@@ -3,9 +3,9 @@
 #include "lib/mpc.h"
 #include "utils.h"
 
-List(LispValue) read_all(mpc_ast_t* node);
-LispValue eval(LispValue* value);
-LispValue eval_operation(char* operator, List(LispValue) * args);
+List* read_all(mpc_ast_t* node);
+LispValue* eval(LispValue* value);
+LispValue* eval_operation(const char* operator, List * args);
 
 int main(void) {
   mpc_parser_t* number = mpc_new("number");
@@ -34,30 +34,30 @@ int main(void) {
     }
     mpc_result_t result;
     if (mpc_parse("<stdin>", input, lispy, &result)) {
-      List(LispValue) values = read_all(result.output);
+      List* values = read_all(result.output);
       for_each(LispValue, value, values) {
         switch (value->type) {
           case Number:
           case Error:
           case Symbol:
           case QExpression: {
-            XString s = lisp_value_to_string(value);
-            printf("%s ", xstring_to_c_string(&s));
-            xstring_drop(&s);
+            XString* s = lisp_value_to_string(value);
+            printf("%s ", xstring_to_c_string(s));
+            xstring_drop(s);
             break;
           }
           case SExpression: {
-            LispValue r = eval(value);
-            XString s = lisp_value_to_string(&r);
-            printf("%s ", xstring_to_c_string(&s));
-            xstring_drop(&s);
-            lisp_value_drop(&r);
+            LispValue* r = eval(value);
+            XString* s = lisp_value_to_string(r);
+            printf("%s ", xstring_to_c_string(s));
+            xstring_drop(s);
+            lisp_value_drop(r);
             break;
           }
         }
       }
       putchar('\n');
-      list_drop(LispValue)(&values, lisp_value_drop);
+      list_drop(values, (void (*)(void*))lisp_value_drop);
       mpc_ast_delete(result.output);
     } else {
       mpc_err_print(result.error);
@@ -69,7 +69,7 @@ int main(void) {
   return 0;
 }
 
-LispValue read(mpc_ast_t* node) {
+LispValue* read(mpc_ast_t* node) {
   if (strstr(node->tag, "number") != NULL) {
     errno = 0;
     int number = (int)strtol(node->contents, NULL, 10);
@@ -83,10 +83,10 @@ LispValue read(mpc_ast_t* node) {
     bool is_s_expression = strstr(node->tag, "s_expression") != NULL;
     bool is_q_expression = strstr(node->tag, "q_expression") != NULL;
     if (is_s_expression || is_q_expression) {
-      LispValue value =
+      LispValue* value =
           expressions_new(is_s_expression ? SExpression : QExpression);
       for (int i = 1; i < node->children_num - 1; i++) {
-        lisp_value_add_cell(&value, read(node->children[i]));
+        lisp_value_add_cell(value, read(node->children[i]));
       }
       return value;
     }
@@ -94,44 +94,41 @@ LispValue read(mpc_ast_t* node) {
   return error_from(xstring_from("unable to parse"));
 }
 
-List(LispValue) read_all(mpc_ast_t* node) {
-  List(LispValue) values = list_new(LispValue)();
+List* read_all(mpc_ast_t* node) {
+  List* values = list_new();
   for (int i = 1; i < node->children_num - 1; i++) {
-    list_push(LispValue)(&values, read(node->children[i]));
+    list_push(values, read(node->children[i]));
   }
   return values;
 }
 
-LispValue eval(LispValue* value) {
+LispValue* eval(LispValue* value) {
   if (value->type == SExpression) {
-    if (value->expressions.size == 0) {
+    if (value->expressions->size == 0) {
       return error_from(xstring_from("empty expression"));
     }
-    ListIterator(LispValue) iterator =
-        list_iterator_from(LispValue)(&value->expressions);
-    LispValue operator= * list_iterator_next(LispValue)(&iterator);
+    ListIterator iterator = list_iterator_from(value->expressions);
+    LispValue* operator= list_iterator_next(&iterator);
     bool has_eval = false;
-    if (operator.type == SExpression &&
-        string_equals(xstring_to_c_string(
-                          &list_head(LispValue)(&operator.expressions)->symbol),
-                      "eval")) {
-      operator= eval(list_get(LispValue)(&operator.expressions, 1));
+    if (operator->type == SExpression && string_equals(
+            xstring_to_c_string(
+                ((LispValue*)list_head(operator->expressions))->symbol),
+            "eval")) {
+      operator= eval(list_get(operator->expressions, 1));
       has_eval = true;
     }
-    if (operator.type != Symbol) {
+    if (operator->type != Symbol) {
       return error_from(xstring_from("not a function"));
     }
-    List(LispValue) args =
-        list_new_with_capacity(LispValue)(value->expressions.size - 1);
-    while (list_iterator_has_next(LispValue)(&iterator)) {
-      list_push(LispValue)(&args,
-                           eval(list_iterator_next(LispValue)(&iterator)));
+    List* args = list_new_with_capacity(value->expressions->size - 1);
+    while (list_iterator_has_next(&iterator)) {
+      list_push(args, eval(list_iterator_next(&iterator)));
     };
-    LispValue result =
-        eval_built_in_functions(xstring_to_c_string(&operator.symbol), &args);
-    list_drop(LispValue)(&args, lisp_value_drop);
+    LispValue* result =
+        eval_built_in_functions(xstring_to_c_string(operator->symbol), args);
+    list_drop(args, (void (*)(void*))lisp_value_drop);
     if (has_eval) {
-      lisp_value_drop(&operator);
+      lisp_value_drop(operator);
     }
     return result;
   }

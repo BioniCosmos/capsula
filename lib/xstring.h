@@ -8,13 +8,13 @@ typedef struct {
   char* data;
 } XString;
 
-XString xstring_new_with_size(size_t size);
-XString xstring_from(char* s);
-XString xstring_clone(XString* xs);
+XString* xstring_new_with_size(size_t size);
+XString* xstring_from(const char* s);
+XString* xstring_clone(XString* xs);
 void xstring_drop(XString* xs);
-char* xstring_to_c_string(XString* xs);
+const char* xstring_to_c_string(XString* xs);
 void xstring_push(XString* a, XString* b);
-XString xstring_concat(XString* a, XString* b);
-XString int_to_xstring(int i);
+XString* xstring_concat(XString* a, XString* b);
+XString* int_to_xstring(int i);
 
 #endif

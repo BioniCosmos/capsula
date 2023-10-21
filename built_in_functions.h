@@ -3,6 +3,6 @@
 
 #include "lisp_value.h"
 
-LispValue eval_built_in_functions(char* function_name, List(LispValue) * args);
+LispValue* eval_built_in_functions(const char* function_name, List* args);
 
 #endif

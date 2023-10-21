@@ -3,6 +3,6 @@
 
 #include <stdbool.h>
 
-bool string_equals(char* a, char* b);
+bool string_equals(const char* a, const char* b);
 
 #endif
