@@ -24,23 +24,8 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
     exe.linkSystemLibrary("edit");
-
-    var file_paths = std.ArrayList([]const u8).init(b.allocator);
-    {
-        const dir = try std.fs.cwd().openIterableDir(".", .{});
-        var walker = try dir.walk(b.allocator);
-        defer walker.deinit();
-        while (try walker.next()) |file| {
-            const ext = std.fs.path.extension(file.basename);
-            if (!string_start_with(file.path, "build") and
-                !string_equal(file.basename, "main.c") and
-                string_equal(ext, ".c") or string_equal(ext, ".h"))
-            {
-                try file_paths.append(b.dupe(file.path));
-            }
-        }
-    }
-    exe.addCSourceFiles(file_paths.items, &[_][]const u8{});
+    exe.addIncludePath(.{ .path = "lib" });
+    exe.addCSourceFile(.{ .file = .{ .path = "lib/mpc.c" }, .flags = &[_][]const u8{} });
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -77,6 +62,9 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
+    unit_tests.linkSystemLibrary("edit");
+    unit_tests.addIncludePath(.{ .path = "lib" });
+    unit_tests.addCSourceFile(.{ .file = .{ .path = "lib/mpc.c" }, .flags = &[_][]const u8{} });
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
 
@@ -85,17 +73,4 @@ pub fn build(b: *std.Build) !void {
     // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
-}
-
-fn string_equal(a: []const u8, b: []const u8) bool {
-    return std.mem.eql(u8, a, b);
-}
-
-fn string_start_with(s: []const u8, prefix: []const u8) bool {
-    for (prefix, 0..prefix.len) |c, i| {
-        if (s[i] != c) {
-            return false;
-        }
-    }
-    return true;
 }
