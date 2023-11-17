@@ -6,10 +6,7 @@ const ArrayList = std.ArrayList;
 const string = @import("string.zig");
 const RawString = string.RawString;
 const String = string.String;
-
-const c = @cImport({
-    @cInclude("mpc.h");
-});
+const Token = @import("tokenizer.zig").Token;
 
 pub const LispValue = struct {
     const Self = @This();
@@ -47,33 +44,29 @@ pub const LispValue = struct {
         };
     }
 
-    pub fn fromAST(allocator: Allocator, node: *const c.mpc_ast_t) !LispValue {
-        const tag = mem.span(node.tag);
-        const contents = mem.span(node.contents);
-        const children_len = @as(usize, @intCast(node.children_num));
-
-        if (String.contain(tag, "number")) {
-            const number = std.fmt.parseInt(i32, contents, 10) catch {
-                const err = try String.fromSlices(allocator, &[_]RawString{ "Fail to parse `", contents, "` into a number." });
-                return LispValue.fromError(allocator, err);
-            };
-            return LispValue.fromNumber(allocator, number);
+    pub fn fromToken(allocator: Allocator, token: *const Token) !LispValue {
+        switch (token.value) {
+            .number => |number| {
+                const value = std.fmt.parseInt(i32, number, 10) catch {
+                    const err = try String.fromSlices(
+                        allocator,
+                        &[_]RawString{ "Fail to parse `", number, "` into a number." },
+                    );
+                    return LispValue.fromError(allocator, err);
+                };
+                return LispValue.fromNumber(allocator, value);
+            },
+            .symbol => |symbol| {
+                return LispValue.fromSymbol(allocator, symbol);
+            },
+            .sexpr => |sexpr| {
+                var value = LispValue.initValues(allocator, token.quoted);
+                for (sexpr.items) |cell| {
+                    try value.data.values.append(try fromToken(allocator, &cell));
+                }
+                return value;
+            },
         }
-
-        if (String.contain(tag, "symbol")) {
-            return LispValue.fromSymbol(allocator, contents);
-        }
-
-        if (String.contain(tag, "_expression")) {
-            var value = LispValue.initValues(allocator, !String.contain(tag, "s_expression"));
-            for (1..children_len - 1) |i| {
-                try value.data.values.append(try fromAST(allocator, node.children[i]));
-            }
-            return value;
-        }
-
-        const err = try String.fromSlices(allocator, &[_]RawString{ "Fail to parse `", contents, "`." });
-        return LispValue.fromError(allocator, err);
     }
 
     pub fn deinit(self: *const Self) void {

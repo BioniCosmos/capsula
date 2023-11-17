@@ -24,8 +24,6 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
     exe.linkSystemLibrary("edit");
-    exe.addIncludePath(.{ .path = "lib" });
-    exe.addCSourceFile(.{ .file = .{ .path = "lib/mpc.c" }, .flags = &[_][]const u8{} });
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -63,8 +61,6 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
     unit_tests.linkSystemLibrary("edit");
-    unit_tests.addIncludePath(.{ .path = "lib" });
-    unit_tests.addCSourceFile(.{ .file = .{ .path = "lib/mpc.c" }, .flags = &[_][]const u8{} });
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
 
