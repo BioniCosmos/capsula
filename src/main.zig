@@ -14,10 +14,11 @@ pub fn main() !void {
     var arena = ArenaAllocator.init(heap.raw_c_allocator);
     const allocator = arena.allocator();
     defer arena.deinit();
+    io.println("Welcome to Capsula!", .{});
 
     while (true) {
         defer _ = arena.reset(.retain_capacity);
-        const input = io.readline("lispy> ");
+        const input = io.readline("> ");
         if (input == null or String.equal(input.?, "exit")) {
             break;
         }

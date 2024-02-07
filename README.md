@@ -1,5 +1,3 @@
-# A-Lisp
+# Capsula
 
-another Lisp interpreter in Zig
-
-Status: WIP
+maybe a dialect of Lisp
