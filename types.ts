@@ -1,10 +1,16 @@
+import type { Environment } from './env'
+
 export type Expr =
-  | { type: 'bool'; value: 'true' | 'false' }
+  | { type: 'nil' }
+  | { type: 'bool'; value: boolean }
   | { type: 'num'; value: number }
   | { type: 'str'; value: string }
   | { type: 'sym'; value: string }
   | SExpr
-  | ({ type: 'fn' } & Fn)
+  | ({ type: 'fn' } & (
+      | SourceFn
+      | { fnType: 'native'; body: (...params: Expr[]) => Expr }
+    ))
   | { type: 'quote' }
   | { type: 'def' }
   | { type: 'lambda' }
@@ -19,28 +25,9 @@ export type SExpr = {
   parent: SExpr | null
 }
 
-export type Fn =
-  | { fnType: 'source'; env: Environment; body: Expr[] }
-  | { fnType: 'native'; body: () => Expr }
-
-export class Environment {
-  readonly #vars = new Map<string, Expr>()
-
-  constructor(private readonly parent: Environment | null = null) {}
-
-  define(name: string, value: Expr) {
-    this.#vars.set(name, value)
-  }
-
-  lookup(name: string): Expr {
-    if (this.#vars.has(name)) {
-      return this.#vars.get(name)!
-    }
-
-    if (this.parent) {
-      return this.parent.lookup(name)
-    }
-
-    throw Error(`Undefined variable: ${name}`)
-  }
+type SourceFn = {
+  fnType: 'source'
+  env: Environment
+  params: string[]
+  body: Expr[]
 }

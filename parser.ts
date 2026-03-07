@@ -14,7 +14,6 @@ export function parse(input: string) {
 
   let i = 0
   while (i < input.length) {
-    // console.log(input[i])
     switch (input[i]) {
       // Using tab is prohibited in source code.
       case '\t':
@@ -79,12 +78,12 @@ export function parse(input: string) {
       default: {
         // boolean
         if (input.slice(i, i + 4) === 'true') {
-          push({ type: 'bool', value: 'true' })
+          push({ type: 'bool', value: true })
           i += 4
           break
         }
         if (input.slice(i, i + 5) === 'false') {
-          push({ type: 'bool', value: 'false' })
+          push({ type: 'bool', value: false })
           i += 5
           break
         }
