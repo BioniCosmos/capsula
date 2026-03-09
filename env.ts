@@ -1,15 +1,15 @@
-import type { Expr } from './types'
+import type { Var } from './types'
 
 export class Environment {
-  readonly #vars = new Map<string, Expr>()
+  readonly #vars = new Map<string, Var>()
 
   constructor(private readonly parent: Environment | null = null) {}
 
-  define(name: string, value: Expr) {
+  define(name: string, value: Var) {
     this.#vars.set(name, value)
   }
 
-  lookup(name: string): Expr {
+  lookup(name: string): Var {
     if (this.#vars.has(name)) {
       return this.#vars.get(name)!
     }

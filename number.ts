@@ -1,11 +1,19 @@
-import type { Expr } from './types'
+import { env } from './env'
+import { nativeFn } from './fn'
+import { typeOf, type Var } from './types'
 
-export function add(self: Expr, rhs: Expr): Expr {
-  if (self.type !== 'num') {
-    throw Error(`calling \`add\`: expecting number, found \`${self.type}\``)
+export function add(self: Var, rhs: Var) {
+  if (!isNumber(self)) {
+    throw Error(`calling \`add\`: expecting number, found \`${typeOf(self)}\``)
   }
-  if (rhs.type !== 'num') {
-    throw Error(`calling \`add\`: expecting number, found \`${rhs.type}\``)
+  if (!isNumber(rhs)) {
+    throw Error(`calling \`add\`: expecting number, found \`${typeOf(rhs)}\``)
   }
-  return { type: 'num', value: self.value + rhs.value }
+  return self + rhs
 }
+
+export function isNumber(x: Var): x is number {
+  return typeOf(x) === 'num'
+}
+
+env.define('number?', nativeFn(isNumber))

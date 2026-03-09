@@ -1,15 +1,11 @@
-import type { Expr, SExpr } from './types'
+import type { List } from './list'
+import { Sym, type SExpr } from './types'
 
 export function parse(input: string) {
-  const exprs = Array.of<Expr>()
-  let top: SExpr | null = null
+  const exprs = Array.of<SExpr[]>([])
 
-  function push(expr: Expr) {
-    if (top !== null) {
-      top.value.push(expr)
-    } else {
-      exprs.push(expr)
-    }
+  function push(expr: SExpr) {
+    exprs.at(-1)!.push(expr)
   }
 
   let i = 0
@@ -48,23 +44,33 @@ export function parse(input: string) {
         if (input[j] !== '"') {
           throw Error('parsing string: expected `"`, found EOF')
         }
-        push({ type: 'str', value: input.slice(i + 1, j) })
+        push(input.slice(i + 1, j))
         i = j + 1
         break
       }
       // S-expression
       case '(': {
-        const newSExpr: Expr = { type: 'sexpr', value: [], parent: top }
-        push(newSExpr)
-        top = newSExpr
+        exprs.push([])
         i++
         break
       }
       case ')': {
-        if (top === null) {
+        if (exprs.length === 1) {
           throw Error('parsing: unexpected `)`')
         }
-        top = top.parent
+        const xs = exprs.pop()!
+        if (xs.length === 0) {
+          push(null)
+        } else {
+          const head: List = [xs[0], null]
+          let tail: List = head
+          for (const x of xs.slice(1)) {
+            const node: List = [x, null]
+            tail[1] = node
+            tail = node
+          }
+          push(head)
+        }
         i++
         break
       }
@@ -78,12 +84,12 @@ export function parse(input: string) {
       default: {
         // boolean
         if (input.slice(i, i + 4) === 'true') {
-          push({ type: 'bool', value: true })
+          push(true)
           i += 4
           break
         }
         if (input.slice(i, i + 5) === 'false') {
-          push({ type: 'bool', value: false })
+          push(false)
           i += 5
           break
         }
@@ -129,7 +135,7 @@ export function parse(input: string) {
                 `parsing number: The last character of a number should always be a digit. Found \`${prev}\`.`,
               )
             }
-            push({ type: 'num', value: Number(input.slice(i, j)) })
+            push(Number(input.slice(i, j)))
             i = j
             break
           }
@@ -153,15 +159,15 @@ export function parse(input: string) {
         while (j < input.length && !delimiters.includes(input[j])) {
           j++
         }
-        push({ type: 'sym', value: input.slice(i, j) })
+        push(new Sym(input.slice(i, j)))
         i = j
       }
     }
   }
 
-  if (top !== null) {
+  if (exprs.length !== 1) {
     throw Error('parsing: expected `)`, found EOF')
   }
 
-  return exprs
+  return exprs[0]
 }

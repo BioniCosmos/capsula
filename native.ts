@@ -1,62 +1,68 @@
 import { env, Environment } from './env'
-import { add as numAdd } from './number'
-import { type Expr } from './types'
+import { Fn, nativeFn, NativeFn, SourceFn } from './fn'
+import { isList, type List } from './list'
+import { isNumber, add as numAdd } from './number'
+import { car, cdr } from './pair'
+import {
+  isBoolean,
+  isNil,
+  isString,
+  isSymbol,
+  typeOf,
+  type SExpr,
+  type Var,
+} from './types'
 
-export const dispatcher: Map<string, Map<Expr['type'], Function>> = new Map([
+export const dispatcher: Map<string, Map<string, Function>> = new Map([
   ['+', new Map([['num', numAdd]])],
 ])
 
-export function evaluate(expr: Expr, env: Environment): Expr {
-  switch (expr.type) {
-    case 'nil':
-    case 'bool':
-    case 'num':
-    case 'str':
-      return expr
-    case 'sym':
-      return env.lookup(expr.value)
-    case 'sexpr':
-      if (expr.value.length === 0) {
-        throw Error('evaluating S-expression: empty')
-      }
-      const fn = evaluate(expr.value[0], env)
-      if (fn.type !== 'fn') {
-        throw Error(
-          `evaluating S-expression: expecting function, found \`${fn.type}\``,
-        )
-      }
-      const args = expr.value.slice(1).map((arg) => evaluate(arg, env))
-      switch (fn.fnType) {
-        // TODO: support `.`
-        case 'source': {
-          const env = new Environment(fn.env)
-          for (const [i, param] of fn.params.entries()) {
-            const arg = args.at(i)
-            if (!arg) {
-              throw Error('calling function: missing arguments')
-            }
-            env.define(param, arg)
-          }
-          let result: Expr = { type: 'nil' }
-          for (const expr of fn.body) {
-            result = evaluate(expr, env)
-          }
-          return result
-        }
-        case 'native': {
-          return fn.body(...args)
-        }
-      }
-    default:
-      throw Error('unimplemented')
+export function evaluate(expr: SExpr, env: Environment): Var {
+  if (isNil(expr) || isBoolean(expr) || isNumber(expr) || isString(expr)) {
+    return expr
   }
+  if (isSymbol(expr)) {
+    return env.lookup(expr.value)
+  }
+  if (!isList(expr)) {
+    throw Error('evaluating: expecting list, found pair')
+  }
+  const fn = evaluate(car(expr) as SExpr, env)
+  if (!(fn instanceof Fn)) {
+    throw Error(`evaluating: expecting function, found \`${typeOf(fn)}\``)
+  }
+  let args = cdr(expr) as List
+  const f = fn.value
+  if (f instanceof SourceFn) {
+    const fnEnv = new Environment(f.env)
+    for (const param of f.params) {
+      if (isNil(args)) {
+        throw Error('calling function: missing arguments')
+      }
+      fnEnv.define(param, evaluate(car(args) as SExpr, env))
+      args = cdr(args) as List
+    }
+    let result: Var = null
+    for (const expr of f.body) {
+      result = evaluate(expr, fnEnv)
+    }
+    return result
+  }
+  if (f instanceof NativeFn) {
+    const params = Array.of<Var>()
+    while (!isNil(args)) {
+      params.push(evaluate(car(args) as SExpr, env))
+      args = cdr(args) as List
+    }
+    return f.body(...params)
+  }
+  throw Error('unreachable')
 }
 
-env.define('+', {
-  type: 'fn',
-  fnType: 'native',
-  body: (...xs) => {
-    const fn = dispatcher.get('+')?.get(xs[0].type)
+env.define(
+  '+',
+  nativeFn((...xs) => {
+    const fn = dispatcher.get('+')?.get(typeOf(xs[0]))
     if (!fn) {
       throw Error('function calling dispatching: failed to find a candidate')
     }
@@ -69,5 +75,5 @@ env.define('+', {
     return xs.reduce((acc, x) => {
       return fn(acc, x)
     })
-  },
-})
+  }),
+)
