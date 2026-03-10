@@ -8,7 +8,9 @@ import {
   isNil,
   isString,
   isSymbol,
+  Raw,
   typeOf,
+  type Box,
   type SExpr,
   type Var,
 } from './types'
@@ -27,15 +29,18 @@ export function evaluate(expr: SExpr, env: Environment): Var {
   if (!isList(expr)) {
     throw Error('evaluating: expecting list, found pair')
   }
-  const fn = evaluate(car(expr) as SExpr, env)
-  if (!(fn instanceof Fn)) {
-    throw Error(`evaluating: expecting function, found \`${typeOf(fn)}\``)
+  const box = evaluate(car(expr) as SExpr, env)
+  if (box instanceof Raw) {
+    return box.eval(cdr(expr) as List, env)
   }
+  if (!(box instanceof Fn)) {
+    throw Error(`evaluating: expecting function, found \`${typeOf(box)}\``)
+  }
+  const { value: fn } = box
   let args = cdr(expr) as List
-  const f = fn.value
-  if (f instanceof SourceFn) {
-    const fnEnv = new Environment(f.env)
-    for (const param of f.params) {
+  if (fn instanceof SourceFn) {
+    const fnEnv = new Environment(fn.env)
+    for (const param of fn.params) {
       if (isNil(args)) {
         throw Error('calling function: missing arguments')
       }
@@ -43,21 +48,45 @@ export function evaluate(expr: SExpr, env: Environment): Var {
       args = cdr(args) as List
     }
     let result: Var = null
-    for (const expr of f.body) {
+    for (const expr of fn.body) {
       result = evaluate(expr, fnEnv)
     }
     return result
   }
-  if (f instanceof NativeFn) {
+  if (fn instanceof NativeFn) {
     const params = Array.of<Var>()
     while (!isNil(args)) {
       params.push(evaluate(car(args) as SExpr, env))
       args = cdr(args) as List
     }
-    return f.body(...params)
+    return fn.body(...params)
   }
   throw Error('unreachable')
 }
+
+class Def extends Raw implements Box {
+  type = 'def'
+
+  override eval(exprs: List, env: Environment): Var {
+    if (isNil(exprs)) {
+      throw Error(`evaluating \`def\`: missing arguments`)
+    }
+    const sym = car(exprs)
+    if (!isSymbol(sym)) {
+      throw Error(
+        `evaluating \`def\`: expecting symbol, found \`${typeOf(sym)}\``,
+      )
+    }
+    exprs = cdr(exprs) as List
+    if (isNil(exprs)) {
+      throw Error(`evaluating \`def\`: missing value`)
+    }
+    env.define(sym.value, evaluate(car(exprs) as SExpr, env))
+    return null
+  }
+}
+
+env.define('def', new Def())
 
 env.define(
   '+',

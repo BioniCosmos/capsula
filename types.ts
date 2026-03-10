@@ -1,5 +1,6 @@
-import { env } from './env'
+import { env, Environment } from './env'
 import { nativeFn } from './fn'
+import type { List } from './list'
 import type { Pair } from './pair'
 
 export type Var = SExpr | Box
@@ -12,6 +13,10 @@ export class Sym {
 
 export interface Box {
   type: string
+}
+
+export abstract class Raw {
+  abstract eval(exprs: List, env: Environment): Var
 }
 
 export function typeOf(x: Var) {
