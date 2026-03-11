@@ -1,4 +1,4 @@
-import type { List } from './list'
+import { cons } from './pair'
 import { Sym, type SExpr } from './types'
 
 export function parse(input: string) {
@@ -58,19 +58,7 @@ export function parse(input: string) {
         if (exprs.length === 1) {
           throw Error('parsing: unexpected `)`')
         }
-        const xs = exprs.pop()!
-        if (xs.length === 0) {
-          push(null)
-        } else {
-          const head: List = [xs[0], null]
-          let tail: List = head
-          for (const x of xs.slice(1)) {
-            const node: List = [x, null]
-            tail[1] = node
-            tail = node
-          }
-          push(head)
-        }
+        push(exprs.pop()!.reduceRight((acc, x) => cons(x, acc), null))
         i++
         break
       }
