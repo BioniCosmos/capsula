@@ -88,6 +88,44 @@ class Def extends Raw implements Box {
 
 env.define('def', new Def())
 
+// TODO: support `else`
+class Cond extends Raw implements Box {
+  type = 'cond'
+
+  override eval(exprs: List, env: Environment): Var {
+    let result: Var = null
+    while (exprs !== null) {
+      let clause = car(exprs)
+      if (!isList(clause) || clause === null) {
+        throw Error(
+          `evaluating \`cond\`: expecting non-empty \`list\`, found \`${typeOf(clause)}\``,
+        )
+      }
+      const condition = evaluate(car(clause) as SExpr, env)
+      if (!isBoolean(condition)) {
+        throw Error(
+          `evaluating \`cond\`: expecting \`bool\`, found \`${typeOf(condition)}\``,
+        )
+      }
+      if (condition) {
+        clause = cdr(clause)
+        if (clause === null) {
+          throw Error(`evaluating \`cond\`: missing body`)
+        }
+        do {
+          result = evaluate(car(clause) as SExpr, env)
+          clause = cdr(clause)
+        } while (clause !== null)
+        break
+      }
+      exprs = cdr(exprs) as List
+    }
+    return result
+  }
+}
+
+env.define('cond', new Cond())
+
 env.define(
   '+',
   nativeFn((...xs) => {
