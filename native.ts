@@ -126,6 +126,43 @@ class Cond extends Raw implements Box {
 
 env.define('cond', new Cond())
 
+// TODO: support var/rest, optional and named parameters
+class Lambda extends Raw implements Box {
+  type = 'lambda'
+
+  override eval(exprs: List, env: Environment): Var {
+    if (isNil(exprs)) {
+      throw Error('evaluating `lambda`: missing arguments')
+    }
+    let params = car(exprs)
+    if (!isList(params)) {
+      throw Error(
+        `evaluating \`lambda\`: expecting list, found \`${typeOf(params)}\``,
+      )
+    }
+    const paramNames = Array.of<string>()
+    while (!isNil(params)) {
+      const param = car(params)
+      if (!isSymbol(param)) {
+        throw Error(
+          `evaluating \`lambda\`: expecting symbol, found \`${typeOf(param)}\``,
+        )
+      }
+      paramNames.push(param.value)
+      params = cdr(params)
+    }
+    let body = cdr(exprs)
+    const bodyArray = Array.of<SExpr>()
+    while (!isNil(body)) {
+      bodyArray.push(car(body) as SExpr)
+      body = cdr(body)
+    }
+    return new Fn(new SourceFn(env, paramNames, bodyArray))
+  }
+}
+
+env.define('lambda', new Lambda())
+
 env.define(
   '+',
   nativeFn((...xs) => {
