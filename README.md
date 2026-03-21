@@ -105,9 +105,58 @@ bun run index.ts
 2. **Bytecode VM** — Implement stack-based VM and compiler
 3. **Custom Syntax** — Pratt parser for C-family syntax
 4. **Type System** — Gradual typing (dynamic → static → inference)
-5. **WASM Backend** — Browser-compatible compilation
-6. **Self-hosting** — Rewrite compiler in Capsula
-7. **LLVM Backend** — Native performance
+5. **Self-hosting** — Rewrite compiler in Capsula (see below)
+6. **LLVM Backend** — Native performance
+
+---
+
+## Self-hosting Plan
+
+Self-hosting means the Capsula compiler is written in Capsula itself. The path has three stages:
+
+### Stage 1 — Metacircular Interpreter
+
+Write a Capsula parser and tree-walking evaluator in Capsula, run it on the existing TypeScript interpreter:
+
+```
+TypeScript interpreter
+  └─▶ eval.cv  (Capsula evaluator written in Capsula)
+        └─▶ program.cv  (any Capsula program)
+```
+
+This proves the language is expressive enough to describe its own semantics, and that both interpreters agree on behavior. Performance is not a goal here.
+
+Minimum language features required before starting:
+
+- `quote`, `let`, `begin`
+- Arithmetic and comparison operators (`-`, `*`, `/`, `=`, `<`, `>`)
+- String operations (`string-ref`, `string-length`, `substring`)
+- Tail call optimization (TCO)
+
+### Stage 2 — LLVM IR Code Generator
+
+Extend the Capsula compiler to emit LLVM IR instead of interpreting. Run it on the Stage 1 interpreter:
+
+```
+TypeScript interpreter
+  └─▶ compiler.cv  (Capsula → LLVM IR, written in Capsula)
+        └─▶ compiler.cv  (compiles itself, outputs compiler.ll)
+
+llc compiler.ll -o compiler  (native binary)
+```
+
+LLVM IR is chosen over raw assembly because it handles register allocation, optimization, and multi-platform output (x86-64, ARM, RISC-V) automatically.
+
+### Stage 3 — True Self-hosting
+
+The native binary produced in Stage 2 compiles Capsula source without any TypeScript dependency:
+
+```
+compiler  (native binary)
+  └─▶ compiler.cv  (compiles itself again, closes the bootstrap loop)
+```
+
+At this point the TypeScript implementation can be retired.
 
 ---
 
