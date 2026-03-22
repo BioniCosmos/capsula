@@ -10,7 +10,7 @@ export class Fn implements Box {
 export class SourceFn {
   constructor(
     public env: Environment,
-    public params: string[],
+    public params: Params,
     public body: SExpr[],
   ) {}
 }
@@ -22,3 +22,5 @@ export class NativeFn {
 export function nativeFn(body: (...params: Var[]) => Var) {
   return new Fn(new NativeFn(body))
 }
+
+export type Params = { fixed: string[]; rest: string }

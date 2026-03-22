@@ -1,8 +1,11 @@
 import { cons } from './pair'
 import { Sym, type SExpr } from './types'
 
+const digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+
 export function parse(input: string) {
   const exprs = Array.of<SExpr[]>([])
+  const stops = Array.of<number>(0)
 
   function push(expr: SExpr) {
     exprs.at(-1)!.push(expr)
@@ -51,6 +54,7 @@ export function parse(input: string) {
       // S-expression
       case '(': {
         exprs.push([])
+        stops.push(0)
         i++
         break
       }
@@ -58,9 +62,43 @@ export function parse(input: string) {
         if (exprs.length === 1) {
           throw Error('parsing: unexpected `)`')
         }
-        push(exprs.pop()!.reduceRight((acc, x) => cons(x, acc), null))
+        const currentLevel = exprs.pop()!
+        const lastIndex = stops.pop()!
+        if (lastIndex !== 0) {
+          if (currentLevel.length - 1 !== lastIndex) {
+            throw Error('parsing: unexpected expressions after `.`')
+          }
+          push(currentLevel.reduceRight((acc, x) => cons(x, acc)))
+        } else {
+          push(currentLevel.reduceRight((acc, x) => cons(x, acc), null))
+        }
         i++
         break
+      }
+      // cons cell
+      // @ts-ignore
+      case '.': {
+        // `(a . b)`, `(a ."b")`, `(a .(b))`, `(a .\nb)` and `(a .; comments\nb)` are supported.
+        // `.` on top or `(. b)` or `(a . b . c)` are wrong.
+        const legal = [' ', '\n', '(', '"', ';']
+        if (legal.includes(input[i + 1])) {
+          if (exprs.length === 1 || exprs.at(-1)!.length === 0) {
+            throw Error('parsing: unexpected `.`')
+          }
+          const lastIndex = stops.length - 1
+          if (stops[lastIndex] !== 0) {
+            throw Error('parsing: unexpected `.`')
+          }
+          // record the last element index in `exprs`
+          stops[lastIndex] = exprs.at(-1)!.length
+          i++
+          break
+        }
+        const illegal = [...digits, '\t', ')', '[', ']', '{', '}', `'`]
+        if (illegal.includes(input[i + 1])) {
+          throw Error(`parsing: unexpected \`${input[i + 1]}\``)
+        }
+        // fallthrough to symbol parsing
       }
       // reserved keywords
       case '[':
@@ -83,7 +121,6 @@ export function parse(input: string) {
         }
         // number
         // TODO: support binary, octonary and hexadecimal
-        const digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
         if (digits.includes(input[i]) || input[i] === '-') {
           let j = i + 1
           let prev = input[i]

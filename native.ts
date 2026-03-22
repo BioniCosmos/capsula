@@ -1,8 +1,8 @@
 import { env, Environment } from './env'
-import { Fn, nativeFn, NativeFn, SourceFn } from './fn'
+import { Fn, nativeFn, NativeFn, SourceFn, type Params } from './fn'
 import { isList, type List } from './list'
 import { isNumber, add as numAdd } from './number'
-import { car, cdr } from './pair'
+import { car, cdr, isPair } from './pair'
 import {
   isBoolean,
   isNil,
@@ -40,12 +40,19 @@ export function evaluate(expr: SExpr, env: Environment): Var {
   let args = cdr(expr) as List
   if (fn instanceof SourceFn) {
     const fnEnv = new Environment(fn.env)
-    for (const param of fn.params) {
+    for (const param of fn.params.fixed) {
       if (isNil(args)) {
         throw Error('calling function: missing arguments')
       }
       fnEnv.define(param, evaluate(car(args) as SExpr, env))
       args = cdr(args) as List
+    }
+    if (fn.params.rest !== '') {
+      fnEnv.define(fn.params.rest, args)
+      while (!isNil(args)) {
+        args[0] = evaluate(car(args) as SExpr, env)
+        args = cdr(args) as List
+      }
     }
     let result: Var = null
     for (const expr of fn.body) {
@@ -126,7 +133,7 @@ class Cond extends Raw implements Box {
 
 env.define('cond', new Cond())
 
-// TODO: support var/rest, optional and named parameters
+// TODO: support optional and named parameters
 class Lambda extends Raw implements Box {
   type = 'lambda'
 
@@ -134,22 +141,37 @@ class Lambda extends Raw implements Box {
     if (isNil(exprs)) {
       throw Error('evaluating `lambda`: missing arguments')
     }
+    const paramDeclaration: Params = { fixed: [], rest: '' }
     let params = car(exprs)
-    if (!isList(params)) {
-      throw Error(
-        `evaluating \`lambda\`: expecting list, found \`${typeOf(params)}\``,
-      )
-    }
-    const paramNames = Array.of<string>()
-    while (!isNil(params)) {
-      const param = car(params)
-      if (!isSymbol(param)) {
+    if (isSymbol(params)) {
+      paramDeclaration.rest = params.value
+    } else if (isPair(params)) {
+      while (true) {
+        const param = car(params)
+        if (!isSymbol(param)) {
+          throw Error(
+            `evaluating \`lambda\`: expecting symbol, found \`${typeOf(param)}\``,
+          )
+        }
+        paramDeclaration.fixed.push(param.value)
+        const next = cdr(params)
+        if (isNil(next)) {
+          break
+        }
+        if (isSymbol(next)) {
+          paramDeclaration.rest = next.value
+          break
+        }
+        if (isPair(next)) {
+          params = next
+          continue
+        }
         throw Error(
-          `evaluating \`lambda\`: expecting symbol, found \`${typeOf(param)}\``,
+          `evaluating \`lambda\`: expecting symbol, found \`${typeOf(next)}\``,
         )
       }
-      paramNames.push(param.value)
-      params = cdr(params)
+    } else {
+      throw Error('evaluating `lambda`: missing parameters')
     }
     let body = cdr(exprs)
     const bodyArray = Array.of<SExpr>()
@@ -157,7 +179,7 @@ class Lambda extends Raw implements Box {
       bodyArray.push(car(body) as SExpr)
       body = cdr(body)
     }
-    return new Fn(new SourceFn(env, paramNames, bodyArray))
+    return new Fn(new SourceFn(env, paramDeclaration, bodyArray))
   }
 }
 
