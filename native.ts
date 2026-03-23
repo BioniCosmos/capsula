@@ -185,6 +185,55 @@ class Lambda extends Raw implements Box {
 
 env.define('lambda', new Lambda())
 
+// TODO: stricter grammar
+// TODO: support associated types, variables…
+class Trait extends Raw implements Box {
+  type = 'trait'
+
+  #fns = new Map<string, SourceFn | null>()
+
+  override eval(exprs: List, env: Environment): Var {
+    const traitEnv = new Environment(env)
+    while (!isNil(exprs)) {
+      evaluate(car(exprs) as SExpr, traitEnv)
+      exprs = cdr(exprs) as List
+    }
+    const fnEntries = traitEnv.locals
+      .entries()
+      .filter(([, v]) => v instanceof Fn && v.value instanceof SourceFn)
+      .map(([k, v]): [string, SourceFn | null] => {
+        const fn = (v as Fn).value as SourceFn
+        if (fn.body.length === 0) {
+          return [k, null]
+        }
+        fn.env = env
+        return [k, fn]
+      })
+    for (const [k, v] of fnEntries) {
+      this.#fns.set(k, v)
+      env.define(k, new TraitValue(k, this))
+    }
+    return this
+  }
+}
+
+env.define('trait', new Trait())
+
+class TraitValue extends Raw implements Box {
+  type = 'trait-value'
+
+  constructor(
+    private name: string,
+    private trait: Trait,
+  ) {
+    super()
+  }
+
+  override eval(exprs: List, env: Environment): Var {
+    throw new Error('Method not implemented.')
+  }
+}
+
 env.define(
   '+',
   nativeFn((...xs) => {

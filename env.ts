@@ -5,6 +5,10 @@ export class Environment {
 
   constructor(private readonly parent: Environment | null = null) {}
 
+  get locals(): ReadonlyMap<string, Var> {
+    return this.#vars
+  }
+
   define(name: string, value: Var) {
     this.#vars.set(name, value)
   }
