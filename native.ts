@@ -191,6 +191,7 @@ class Trait extends Raw implements Box {
   type = 'trait'
 
   #fns = new Map<string, SourceFn | null>()
+  #implRegistry = new Map<string, Map<string, SourceFn>>()
 
   override eval(exprs: List, env: Environment): Var {
     const traitEnv = new Environment(env)
@@ -215,6 +216,24 @@ class Trait extends Raw implements Box {
     }
     return this
   }
+
+  register(typeName: string, name: string, v: SourceFn) {
+    if (!this.#implRegistry.has(typeName)) {
+      this.#implRegistry.set(typeName, new Map())
+    }
+    this.#implRegistry.get(typeName)!.set(name, v)
+  }
+
+  findMissingImpls(typeName: string) {
+    const traitSet = new Set(
+      this.#fns
+        .entries()
+        .filter(([, v]) => v === null)
+        .map(([k]) => k),
+    )
+    const implSet = new Set(this.#implRegistry.get(typeName)?.keys())
+    return traitSet.difference(implSet)
+  }
 }
 
 env.define('trait', new Trait())
@@ -233,6 +252,73 @@ class TraitValue extends Raw implements Box {
     throw new Error('Method not implemented.')
   }
 }
+
+class Impl extends Raw implements Box {
+  type = 'impl'
+
+  override eval(exprs: List, env: Environment): Var {
+    if (isNil(exprs)) {
+      throw Error('evaluating `impl`: missing trait name')
+    }
+
+    const traitName = car(exprs)
+    exprs = cdr(exprs) as List
+    if (isNil(exprs)) {
+      throw Error('evaluating `impl`: missing target type name')
+    }
+    const typeName = car(exprs)
+    exprs = cdr(exprs) as List
+
+    if (!isSymbol(traitName)) {
+      throw Error(
+        `evaluating \`impl\`: expecting \`symbol\` for trait name, found \`${typeOf(traitName)}\``,
+      )
+    }
+    if (!isSymbol(typeName)) {
+      throw Error(
+        `evaluating \`impl\`: expecting \`symbol\` for target type name, found \`${typeOf(typeName)}\``,
+      )
+    }
+
+    const trait = env.lookup(traitName.value)
+    if (!(trait instanceof Trait)) {
+      throw Error(
+        `evaluating \`impl\`: \`${traitName.value}\` is not a trait, but \`${typeOf(trait)}\`.`,
+      )
+    }
+    const implEnv = new Environment(env)
+    while (!isNil(exprs)) {
+      evaluate(car(exprs) as SExpr, implEnv)
+      exprs = cdr(exprs) as List
+    }
+    const fnEntries = implEnv.locals
+      .entries()
+      .filter(([, v]) => v instanceof Fn && v.value instanceof SourceFn)
+      .map(([k, v]): [string, SourceFn] => {
+        const fn = (v as Fn).value as SourceFn
+        fn.env = env
+        return [k, fn]
+      })
+    for (const [k, v] of fnEntries) {
+      trait.register(typeName.value, k, v)
+    }
+
+    const missingImpls = trait.findMissingImpls(typeName.value)
+    if (missingImpls.size !== 0) {
+      throw Error(
+        `evaluating \`impl\`: missing the following implementations: ${missingImpls
+          .values()
+          .map((k) => `\`${k}\``)
+          .toArray()
+          .join(', ')}`,
+      )
+    }
+
+    return null
+  }
+}
+
+env.define('impl', new Impl())
 
 env.define(
   '+',
