@@ -8,16 +8,12 @@ export function cons(car: Var, cdr: Var): Pair {
   return [car, cdr]
 }
 
-env.define('cons', nativeFn(cons))
-
 export function car(x: Var) {
   if (!isPair(x)) {
     throw Error(`calling \`car\`: expecting \`pair\`, found \`${typeOf(x)}\``)
   }
   return x[0]
 }
-
-env.define('car', nativeFn(car))
 
 export function cdr(x: Var) {
   if (!isPair(x)) {
@@ -26,10 +22,13 @@ export function cdr(x: Var) {
   return x[1]
 }
 
-env.define('cdr', nativeFn(cdr))
-
 export function isPair(x: Var): x is Pair {
   return typeOf(x) === 'pair'
 }
 
-env.define('pair?', nativeFn(isPair))
+export function init() {
+  env.define('cons', nativeFn(cons))
+  env.define('car', nativeFn(car))
+  env.define('cdr', nativeFn(cdr))
+  env.define('pair?', nativeFn(isPair))
+}

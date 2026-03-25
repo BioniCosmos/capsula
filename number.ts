@@ -16,4 +16,6 @@ export function isNumber(x: Var): x is number {
   return typeOf(x) === 'num'
 }
 
-env.define('number?', nativeFn(isNumber))
+export function init() {
+  env.define('number?', nativeFn(isNumber))
+}

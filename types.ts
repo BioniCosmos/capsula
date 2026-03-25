@@ -1,4 +1,4 @@
-import { env, Environment } from './env'
+import { env, type Environment } from './env'
 import { nativeFn } from './fn'
 import type { List } from './list'
 import type { Pair } from './pair'
@@ -48,26 +48,25 @@ export function isNil(x: Var): x is null {
   return typeOf(x) === 'nil'
 }
 
-env.define('nil?', nativeFn(isNil))
-
 export function isBoolean(x: Var): x is boolean {
   return typeOf(x) === 'bool'
 }
-
-env.define('boolean?', nativeFn(isBoolean))
 
 export function isString(x: Var): x is string {
   return typeOf(x) === 'str'
 }
 
-env.define('string?', nativeFn(isString))
-
 export function isSymbol(x: Var): x is Sym {
   return typeOf(x) === 'sym'
 }
 
-env.define('symbol?', nativeFn(isSymbol))
-
 export function isBox(x: Var): x is Box {
   return typeOf(x) === 'box'
+}
+
+export function init() {
+  env.define('nil?', nativeFn(isNil))
+  env.define('boolean?', nativeFn(isBoolean))
+  env.define('string?', nativeFn(isString))
+  env.define('symbol?', nativeFn(isSymbol))
 }

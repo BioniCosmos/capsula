@@ -39,26 +39,7 @@ export function evaluate(expr: SExpr, env: Environment): Var {
   const { value: fn } = box
   let args = cdr(expr) as List
   if (fn instanceof SourceFn) {
-    const fnEnv = new Environment(fn.env)
-    for (const param of fn.params.fixed) {
-      if (isNil(args)) {
-        throw Error('calling function: missing arguments')
-      }
-      fnEnv.define(param, evaluate(car(args) as SExpr, env))
-      args = cdr(args) as List
-    }
-    if (fn.params.rest !== '') {
-      fnEnv.define(fn.params.rest, args)
-      while (!isNil(args)) {
-        args[0] = evaluate(car(args) as SExpr, env)
-        args = cdr(args) as List
-      }
-    }
-    let result: Var = null
-    for (const expr of fn.body) {
-      result = evaluate(expr, fnEnv)
-    }
-    return result
+    return fn.apply(args, env)
   }
   if (fn instanceof NativeFn) {
     const params = Array.of<Var>()
@@ -224,6 +205,21 @@ class Trait extends Raw implements Box {
     this.#implRegistry.get(typeName)!.set(name, v)
   }
 
+  findImpl(typeName: string, name: string) {
+    const defaultImpl = this.#fns.get(name)
+    if (defaultImpl === undefined) {
+      throw Error('unreachable')
+    }
+    const impl = this.#implRegistry.get(typeName)?.get(name)
+    if (impl !== undefined) {
+      return impl
+    }
+    if (defaultImpl !== null) {
+      return defaultImpl
+    }
+    throw Error(`trait dispatching: missing implementation for \`${typeName}\``)
+  }
+
   findMissingImpls(typeName: string) {
     const traitSet = new Set(
       this.#fns
@@ -249,7 +245,10 @@ class TraitValue extends Raw implements Box {
   }
 
   override eval(exprs: List, env: Environment): Var {
-    throw new Error('Method not implemented.')
+    if (isNil(exprs)) {
+      throw Error('evaluating `trait-value`: unsupported syntax')
+    }
+    return this.trait.findImpl(typeOf(car(exprs)), this.name).apply(exprs, env)
   }
 }
 
