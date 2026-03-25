@@ -52,10 +52,6 @@ export function isBoolean(x: Var): x is boolean {
   return typeOf(x) === 'bool'
 }
 
-export function isString(x: Var): x is string {
-  return typeOf(x) === 'str'
-}
-
 export function isSymbol(x: Var): x is Sym {
   return typeOf(x) === 'sym'
 }
@@ -67,6 +63,5 @@ export function isBox(x: Var): x is Box {
 export function init() {
   env.define('nil?', nativeFn(isNil))
   env.define('boolean?', nativeFn(isBoolean))
-  env.define('string?', nativeFn(isString))
   env.define('symbol?', nativeFn(isSymbol))
 }

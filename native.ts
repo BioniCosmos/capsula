@@ -3,10 +3,10 @@ import { Fn, nativeFn, NativeFn, SourceFn, type Params } from './fn'
 import { isList, type List } from './list'
 import { isNumber, add as numAdd } from './number'
 import { car, cdr, isPair } from './pair'
+import { isString } from './string'
 import {
   isBoolean,
   isNil,
-  isString,
   isSymbol,
   Raw,
   typeOf,
@@ -217,7 +217,9 @@ class Trait extends Raw implements Box {
     if (defaultImpl !== null) {
       return defaultImpl
     }
-    throw Error(`trait dispatching: missing implementation for \`${typeName}\``)
+    throw Error(
+      `trait dispatching: missing implementation for \`${typeName}\` on \`${name}\``,
+    )
   }
 
   findMissingImpls(typeName: string) {
@@ -248,7 +250,9 @@ class TraitValue extends Raw implements Box {
     if (isNil(exprs)) {
       throw Error('evaluating `trait-value`: unsupported syntax')
     }
-    return this.trait.findImpl(typeOf(car(exprs)), this.name).apply(exprs, env)
+    return this.trait
+      .findImpl(typeOf(evaluate(car(exprs) as SExpr, env)), this.name)
+      .apply(exprs, env)
   }
 }
 
