@@ -1,5 +1,5 @@
-import { env } from './env'
-import { nativeFn } from './fn'
+import { Environment } from './env'
+import { Fn } from './fn'
 import { cdr, isPair } from './pair'
 import { isNil, typeOf, type Var } from './types'
 
@@ -19,7 +19,10 @@ export function length(x: Var): number {
   return 1 + length(cdr(x))
 }
 
-export function init() {
+export function init(
+  env: Environment,
+  nativeFn: (body: (...params: Var[]) => Var) => Fn,
+) {
   env.define('list?', nativeFn(isList))
   env.define('length', nativeFn(length))
 }

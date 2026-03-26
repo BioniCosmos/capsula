@@ -1,5 +1,5 @@
-import { env, type Environment } from './env'
-import { nativeFn } from './fn'
+import type { Environment } from './env'
+import { Fn } from './fn'
 import type { List } from './list'
 import type { Pair } from './pair'
 
@@ -60,7 +60,10 @@ export function isBox(x: Var): x is Box {
   return typeOf(x) === 'box'
 }
 
-export function init() {
+export function init(
+  env: Environment,
+  nativeFn: (body: (...params: Var[]) => Var) => Fn,
+) {
   env.define('nil?', nativeFn(isNil))
   env.define('boolean?', nativeFn(isBoolean))
   env.define('symbol?', nativeFn(isSymbol))

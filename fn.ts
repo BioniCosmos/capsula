@@ -2,12 +2,18 @@ import { Environment } from './env'
 import type { List } from './list'
 import { evaluate } from './native'
 import { car, cdr } from './pair'
-import { isNil, type Box, type SExpr, type Var } from './types'
+import { isNil, Raw, type Box, type SExpr, type Var } from './types'
 
-export class Fn implements Box {
+export class Fn extends Raw implements Box {
   type = 'fn'
 
-  constructor(public value: SourceFn | NativeFn) {}
+  constructor(public value: SourceFn | NativeFn) {
+    super()
+  }
+
+  override eval(exprs: List, env: Environment): Var {
+    return this.value.apply(exprs, env)
+  }
 }
 
 export class SourceFn {
@@ -43,6 +49,15 @@ export class SourceFn {
 
 export class NativeFn {
   constructor(public body: (...params: Var[]) => Var) {}
+
+  apply(args: List, env: Environment) {
+    const params = Array.of<Var>()
+    while (!isNil(args)) {
+      params.push(evaluate(car(args) as SExpr, env))
+      args = cdr(args) as List
+    }
+    return this.body(...params)
+  }
 }
 
 export function nativeFn(body: (...params: Var[]) => Var) {

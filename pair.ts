@@ -1,5 +1,5 @@
-import { env } from './env'
-import { nativeFn } from './fn'
+import { Environment } from './env'
+import { Fn } from './fn'
 import { typeOf, type Var } from './types'
 
 export type Pair = [Var, Var]
@@ -26,7 +26,10 @@ export function isPair(x: Var): x is Pair {
   return typeOf(x) === 'pair'
 }
 
-export function init() {
+export function init(
+  env: Environment,
+  nativeFn: (body: (...params: Var[]) => Var) => Fn,
+) {
   env.define('cons', nativeFn(cons))
   env.define('car', nativeFn(car))
   env.define('cdr', nativeFn(cdr))

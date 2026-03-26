@@ -1,5 +1,5 @@
-import { env } from './env'
-import { nativeFn } from './fn'
+import { Environment } from './env'
+import { Fn } from './fn'
 import { typeOf, type Var } from './types'
 
 export function add(self: Var, rhs: Var) {
@@ -16,6 +16,9 @@ export function isNumber(x: Var): x is number {
   return typeOf(x) === 'num'
 }
 
-export function init() {
+export function init(
+  env: Environment,
+  nativeFn: (body: (...params: Var[]) => Var) => Fn,
+) {
   env.define('number?', nativeFn(isNumber))
 }

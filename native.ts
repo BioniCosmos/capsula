@@ -1,5 +1,5 @@
 import { env, Environment } from './env'
-import { Fn, nativeFn, NativeFn, SourceFn, type Params } from './fn'
+import { Fn, nativeFn, SourceFn, type Params } from './fn'
 import { isList, type List } from './list'
 import { isNumber, add as numAdd } from './number'
 import { car, cdr, isPair } from './pair'
@@ -32,22 +32,6 @@ export function evaluate(expr: SExpr, env: Environment): Var {
   const box = evaluate(car(expr) as SExpr, env)
   if (box instanceof Raw) {
     return box.eval(cdr(expr) as List, env)
-  }
-  if (!(box instanceof Fn)) {
-    throw Error(`evaluating: expecting function, found \`${typeOf(box)}\``)
-  }
-  const { value: fn } = box
-  let args = cdr(expr) as List
-  if (fn instanceof SourceFn) {
-    return fn.apply(args, env)
-  }
-  if (fn instanceof NativeFn) {
-    const params = Array.of<Var>()
-    while (!isNil(args)) {
-      params.push(evaluate(car(args) as SExpr, env))
-      args = cdr(args) as List
-    }
-    return fn.body(...params)
   }
   throw Error('unreachable')
 }
@@ -165,163 +149,6 @@ class Lambda extends Raw implements Box {
 }
 
 env.define('lambda', new Lambda())
-
-// TODO: stricter grammar
-// TODO: support associated types, variables…
-class Trait extends Raw implements Box {
-  type = 'trait'
-
-  #fns = new Map<string, SourceFn | null>()
-  #implRegistry = new Map<string, Map<string, SourceFn>>()
-
-  override eval(exprs: List, env: Environment): Var {
-    const traitEnv = new Environment(env)
-    while (!isNil(exprs)) {
-      evaluate(car(exprs) as SExpr, traitEnv)
-      exprs = cdr(exprs) as List
-    }
-    const fnEntries = traitEnv.locals
-      .entries()
-      .filter(([, v]) => v instanceof Fn && v.value instanceof SourceFn)
-      .map(([k, v]): [string, SourceFn | null] => {
-        const fn = (v as Fn).value as SourceFn
-        if (fn.body.length === 0) {
-          return [k, null]
-        }
-        fn.env = env
-        return [k, fn]
-      })
-    for (const [k, v] of fnEntries) {
-      this.#fns.set(k, v)
-      env.define(k, new TraitValue(k, this))
-    }
-    return this
-  }
-
-  register(typeName: string, name: string, v: SourceFn) {
-    if (!this.#implRegistry.has(typeName)) {
-      this.#implRegistry.set(typeName, new Map())
-    }
-    this.#implRegistry.get(typeName)!.set(name, v)
-  }
-
-  findImpl(typeName: string, name: string) {
-    const defaultImpl = this.#fns.get(name)
-    if (defaultImpl === undefined) {
-      throw Error('unreachable')
-    }
-    const impl = this.#implRegistry.get(typeName)?.get(name)
-    if (impl !== undefined) {
-      return impl
-    }
-    if (defaultImpl !== null) {
-      return defaultImpl
-    }
-    throw Error(
-      `trait dispatching: missing implementation for \`${typeName}\` on \`${name}\``,
-    )
-  }
-
-  findMissingImpls(typeName: string) {
-    const traitSet = new Set(
-      this.#fns
-        .entries()
-        .filter(([, v]) => v === null)
-        .map(([k]) => k),
-    )
-    const implSet = new Set(this.#implRegistry.get(typeName)?.keys())
-    return traitSet.difference(implSet)
-  }
-}
-
-env.define('trait', new Trait())
-
-class TraitValue extends Raw implements Box {
-  type = 'trait-value'
-
-  constructor(
-    private name: string,
-    private trait: Trait,
-  ) {
-    super()
-  }
-
-  override eval(exprs: List, env: Environment): Var {
-    if (isNil(exprs)) {
-      throw Error('evaluating `trait-value`: unsupported syntax')
-    }
-    return this.trait
-      .findImpl(typeOf(evaluate(car(exprs) as SExpr, env)), this.name)
-      .apply(exprs, env)
-  }
-}
-
-class Impl extends Raw implements Box {
-  type = 'impl'
-
-  override eval(exprs: List, env: Environment): Var {
-    if (isNil(exprs)) {
-      throw Error('evaluating `impl`: missing trait name')
-    }
-
-    const traitName = car(exprs)
-    exprs = cdr(exprs) as List
-    if (isNil(exprs)) {
-      throw Error('evaluating `impl`: missing target type name')
-    }
-    const typeName = car(exprs)
-    exprs = cdr(exprs) as List
-
-    if (!isSymbol(traitName)) {
-      throw Error(
-        `evaluating \`impl\`: expecting \`symbol\` for trait name, found \`${typeOf(traitName)}\``,
-      )
-    }
-    if (!isSymbol(typeName)) {
-      throw Error(
-        `evaluating \`impl\`: expecting \`symbol\` for target type name, found \`${typeOf(typeName)}\``,
-      )
-    }
-
-    const trait = env.lookup(traitName.value)
-    if (!(trait instanceof Trait)) {
-      throw Error(
-        `evaluating \`impl\`: \`${traitName.value}\` is not a trait, but \`${typeOf(trait)}\`.`,
-      )
-    }
-    const implEnv = new Environment(env)
-    while (!isNil(exprs)) {
-      evaluate(car(exprs) as SExpr, implEnv)
-      exprs = cdr(exprs) as List
-    }
-    const fnEntries = implEnv.locals
-      .entries()
-      .filter(([, v]) => v instanceof Fn && v.value instanceof SourceFn)
-      .map(([k, v]): [string, SourceFn] => {
-        const fn = (v as Fn).value as SourceFn
-        fn.env = env
-        return [k, fn]
-      })
-    for (const [k, v] of fnEntries) {
-      trait.register(typeName.value, k, v)
-    }
-
-    const missingImpls = trait.findMissingImpls(typeName.value)
-    if (missingImpls.size !== 0) {
-      throw Error(
-        `evaluating \`impl\`: missing the following implementations: ${missingImpls
-          .values()
-          .map((k) => `\`${k}\``)
-          .toArray()
-          .join(', ')}`,
-      )
-    }
-
-    return null
-  }
-}
-
-env.define('impl', new Impl())
 
 env.define(
   '+',

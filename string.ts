@@ -1,5 +1,5 @@
-import { env } from './env'
-import { nativeFn } from './fn'
+import { Environment } from './env'
+import { Fn } from './fn'
 import { typeOf, type Var } from './types'
 
 export function isString(x: Var): x is string {
@@ -13,7 +13,10 @@ export function stringConcat(a: Var, b: Var) {
   return a + b
 }
 
-export function init() {
+export function init(
+  env: Environment,
+  nativeFn: (body: (...params: Var[]) => Var) => Fn,
+) {
   env.define('string?', nativeFn(isString))
   env.define('string-concat', nativeFn(stringConcat))
 }
