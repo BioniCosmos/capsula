@@ -139,17 +139,17 @@ class Impl extends Raw implements Box {
       evaluate(car(exprs) as SExpr, implEnv)
       exprs = cdr(exprs) as List
     }
-    const fnEntries = implEnv.locals
+    implEnv.locals
       .entries()
-      .filter(([, v]) => v instanceof Fn && v.value instanceof SourceFn)
-      .map(([k, v]): [string, SourceFn] => {
-        const fn = (v as Fn).value as SourceFn
-        fn.env = env
+      .filter(([, v]) => v instanceof Fn)
+      .map(([k, v]): [string, Fn] => {
+        const fn = v as Fn
+        if (fn.value instanceof SourceFn) {
+          fn.value.env = env
+        }
         return [k, fn]
       })
-    for (const [k, v] of fnEntries) {
-      trait.register(typeName.value, k, new Fn(v))
-    }
+      .forEach(([k, v]) => trait.register(typeName.value, k, v))
 
     const missingImpls = trait.findMissingImpls(typeName.value)
     if (missingImpls.size !== 0) {

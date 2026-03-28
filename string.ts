@@ -25,7 +25,7 @@ export function init(
   evaluate(
     parse(String.raw`
       (impl Add str
-        (def add (lambda (self rhs) (string-concat self rhs))))
+        (def add string-concat))
     `)[0],
     env,
   )
