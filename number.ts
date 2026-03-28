@@ -1,5 +1,6 @@
 import { Environment } from './env'
 import { Fn } from './fn'
+import type { Trait } from './trait'
 import { typeOf, type Var } from './types'
 
 export function add(self: Var, rhs: Var) {
@@ -21,4 +22,7 @@ export function init(
   nativeFn: (body: (...params: Var[]) => Var) => Fn,
 ) {
   env.define('number?', nativeFn(isNumber))
+
+  const Add = env.lookup('Add') as Trait
+  Add.register('num', 'add', nativeFn(add))
 }

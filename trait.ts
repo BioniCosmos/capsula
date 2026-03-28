@@ -170,8 +170,6 @@ export function init(
   env: Environment,
   parse: (input: string) => SExpr[],
   evaluate: (expr: SExpr, env: Environment) => Var,
-  nativeFn: (body: (...params: Var[]) => Var) => Fn,
-  numberAdd: (self: Var, rhs: Var) => Var,
 ) {
   env.define('trait', new Trait())
   env.define('impl', new Impl())
@@ -188,6 +186,4 @@ export function init(
     `)[0],
     env,
   )
-  const Add = env.lookup('Add') as Trait
-  Add.register('num', 'add', nativeFn(numberAdd))
 }
