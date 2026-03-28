@@ -1,8 +1,9 @@
-import { env, Environment } from './env'
-import { Fn, nativeFn, SourceFn, type Params } from './fn'
+import { Environment } from './env'
+import { Fn, SourceFn, type Params } from './fn'
 import { isList, type List } from './list'
-import { isNumber, add as numAdd } from './number'
+import { isNumber } from './number'
 import { car, cdr, isPair } from './pair'
+import { parse } from './parser'
 import { isString } from './string'
 import { TraitValue } from './trait'
 import {
@@ -15,10 +16,6 @@ import {
   type SExpr,
   type Var,
 } from './types'
-
-export const dispatcher: Map<string, Map<string, Function>> = new Map([
-  ['+', new Map([['num', numAdd]])],
-])
 
 export function evaluate(expr: SExpr, env: Environment): Var {
   if (isNil(expr) || isBoolean(expr) || isNumber(expr) || isString(expr)) {
@@ -59,8 +56,6 @@ class Def extends Raw implements Box {
   }
 }
 
-env.define('def', new Def())
-
 // TODO: support `else`
 class Cond extends Raw implements Box {
   type = 'cond'
@@ -96,8 +91,6 @@ class Cond extends Raw implements Box {
     return result
   }
 }
-
-env.define('cond', new Cond())
 
 // TODO: support optional and named parameters
 class Lambda extends Raw implements Box {
@@ -149,40 +142,40 @@ class Lambda extends Raw implements Box {
   }
 }
 
-env.define('lambda', new Lambda())
+export function baseInit(env: Environment) {
+  env.define('def', new Def())
+  env.define('cond', new Cond())
+  env.define('lambda', new Lambda())
+}
 
-env.define(
-  'apply',
-  nativeFn((fn, args) => {
-    if (!(fn instanceof Fn) && !(fn instanceof TraitValue)) {
-      throw Error(
-        `calling \`apply\`: expecting function, found \`${typeOf(fn)}\``,
-      )
-    }
-    if (!isList(args)) {
-      throw Error(
-        `calling \`apply\`: expecting list, found \`${typeOf(args)}\``,
-      )
-    }
-    return fn.eval(args, env)
-  }),
-)
-
-env.define(
-  '+',
-  nativeFn((...xs) => {
-    const fn = dispatcher.get('+')?.get(typeOf(xs[0]))
-    if (!fn) {
-      throw Error('function calling dispatching: failed to find a candidate')
-    }
-    if (xs.length === 0) {
-      return { type: 'nil' }
-    }
-    if (xs.length === 1) {
-      return xs[0]
-    }
-    return xs.reduce((acc, x) => {
-      return fn(acc, x)
-    })
-  }),
-)
+export function init(
+  env: Environment,
+  nativeFn: (body: (...params: Var[]) => Var) => Fn,
+) {
+  env.define(
+    'apply',
+    nativeFn((fn, args) => {
+      if (!(fn instanceof Fn) && !(fn instanceof TraitValue)) {
+        throw Error(
+          `calling \`apply\`: expecting function, found \`${typeOf(fn)}\``,
+        )
+      }
+      if (!isList(args)) {
+        throw Error(
+          `calling \`apply\`: expecting list, found \`${typeOf(args)}\``,
+        )
+      }
+      return fn.eval(args, env)
+    }),
+  )
+  env.define(
+    '=',
+    nativeFn((self, rhs) => self === rhs),
+  )
+  evaluate(
+    parse(String.raw`
+      (def + add-all)
+    `)[0],
+    env,
+  )
+}

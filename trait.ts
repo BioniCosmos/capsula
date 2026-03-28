@@ -180,10 +180,11 @@ export function init(
     parse(String.raw`
       (def Add (trait
         (def add (lambda (self rhs)))
-        (def add-all (lambda (x . xs)
+        (def add-all (lambda xs
           (cond
-            ((nil? xs) x)
-            (true (add x (apply add-all xs))))))))
+            ((nil? xs) nil)
+            ((= (length xs) 1) (car xs))
+            (true (add (car xs) (apply add-all (cdr xs)))))))))
     `)[0],
     env,
   )
