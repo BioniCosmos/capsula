@@ -81,7 +81,7 @@ export class Trait extends Raw implements Box {
   }
 }
 
-class TraitValue extends Raw implements Box {
+export class TraitValue extends Raw implements Box {
   type = 'trait-value'
 
   constructor(

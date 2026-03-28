@@ -4,6 +4,7 @@ import { isList, type List } from './list'
 import { isNumber, add as numAdd } from './number'
 import { car, cdr, isPair } from './pair'
 import { isString } from './string'
+import { TraitValue } from './trait'
 import {
   isBoolean,
   isNil,
@@ -149,6 +150,23 @@ class Lambda extends Raw implements Box {
 }
 
 env.define('lambda', new Lambda())
+
+env.define(
+  'apply',
+  nativeFn((fn, args) => {
+    if (!(fn instanceof Fn) && !(fn instanceof TraitValue)) {
+      throw Error(
+        `calling \`apply\`: expecting function, found \`${typeOf(fn)}\``,
+      )
+    }
+    if (!isList(args)) {
+      throw Error(
+        `calling \`apply\`: expecting list, found \`${typeOf(args)}\``,
+      )
+    }
+    return fn.eval(args, env)
+  }),
+)
 
 env.define(
   '+',
