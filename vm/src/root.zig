@@ -1,23 +1,19 @@
-//! By convention, root.zig is the root source file when making a library.
 const std = @import("std");
+const mem = std.mem;
 
-pub fn bufferedPrint() !void {
-    // Stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    const stdout = &stdout_writer.interface;
-
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
-
-    try stdout.flush(); // Don't forget to flush!
-}
-
-pub fn add(a: i32, b: i32) i32 {
-    return a + b;
-}
-
-test "basic add functionality" {
-    try std.testing.expect(add(3, 7) == 10);
+pub export fn execute(bytecode: [*]const u8, len: u64) void {
+    var i: usize = 0;
+    while (i < len) {
+        switch (bytecode[i]) {
+            0 => {
+                i += 1;
+                const lhs = mem.readInt(i64, bytecode[i .. i + 8][0..8], .little);
+                i += 8;
+                const rhs = mem.readInt(i64, bytecode[i .. i + 8][0..8], .little);
+                i += 8;
+                std.debug.print("{}\n", .{lhs + rhs});
+            },
+            else => unreachable,
+        }
+    }
 }
