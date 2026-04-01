@@ -129,7 +129,7 @@ class Lambda extends Raw implements Box {
           `evaluating \`lambda\`: expecting symbol, found \`${typeOf(next)}\``,
         )
       }
-    } else {
+    } else if (params !== null) {
       throw Error('evaluating `lambda`: missing parameters')
     }
     let body = cdr(exprs)
