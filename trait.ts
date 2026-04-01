@@ -171,7 +171,7 @@ export function init(
   parse: (input: string) => SExpr[],
   evaluate: (expr: SExpr, env: Environment) => Var,
 ) {
-  env.define('trait', new Trait())
+  env.define('trait', () => new Trait())
   env.define('impl', new Impl())
 
   evaluate(

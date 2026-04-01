@@ -1,21 +1,25 @@
 import type { Var } from './types'
 
 export class Environment {
-  readonly #vars = new Map<string, Var>()
+  readonly #vars = new Map<string, Var | (() => Var)>()
 
   constructor(private readonly parent: Environment | null = null) {}
 
-  get locals(): ReadonlyMap<string, Var> {
-    return this.#vars
+  get locals() {
+    return this.#vars as ReadonlyMap<string, Var>
   }
 
-  define(name: string, value: Var) {
+  define(name: string, value: Var | (() => Var)) {
     this.#vars.set(name, value)
   }
 
   lookup(name: string): Var {
     if (this.#vars.has(name)) {
-      return this.#vars.get(name)!
+      const v = this.#vars.get(name)!
+      if (typeof v === 'function') {
+        return v()
+      }
+      return v
     }
 
     if (this.parent) {
