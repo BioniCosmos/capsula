@@ -168,14 +168,24 @@ export function init(
       return fn.eval(args, env)
     }),
   )
+
   env.define(
     '=',
     nativeFn((self, rhs) => self === rhs),
   )
+
   evaluate(
     parse(String.raw`
       (def + add-all)
     `)[0],
     env,
+  )
+
+  env.define(
+    'print',
+    nativeFn((...xs) => {
+      console.log(...xs)
+      return null
+    }),
   )
 }
