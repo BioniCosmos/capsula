@@ -1,3 +1,4 @@
+import { init as coroutineInit } from './coroutine'
 import { env } from './env'
 import { init as listInit } from './list'
 import { baseInit, evaluate, init as nativeInit } from './native'
@@ -13,6 +14,7 @@ export async function init() {
   baseInit(env)
   typesInit(env, nativeFn)
   traitInit(env, parse, evaluate)
+  coroutineInit(env)
   numberInit(env, nativeFn)
   stringInit(env, nativeFn, parse, evaluate)
   pairInit(env, nativeFn)

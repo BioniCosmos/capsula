@@ -1,4 +1,4 @@
-import { dlopen, FFIType, ptr, suffix } from 'bun:ffi'
+import { dlopen, FFIType, suffix } from 'bun:ffi'
 import { env } from './env'
 import { isList, type List } from './list'
 import { evaluate } from './native'
@@ -11,7 +11,7 @@ interface Backend<T> {
   execute(artifact: T): void
 }
 
-class TreeWalk implements Backend<SExpr[]> {
+export class TreeWalk implements Backend<SExpr[]> {
   compile(source: SExpr[]): SExpr[] {
     return source
   }

@@ -93,7 +93,7 @@ class Cond extends Raw implements Box {
 }
 
 // TODO: support optional and named parameters
-class Lambda extends Raw implements Box {
+export class Lambda extends Raw implements Box {
   type = 'lambda'
 
   override eval(exprs: List, env: Environment): Var {
