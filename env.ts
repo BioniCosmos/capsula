@@ -28,6 +28,20 @@ export class Environment {
 
     throw Error(`undefined variable: ${name}`)
   }
+
+  set(name: string, value: Var) {
+    if (this.#vars.has(name)) {
+      this.#vars.set(name, value)
+      return
+    }
+
+    if (this.parent) {
+      this.parent.set(name, value)
+      return
+    }
+
+    throw Error(`undefined variable: ${name}`)
+  }
 }
 
 export const env = new Environment()

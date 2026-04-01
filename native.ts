@@ -142,6 +142,29 @@ class Lambda extends Raw implements Box {
   }
 }
 
+class SetVar extends Raw implements Box {
+  type = 'set!'
+
+  override eval(exprs: List, env: Environment): Var {
+    if (isNil(exprs)) {
+      throw Error(`evaluating \`set!\`: missing arguments`)
+    }
+    const name = car(exprs)
+    if (!isSymbol(name)) {
+      throw Error(
+        `evaluating \`set!\`: expecting \`symbol\`, found \`${typeOf(name)}\``,
+      )
+    }
+    exprs = cdr(exprs) as List
+    if (isNil(exprs)) {
+      throw Error(`evaluating \`set!\`: missing arguments`)
+    }
+    const value = car(exprs)
+    env.set(name.value, value)
+    return null
+  }
+}
+
 export function baseInit(env: Environment) {
   env.define('def', new Def())
   env.define('cond', new Cond())
@@ -188,4 +211,6 @@ export function init(
       return null
     }),
   )
+
+  env.define('set!', new SetVar())
 }
