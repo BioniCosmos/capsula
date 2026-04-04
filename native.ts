@@ -1,8 +1,8 @@
 import { Environment } from './env'
-import { Fn, SourceFn, type Params } from './fn'
-import { isList, type List } from './list'
+import { Fn, SourceFn } from './fn'
+import { collect, isList, iter, next, type List } from './list'
 import { isNumber } from './number'
-import { car, cdr, isPair } from './pair'
+import { car, cdr } from './pair'
 import { parse } from './parser'
 import { isString } from './string'
 import { TraitValue } from './trait'
@@ -11,6 +11,7 @@ import {
   isNil,
   isSymbol,
   Raw,
+  Sym,
   typeOf,
   type Box,
   type SExpr,
@@ -29,7 +30,7 @@ export function evaluate(expr: SExpr, env: Environment): Var {
   }
   const box = evaluate(car(expr) as SExpr, env)
   if (box instanceof Raw) {
-    return box.eval(cdr(expr) as List, env)
+    return box.eval(cdr(expr), env)
   }
   throw Error('unreachable')
 }
@@ -38,20 +39,14 @@ class Def extends Raw implements Box {
   type = 'def'
 
   override eval(exprs: List, env: Environment): Var {
-    if (isNil(exprs)) {
-      throw Error(`evaluating \`def\`: missing arguments`)
-    }
-    const sym = car(exprs)
+    const it = iter(exprs)
+    const sym = next(it, 'def')
     if (!isSymbol(sym)) {
       throw Error(
         `evaluating \`def\`: expecting symbol, found \`${typeOf(sym)}\``,
       )
     }
-    exprs = cdr(exprs) as List
-    if (isNil(exprs)) {
-      throw Error(`evaluating \`def\`: missing value`)
-    }
-    env.define(sym.value, evaluate(car(exprs) as SExpr, env))
+    env.define(sym.value, evaluate(next(it, 'def') as SExpr, env))
     return null
   }
 }
@@ -61,34 +56,28 @@ class Cond extends Raw implements Box {
   type = 'cond'
 
   override eval(exprs: List, env: Environment): Var {
-    let result: Var = null
-    while (exprs !== null) {
-      let clause = car(exprs)
-      if (!isList(clause) || clause === null) {
+    for (const clause of iter(exprs)) {
+      if (!isList(clause) || isNil(clause)) {
         throw Error(
           `evaluating \`cond\`: expecting non-empty \`list\`, found \`${typeOf(clause)}\``,
         )
       }
-      const condition = evaluate(car(clause) as SExpr, env)
+      const it = iter(clause)
+      const condition = evaluate(next(it, 'cond') as SExpr, env)
       if (!isBoolean(condition)) {
         throw Error(
           `evaluating \`cond\`: expecting \`bool\`, found \`${typeOf(condition)}\``,
         )
       }
       if (condition) {
-        clause = cdr(clause)
-        if (clause === null) {
+        const body = it.toArray()
+        if (body.length === 0) {
           throw Error(`evaluating \`cond\`: missing body`)
         }
-        do {
-          result = evaluate(car(clause) as SExpr, env)
-          clause = cdr(clause)
-        } while (clause !== null)
-        break
+        return body.reduce((_, x) => evaluate(x as SExpr, env), null)
       }
-      exprs = cdr(exprs) as List
     }
-    return result
+    return null
   }
 }
 
@@ -97,48 +86,26 @@ export class Lambda extends Raw implements Box {
   type = 'lambda'
 
   override eval(exprs: List, env: Environment): Var {
-    if (isNil(exprs)) {
-      throw Error('evaluating `lambda`: missing arguments')
+    const it = iter(exprs)
+    const [fixed, rest] = collect(iter(next(it, 'lambda')))
+    if (!isSymbol(rest) && !isNil(rest)) {
+      throw Error(
+        `evaluating \`lambda\`: expecting \`symbol\`, found \`${typeOf(rest)}\``,
+      )
     }
-    const paramDeclaration: Params = { fixed: [], rest: '' }
-    let params = car(exprs)
-    if (isSymbol(params)) {
-      paramDeclaration.rest = params.value
-    } else if (isPair(params)) {
-      while (true) {
-        const param = car(params)
-        if (!isSymbol(param)) {
-          throw Error(
-            `evaluating \`lambda\`: expecting symbol, found \`${typeOf(param)}\``,
-          )
-        }
-        paramDeclaration.fixed.push(param.value)
-        const next = cdr(params)
-        if (isNil(next)) {
-          break
-        }
-        if (isSymbol(next)) {
-          paramDeclaration.rest = next.value
-          break
-        }
-        if (isPair(next)) {
-          params = next
-          continue
-        }
-        throw Error(
-          `evaluating \`lambda\`: expecting symbol, found \`${typeOf(next)}\``,
-        )
-      }
-    } else if (params !== null) {
-      throw Error('evaluating `lambda`: missing parameters')
+    const illegalOne = fixed.find((x) => !isSymbol(x))
+    if (illegalOne !== undefined && fixed.length !== 0) {
+      throw Error(
+        `evaluating \`lambda\`: expecting \`symbol\`, found \`${typeOf(illegalOne)}\``,
+      )
     }
-    let body = cdr(exprs)
-    const bodyArray = Array.of<SExpr>()
-    while (!isNil(body)) {
-      bodyArray.push(car(body) as SExpr)
-      body = cdr(body)
-    }
-    return new Fn(new SourceFn(env, paramDeclaration, bodyArray))
+    return new Fn(
+      new SourceFn(
+        env,
+        { fixed: fixed.map((x) => (x as Sym).value), rest: rest?.value ?? '' },
+        it.toArray() as SExpr[],
+      ),
+    )
   }
 }
 
@@ -146,21 +113,14 @@ class SetVar extends Raw implements Box {
   type = 'set!'
 
   override eval(exprs: List, env: Environment): Var {
-    if (isNil(exprs)) {
-      throw Error(`evaluating \`set!\`: missing arguments`)
-    }
-    const name = car(exprs)
+    const it = iter(exprs)
+    const name = next(it, 'set!')
     if (!isSymbol(name)) {
       throw Error(
         `evaluating \`set!\`: expecting \`symbol\`, found \`${typeOf(name)}\``,
       )
     }
-    exprs = cdr(exprs) as List
-    if (isNil(exprs)) {
-      throw Error(`evaluating \`set!\`: missing arguments`)
-    }
-    const value = car(exprs)
-    env.set(name.value, value)
+    env.set(name.value, next(it, 'set!'))
     return null
   }
 }

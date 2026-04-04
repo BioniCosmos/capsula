@@ -1,5 +1,6 @@
 import { Environment } from './env'
 import { Fn } from './fn'
+import type { List } from './list'
 import { typeOf, type Var } from './types'
 
 export type Pair = [Var, Var]
@@ -15,7 +16,9 @@ export function car(x: Var) {
   return x[0]
 }
 
-export function cdr(x: Var) {
+export function cdr(x: [Var, List]): List
+export function cdr(x: Var): Var
+export function cdr(x: Var): Var {
   if (!isPair(x)) {
     throw Error(`calling \`cdr\`: expecting \`pair\`, found \`${typeOf(x)}\``)
   }

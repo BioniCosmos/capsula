@@ -1,8 +1,8 @@
 import { Environment } from './env'
 import { Fn, SourceFn } from './fn'
-import type { List } from './list'
+import { iter, next, type List } from './list'
 import { evaluate } from './native'
-import { car, cdr } from './pair'
+import { car } from './pair'
 import {
   isNil,
   isSymbol,
@@ -23,9 +23,8 @@ export class Trait extends Raw implements Box {
 
   override eval(exprs: List, env: Environment): Var {
     const traitEnv = new Environment(env)
-    while (!isNil(exprs)) {
-      evaluate(car(exprs) as SExpr, traitEnv)
-      exprs = cdr(exprs) as List
+    for (const expr of iter(exprs)) {
+      evaluate(expr as SExpr, traitEnv)
     }
     const fnEntries = traitEnv.locals
       .entries()
@@ -105,17 +104,9 @@ class Impl extends Raw implements Box {
   type = 'impl'
 
   override eval(exprs: List, env: Environment): Var {
-    if (isNil(exprs)) {
-      throw Error('evaluating `impl`: missing trait name')
-    }
-
-    const traitName = car(exprs)
-    exprs = cdr(exprs) as List
-    if (isNil(exprs)) {
-      throw Error('evaluating `impl`: missing target type name')
-    }
-    const typeName = car(exprs)
-    exprs = cdr(exprs) as List
+    const it = iter(exprs)
+    const traitName = next(it, 'impl')
+    const typeName = next(it, 'impl')
 
     if (!isSymbol(traitName)) {
       throw Error(
@@ -135,9 +126,8 @@ class Impl extends Raw implements Box {
       )
     }
     const implEnv = new Environment(env)
-    while (!isNil(exprs)) {
-      evaluate(car(exprs) as SExpr, implEnv)
-      exprs = cdr(exprs) as List
+    for (const expr of it) {
+      evaluate(expr as SExpr, implEnv)
     }
     implEnv.locals
       .entries()

@@ -1,8 +1,8 @@
 import { Environment } from './env'
-import type { List } from './list'
+import { iter, type List } from './list'
 import { evaluate } from './native'
-import { car, cdr } from './pair'
-import { isNil, Raw, type Box, type SExpr, type Var } from './types'
+import { cons } from './pair'
+import { Raw, type Box, type SExpr, type Var } from './types'
 
 export class Fn extends Raw implements Box {
   type = 'fn'
@@ -25,25 +25,23 @@ export class SourceFn {
 
   apply(args: List, env: Environment) {
     const fnEnv = new Environment(this.env)
+    const it = iter(args)
     for (const param of this.params.fixed) {
-      if (isNil(args)) {
+      const { value, done } = it.next()
+      if (done) {
         throw Error('calling function: missing arguments')
       }
-      fnEnv.define(param, evaluate(car(args) as SExpr, env))
-      args = cdr(args) as List
+      fnEnv.define(param, evaluate(value as SExpr, env))
     }
     if (this.params.rest !== '') {
-      fnEnv.define(this.params.rest, args)
-      while (!isNil(args)) {
-        args[0] = evaluate(car(args) as SExpr, env)
-        args = cdr(args) as List
-      }
+      fnEnv.define(
+        this.params.rest,
+        it
+          .toArray()
+          .reduceRight((acc, x) => cons(evaluate(x as SExpr, env), acc), null),
+      )
     }
-    let result: Var = null
-    for (const expr of this.body) {
-      result = evaluate(expr, fnEnv)
-    }
-    return result
+    return this.body.reduce<Var>((_, expr) => evaluate(expr, fnEnv), null)
   }
 }
 
@@ -51,12 +49,11 @@ export class NativeFn {
   constructor(public body: (...params: Var[]) => Var) {}
 
   apply(args: List, env: Environment) {
-    const params = Array.of<Var>()
-    while (!isNil(args)) {
-      params.push(evaluate(car(args) as SExpr, env))
-      args = cdr(args) as List
-    }
-    return this.body(...params)
+    return this.body(
+      ...iter(args)
+        .toArray()
+        .map((x) => evaluate(x as SExpr, env)),
+    )
   }
 }
 

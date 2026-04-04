@@ -1,8 +1,7 @@
 import { Environment } from './env'
 import type { Fn, SourceFn } from './fn'
-import type { List } from './list'
+import { iter, next, type List } from './list'
 import { evaluate, Lambda } from './native'
-import { car } from './pair'
 import { Raw, typeOf, type Box, type SExpr, type Var } from './types'
 
 class Co extends Raw implements Box {
@@ -36,7 +35,7 @@ class Yield extends Raw implements Box {
   type = 'yield'
 
   override eval(exprs: List, env: Environment): Var {
-    const co = evaluate(car(exprs) as SExpr, env)
+    const co = evaluate(next(iter(exprs), 'yield') as SExpr, env)
     if (!(co instanceof Co)) {
       throw Error(
         `evaluating \`yield\`: expecting coroutine, found \`${typeOf(co)}\``,
@@ -50,7 +49,7 @@ class Start extends Raw implements Box {
   type = 'start'
 
   override eval(exprs: List, env: Environment): Var {
-    let co = evaluate(car(exprs) as SExpr, env)
+    let co = evaluate(next(iter(exprs), 'start') as SExpr, env)
     if (!(co instanceof Co)) {
       throw Error(
         `evaluating \`start\`: expecting coroutine, found \`${typeOf(co)}\``,
