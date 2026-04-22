@@ -1,4 +1,4 @@
-import type { Var } from './types'
+import type { BytecodeCompiler, Var } from './types'
 
 export class Environment {
   readonly #vars = new Map<string, Var | (() => Var)>()
@@ -45,3 +45,29 @@ export class Environment {
 }
 
 export const env = new Environment()
+
+export class BytecodeVMEnv {
+  readonly #vars = new Map<string, number | BytecodeCompiler>()
+
+  constructor(private readonly parent: BytecodeVMEnv | null = null) {}
+
+  get locals(): ReadonlyMap<string, number | BytecodeCompiler> {
+    return this.#vars
+  }
+
+  define(name: string, addr: number | BytecodeCompiler) {
+    this.#vars.set(name, addr)
+  }
+
+  lookup(name: string): number | BytecodeCompiler {
+    if (this.#vars.has(name)) {
+      return this.#vars.get(name)!
+    }
+
+    if (this.parent) {
+      return this.parent.lookup(name)
+    }
+
+    throw Error(`undefined variable: ${name}`)
+  }
+}
