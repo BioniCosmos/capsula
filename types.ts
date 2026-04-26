@@ -1,5 +1,5 @@
 import type { BytecodeVM } from './backend'
-import type { Bytecode } from './bytecode'
+import type { Instruction } from './bytecode'
 import type { Environment } from './env'
 import { Fn } from './fn'
 import type { List } from './list'
@@ -22,7 +22,7 @@ export abstract class Raw {
 }
 
 export abstract class BytecodeCompiler {
-  abstract compile(ctx: BytecodeVM, exprs: List): Bytecode[]
+  abstract compile(ctx: BytecodeVM, exprs: List): Instruction[]
 }
 
 export function typeOf(x: Var) {

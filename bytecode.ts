@@ -1,7 +1,7 @@
 export const Instruction = {
   Add: { type: 'Add' },
   Push: (addr: number) => ({ type: 'Push', addr }) as const,
-  Load: { type: 'Load' },
+  Load: (addr: number) => ({ type: 'Load', addr }) as const,
 } as const
 
 type GetValueOrReturnValue<T> = T extends (...args: any[]) => infer R ? R : T
@@ -10,15 +10,13 @@ export type Instruction = GetValueOrReturnValue<
   (typeof Instruction)[keyof typeof Instruction]
 >
 
-export type Bytecode = Instruction | number
-
-export function length(bytecode: Bytecode[]) {
+export function length(bytecode: Instruction[]) {
   let len = 0
   for (const code of bytecode) {
     if (typeof code === 'number') {
       len += 2
     } else {
-      if (code.type === 'Push') {
+      if (code.type === 'Push' || code.type === 'Load') {
         len += 3
       } else {
         len += 1
@@ -28,7 +26,7 @@ export function length(bytecode: Bytecode[]) {
   return len
 }
 
-export function serialize(bytecode: Bytecode[]) {
+export function serialize(bytecode: Instruction[]) {
   let buf = new ArrayBuffer(length(bytecode))
   let view = new DataView(buf)
   let i = 0
@@ -38,7 +36,7 @@ export function serialize(bytecode: Bytecode[]) {
       i += 2
     } else {
       view.setUint8(i++, serializeCmd.get(code.type)!)
-      if (code.type === 'Push') {
+      if (code.type === 'Push' || code.type === 'Load') {
         view.setUint16(i, code.addr, true)
         i += 2
       }
