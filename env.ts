@@ -48,6 +48,7 @@ export const env = new Environment()
 
 export class BytecodeVMEnv {
   readonly #vars = new Map<string, number | BytecodeCompiler>()
+  #baseAddr = 0
 
   constructor(private readonly parent: BytecodeVMEnv | null = null) {}
 
@@ -55,8 +56,14 @@ export class BytecodeVMEnv {
     return this.#vars
   }
 
-  define(name: string, addr: number | BytecodeCompiler) {
+  defineVar(name: string) {
+    const addr = this.#baseAddr++
     this.#vars.set(name, addr)
+    return addr
+  }
+
+  defineCompiler(name: string, compiler: BytecodeCompiler) {
+    this.#vars.set(name, compiler)
   }
 
   lookup(name: string): number | BytecodeCompiler {

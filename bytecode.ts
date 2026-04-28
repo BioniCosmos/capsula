@@ -2,6 +2,7 @@ export const Instruction = {
   Add: { type: 'Add' },
   Push: (addr: number) => ({ type: 'Push', addr }) as const,
   Load: (addr: number) => ({ type: 'Load', addr }) as const,
+  Save: (addr: number) => ({ type: 'Save', addr }) as const,
 } as const
 
 type GetValueOrReturnValue<T> = T extends (...args: any[]) => infer R ? R : T
@@ -16,7 +17,11 @@ export function length(bytecode: Instruction[]) {
     if (typeof code === 'number') {
       len += 2
     } else {
-      if (code.type === 'Push' || code.type === 'Load') {
+      if (
+        code.type === 'Push' ||
+        code.type === 'Load' ||
+        code.type === 'Save'
+      ) {
         len += 3
       } else {
         len += 1
@@ -36,7 +41,11 @@ export function serialize(bytecode: Instruction[]) {
       i += 2
     } else {
       view.setUint8(i++, serializeCmd.get(code.type)!)
-      if (code.type === 'Push' || code.type === 'Load') {
+      if (
+        code.type === 'Push' ||
+        code.type === 'Load' ||
+        code.type === 'Save'
+      ) {
         view.setUint16(i, code.addr, true)
         i += 2
       }

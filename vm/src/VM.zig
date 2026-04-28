@@ -8,7 +8,7 @@ const mem = std.mem;
 const Var = union(VarType) { i64: i64, bool: bool };
 const VarType = enum { i64, bool };
 
-pub const Instruction = enum(u8) { add, push, load };
+pub const Instruction = enum(u8) { add, push, load, save };
 
 const Error = error{ Runtime, MaxVariableNumberExceeded } || mem.Allocator.Error;
 
@@ -20,7 +20,7 @@ gpa: *heap.DebugAllocator(.{}),
 allocator: mem.Allocator,
 
 vars: std.ArrayList(Var) = .empty,
-local: std.ArrayList(Var) = .empty,
+local: [1024 * 1024]Var = undefined,
 stack: std.ArrayList(Var) = .empty,
 
 err_buf: [1024]u8 = undefined,
@@ -34,7 +34,6 @@ pub fn init() Self {
 
 pub fn deinit(self: *Self) void {
     self.vars.deinit(self.allocator);
-    self.local.deinit(self.allocator);
     self.stack.deinit(self.allocator);
     debug.assert(self.gpa.deinit() == .ok);
     heap.c_allocator.destroy(self.gpa);
@@ -74,21 +73,11 @@ pub fn execute(self: *Self, bytecode: []const u8) Error!void {
                     },
                 };
                 debug.print("{}\n", .{lhs + rhs});
+                try self.pushToList(.{ .i64 = lhs + rhs }, &self.stack);
             },
-            .push => {
-                try self.pushToList(
-                    self.vars.items[mem.readVarInt(u16, bytecode[i + 1 .. i + 3], .little)],
-                    &self.stack,
-                );
-                i += 2;
-            },
-            .load => {
-                try self.pushToList(
-                    self.stack.items[mem.readVarInt(u16, bytecode[i + 1 .. i + 3], .little)],
-                    &self.stack,
-                );
-                i += 2;
-            },
+            .push => try self.pushToList(self.vars.items[readAddr(bytecode, &i)], &self.stack),
+            .load => try self.pushToList(self.local[readAddr(bytecode, &i)], &self.stack),
+            .save => self.local[readAddr(bytecode, &i)] = self.pop(),
         }
     }
 }
@@ -115,4 +104,10 @@ fn pushToList(self: *Self, x: Var, xs: *std.ArrayList(Var)) !void {
         self.err = fmt.bufPrint(&self.err_buf, "OOM", .{}) catch unreachable;
         return err;
     };
+}
+
+fn readAddr(bytecode: []const u8, i: *usize) u16 {
+    const addr = mem.readVarInt(u16, bytecode[i.* + 1 .. i.* + 3], .little);
+    i.* += 2;
+    return addr;
 }
