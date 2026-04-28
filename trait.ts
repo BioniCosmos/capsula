@@ -6,22 +6,22 @@ import { car } from './pair'
 import {
   isNil,
   isSymbol,
-  Raw,
   typeOf,
   type Box,
   type SExpr,
+  type TreeWalkEvaluator,
   type Var,
 } from './types'
 
 // TODO: stricter grammar
 // TODO: support associated types, variables…
-export class Trait extends Raw implements Box {
+export class Trait implements Box, TreeWalkEvaluator {
   type = 'trait'
 
   #fns = new Map<string, SourceFn | null>()
   #implRegistry = new Map<string, Map<string, Fn>>()
 
-  override eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: Environment): Var {
     const traitEnv = new Environment(env)
     for (const expr of iter(exprs)) {
       evaluate(expr as SExpr, traitEnv)
@@ -80,17 +80,15 @@ export class Trait extends Raw implements Box {
   }
 }
 
-export class TraitValue extends Raw implements Box {
+export class TraitValue implements Box, TreeWalkEvaluator {
   type = 'trait-value'
 
   constructor(
     private name: string,
     private trait: Trait,
-  ) {
-    super()
-  }
+  ) {}
 
-  override eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: Environment): Var {
     if (isNil(exprs)) {
       throw Error('evaluating `trait-value`: unsupported syntax')
     }
@@ -100,10 +98,10 @@ export class TraitValue extends Raw implements Box {
   }
 }
 
-class Impl extends Raw implements Box {
+class Impl implements Box, TreeWalkEvaluator {
   type = 'impl'
 
-  override eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: Environment): Var {
     const it = iter(exprs)
     const traitName = next(it, 'impl')
     const typeName = next(it, 'impl')

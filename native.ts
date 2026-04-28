@@ -10,11 +10,12 @@ import {
   isBoolean,
   isNil,
   isSymbol,
-  Raw,
+  isTreeWalkEvaluator,
   Sym,
   typeOf,
   type Box,
   type SExpr,
+  type TreeWalkEvaluator,
   type Var,
 } from './types'
 
@@ -29,16 +30,16 @@ export function evaluate(expr: SExpr, env: Environment): Var {
     throw Error('evaluating: expecting list, found pair')
   }
   const box = evaluate(car(expr) as SExpr, env)
-  if (box instanceof Raw) {
+  if (isTreeWalkEvaluator(box)) {
     return box.eval(cdr(expr), env)
   }
   throw Error('unreachable')
 }
 
-class Def extends Raw implements Box {
+class Def implements Box, TreeWalkEvaluator {
   type = 'def'
 
-  override eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: Environment): Var {
     const it = iter(exprs)
     const sym = next(it, 'def')
     if (!isSymbol(sym)) {
@@ -52,10 +53,10 @@ class Def extends Raw implements Box {
 }
 
 // TODO: support `else`
-class Cond extends Raw implements Box {
+class Cond implements Box, TreeWalkEvaluator {
   type = 'cond'
 
-  override eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: Environment): Var {
     for (const clause of iter(exprs)) {
       if (!isList(clause) || isNil(clause)) {
         throw Error(
@@ -82,10 +83,10 @@ class Cond extends Raw implements Box {
 }
 
 // TODO: support optional and named parameters
-export class Lambda extends Raw implements Box {
+export class Lambda implements Box, TreeWalkEvaluator {
   type = 'lambda'
 
-  override eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: Environment): Var {
     const it = iter(exprs)
     const [fixed, rest] = collect(iter(next(it, 'lambda')))
     if (!isSymbol(rest) && !isNil(rest)) {
@@ -109,10 +110,10 @@ export class Lambda extends Raw implements Box {
   }
 }
 
-class SetVar extends Raw implements Box {
+class SetVar implements Box, TreeWalkEvaluator {
   type = 'set!'
 
-  override eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: Environment): Var {
     const it = iter(exprs)
     const name = next(it, 'set!')
     if (!isSymbol(name)) {

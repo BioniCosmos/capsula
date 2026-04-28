@@ -2,16 +2,22 @@ import { Environment } from './env'
 import type { Fn, SourceFn } from './fn'
 import { iter, next, type List } from './list'
 import { evaluate, Lambda } from './native'
-import { Raw, typeOf, type Box, type SExpr, type Var } from './types'
+import {
+  typeOf,
+  type Box,
+  type SExpr,
+  type TreeWalkEvaluator,
+  type Var,
+} from './types'
 
-class Co extends Raw implements Box {
+class Co implements Box, TreeWalkEvaluator {
   type = 'co'
 
   pc = 0
   fn: SourceFn | null = null
   env: Environment | null = null
 
-  override eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: Environment): Var {
     this.fn = (new Lambda().eval(exprs, env) as Fn).value as SourceFn
     this.env = new Environment(env)
     return this
@@ -31,10 +37,10 @@ class Co extends Raw implements Box {
   }
 }
 
-class Yield extends Raw implements Box {
+class Yield implements Box, TreeWalkEvaluator {
   type = 'yield'
 
-  override eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: Environment): Var {
     const co = evaluate(next(iter(exprs), 'yield') as SExpr, env)
     if (!(co instanceof Co)) {
       throw Error(
@@ -45,10 +51,10 @@ class Yield extends Raw implements Box {
   }
 }
 
-class Start extends Raw implements Box {
+class Start implements Box, TreeWalkEvaluator {
   type = 'start'
 
-  override eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: Environment): Var {
     let co = evaluate(next(iter(exprs), 'start') as SExpr, env)
     if (!(co instanceof Co)) {
       throw Error(

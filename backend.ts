@@ -6,12 +6,12 @@ import { isNumber } from './number'
 import { car, cdr } from './pair'
 import { isString } from './string'
 import {
-  BytecodeCompiler,
+  type SExpr,
   isBoolean,
+  isBytecodeCompiler,
   isNil,
   isSymbol,
   typeOf,
-  type SExpr,
 } from './types'
 import { VM } from './vm'
 
@@ -76,7 +76,7 @@ export class BytecodeVM implements Backend<Instruction[]> {
         throw Error(`compiling: expecting symbol, found \`${typeOf(sym)}\``)
       }
       const compiler = this.env.lookup(sym.value)
-      if (!(compiler instanceof BytecodeCompiler)) {
+      if (!isBytecodeCompiler(compiler)) {
         throw Error('compiling: not callable')
       }
       return compiler.compile(this, cdr(expr))

@@ -17,12 +17,20 @@ export interface Box {
   type: string
 }
 
-export abstract class Raw {
-  abstract eval(exprs: List, env: Environment): Var
+export interface TreeWalkEvaluator {
+  eval(exprs: List, env: Environment): Var
 }
 
-export abstract class BytecodeCompiler {
-  abstract compile(ctx: BytecodeVM, exprs: List): Instruction[]
+export function isTreeWalkEvaluator(x: any): x is TreeWalkEvaluator {
+  return typeof x?.eval === 'function'
+}
+
+export interface BytecodeCompiler {
+  compile(ctx: BytecodeVM, exprs: List): Instruction[]
+}
+
+export function isBytecodeCompiler(x: any): x is BytecodeCompiler {
+  return typeof x?.compile === 'function'
 }
 
 export function typeOf(x: Var) {

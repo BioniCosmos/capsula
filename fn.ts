@@ -2,16 +2,14 @@ import { Environment } from './env'
 import { iter, type List } from './list'
 import { evaluate } from './native'
 import { cons } from './pair'
-import { Raw, type Box, type SExpr, type Var } from './types'
+import type { Box, SExpr, TreeWalkEvaluator, Var } from './types'
 
-export class Fn extends Raw implements Box {
+export class Fn implements Box, TreeWalkEvaluator {
   type = 'fn'
 
-  constructor(public value: SourceFn | NativeFn) {
-    super()
-  }
+  constructor(public value: SourceFn | NativeFn) {}
 
-  override eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: Environment): Var {
     return this.value.apply(exprs, env)
   }
 }
