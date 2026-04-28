@@ -121,7 +121,7 @@ class SetVar implements Box, TreeWalkEvaluator {
         `evaluating \`set!\`: expecting \`symbol\`, found \`${typeOf(name)}\``,
       )
     }
-    env.set(name.value, next(it, 'set!'))
+    env.set(name.value, evaluate(next(it, 'set!') as SExpr, env))
     return null
   }
 }
