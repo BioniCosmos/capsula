@@ -1,4 +1,4 @@
-import { Environment } from './env'
+import type { TreeWalk } from './env'
 import { Fn } from './fn'
 import type { List } from './list'
 import { typeOf, type Var } from './types'
@@ -30,7 +30,7 @@ export function isPair(x: Var): x is Pair {
 }
 
 export function init(
-  env: Environment,
+  env: TreeWalk.Environment,
   nativeFn: (body: (...params: Var[]) => Var) => Fn,
 ) {
   env.define('cons', nativeFn(cons))

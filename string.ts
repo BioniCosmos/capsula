@@ -1,4 +1,4 @@
-import { Environment } from './env'
+import type { TreeWalk } from './env'
 import { Fn } from './fn'
 import { typeOf, type SExpr, type Var } from './types'
 
@@ -14,10 +14,10 @@ export function stringConcat(a: Var, b: Var) {
 }
 
 export function init(
-  env: Environment,
+  env: TreeWalk.Environment,
   nativeFn: (body: (...params: Var[]) => Var) => Fn,
   parse: (input: string) => SExpr[],
-  evaluate: (expr: SExpr, env: Environment) => Var,
+  evaluate: (expr: SExpr, env: TreeWalk.Environment) => Var,
 ) {
   env.define('string?', nativeFn(isString))
   env.define('string-concat', nativeFn(stringConcat))

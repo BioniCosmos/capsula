@@ -1,5 +1,5 @@
 import { init as coroutineInit } from './coroutine'
-import { env } from './env'
+import type { TreeWalk } from './env'
 import { init as listInit } from './list'
 import { baseInit, evaluate, init as nativeInit } from './native'
 import { init as numberInit } from './number'
@@ -9,7 +9,7 @@ import { init as stringInit } from './string'
 import { init as traitInit } from './trait'
 import { init as typesInit } from './types'
 
-export async function init() {
+export async function init(env: TreeWalk.Environment) {
   const { nativeFn } = await import('./fn')
   baseInit(env)
   typesInit(env, nativeFn)

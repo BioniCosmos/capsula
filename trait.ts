@@ -1,4 +1,4 @@
-import { Environment } from './env'
+import { TreeWalk } from './env'
 import { Fn, SourceFn } from './fn'
 import { iter, next, type List } from './list'
 import { evaluate } from './native'
@@ -21,8 +21,8 @@ export class Trait implements Box, TreeWalkEvaluator {
   #fns = new Map<string, SourceFn | null>()
   #implRegistry = new Map<string, Map<string, Fn>>()
 
-  eval(exprs: List, env: Environment): Var {
-    const traitEnv = new Environment(env)
+  eval(exprs: List, env: TreeWalk.Environment): Var {
+    const traitEnv = new TreeWalk.Environment(env)
     for (const expr of iter(exprs)) {
       evaluate(expr as SExpr, traitEnv)
     }
@@ -88,7 +88,7 @@ export class TraitValue implements Box, TreeWalkEvaluator {
     private trait: Trait,
   ) {}
 
-  eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: TreeWalk.Environment): Var {
     if (isNil(exprs)) {
       throw Error('evaluating `trait-value`: unsupported syntax')
     }
@@ -101,7 +101,7 @@ export class TraitValue implements Box, TreeWalkEvaluator {
 class Impl implements Box, TreeWalkEvaluator {
   type = 'impl'
 
-  eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: TreeWalk.Environment): Var {
     const it = iter(exprs)
     const traitName = next(it, 'impl')
     const typeName = next(it, 'impl')
@@ -123,7 +123,7 @@ class Impl implements Box, TreeWalkEvaluator {
         `evaluating \`impl\`: \`${traitName.value}\` is not a trait, but \`${typeOf(trait)}\`.`,
       )
     }
-    const implEnv = new Environment(env)
+    const implEnv = new TreeWalk.Environment(env)
     for (const expr of it) {
       evaluate(expr as SExpr, implEnv)
     }
@@ -155,9 +155,9 @@ class Impl implements Box, TreeWalkEvaluator {
 }
 
 export function init(
-  env: Environment,
+  env: TreeWalk.Environment,
   parse: (input: string) => SExpr[],
-  evaluate: (expr: SExpr, env: Environment) => Var,
+  evaluate: (expr: SExpr, env: TreeWalk.Environment) => Var,
 ) {
   env.define('trait', () => new Trait())
   env.define('impl', new Impl())

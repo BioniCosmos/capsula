@@ -1,4 +1,4 @@
-import { Environment } from './env'
+import { TreeWalk } from './env'
 import { iter, type List } from './list'
 import { evaluate } from './native'
 import { cons } from './pair'
@@ -9,20 +9,20 @@ export class Fn implements Box, TreeWalkEvaluator {
 
   constructor(public value: SourceFn | NativeFn) {}
 
-  eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: TreeWalk.Environment): Var {
     return this.value.apply(exprs, env)
   }
 }
 
 export class SourceFn {
   constructor(
-    public env: Environment,
+    public env: TreeWalk.Environment,
     public params: Params,
     public body: SExpr[],
   ) {}
 
-  apply(args: List, env: Environment) {
-    const fnEnv = new Environment(this.env)
+  apply(args: List, env: TreeWalk.Environment) {
+    const fnEnv = new TreeWalk.Environment(this.env)
     const it = iter(args)
     for (const param of this.params.fixed) {
       const { value, done } = it.next()
@@ -46,7 +46,7 @@ export class SourceFn {
 export class NativeFn {
   constructor(public body: (...params: Var[]) => Var) {}
 
-  apply(args: List, env: Environment) {
+  apply(args: List, env: TreeWalk.Environment) {
     return this.body(
       ...iter(args)
         .toArray()

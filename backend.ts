@@ -1,5 +1,5 @@
 import { Instruction, serialize } from './bytecode'
-import { BytecodeVMEnv, env } from './env'
+import { Bytecode, TreeWalk } from './env'
 import { isList } from './list'
 import { evaluate } from './native'
 import { isNumber } from './number'
@@ -20,14 +20,16 @@ interface Backend<T> {
   execute(artifact: T): void
 }
 
-export class TreeWalk implements Backend<SExpr[]> {
+export class TreeWalkBackend implements Backend<SExpr[]> {
+  readonly env = new TreeWalk.Environment()
+
   compile(source: SExpr[]): SExpr[] {
     return source
   }
 
   execute(artifact: SExpr[]): void {
     for (const expr of artifact) {
-      const result = evaluate(expr, env)
+      const result = evaluate(expr, this.env)
       if (result !== null) {
         console.log(result)
       }
@@ -35,9 +37,9 @@ export class TreeWalk implements Backend<SExpr[]> {
   }
 }
 
-export class BytecodeVM implements Backend<Instruction[]> {
+export class BytecodeBackend implements Backend<Instruction[]> {
   readonly #vm: VM
-  readonly env = new BytecodeVMEnv()
+  readonly env = new Bytecode.Environment()
 
   constructor() {
     this.#vm = new VM()

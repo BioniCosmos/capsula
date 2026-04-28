@@ -1,6 +1,6 @@
-import type { BytecodeVM } from './backend'
+import type { BytecodeBackend } from './backend'
 import type { Instruction } from './bytecode'
-import type { Environment } from './env'
+import type { TreeWalk } from './env'
 import { Fn } from './fn'
 import type { List } from './list'
 import type { Pair } from './pair'
@@ -18,7 +18,7 @@ export interface Box {
 }
 
 export interface TreeWalkEvaluator {
-  eval(exprs: List, env: Environment): Var
+  eval(exprs: List, env: TreeWalk.Environment): Var
 }
 
 export function isTreeWalkEvaluator(x: any): x is TreeWalkEvaluator {
@@ -26,7 +26,7 @@ export function isTreeWalkEvaluator(x: any): x is TreeWalkEvaluator {
 }
 
 export interface BytecodeCompiler {
-  compile(ctx: BytecodeVM, exprs: List): Instruction[]
+  compile(ctx: BytecodeBackend, exprs: List): Instruction[]
 }
 
 export function isBytecodeCompiler(x: any): x is BytecodeCompiler {
@@ -75,7 +75,7 @@ export function isBox(x: Var): x is Box {
 }
 
 export function init(
-  env: Environment,
+  env: TreeWalk.Environment,
   nativeFn: (body: (...params: Var[]) => Var) => Fn,
 ) {
   env.define('nil?', nativeFn(isNil))

@@ -1,4 +1,4 @@
-import { Environment } from './env'
+import type { TreeWalk } from './env'
 import { Fn, SourceFn } from './fn'
 import { collect, isList, iter, next, type List } from './list'
 import { isNumber } from './number'
@@ -19,7 +19,7 @@ import {
   type Var,
 } from './types'
 
-export function evaluate(expr: SExpr, env: Environment): Var {
+export function evaluate(expr: SExpr, env: TreeWalk.Environment): Var {
   if (isNil(expr) || isBoolean(expr) || isNumber(expr) || isString(expr)) {
     return expr
   }
@@ -39,7 +39,7 @@ export function evaluate(expr: SExpr, env: Environment): Var {
 class Def implements Box, TreeWalkEvaluator {
   type = 'def'
 
-  eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: TreeWalk.Environment): Var {
     const it = iter(exprs)
     const sym = next(it, 'def')
     if (!isSymbol(sym)) {
@@ -56,7 +56,7 @@ class Def implements Box, TreeWalkEvaluator {
 class Cond implements Box, TreeWalkEvaluator {
   type = 'cond'
 
-  eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: TreeWalk.Environment): Var {
     for (const clause of iter(exprs)) {
       if (!isList(clause) || isNil(clause)) {
         throw Error(
@@ -86,7 +86,7 @@ class Cond implements Box, TreeWalkEvaluator {
 export class Lambda implements Box, TreeWalkEvaluator {
   type = 'lambda'
 
-  eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: TreeWalk.Environment): Var {
     const it = iter(exprs)
     const [fixed, rest] = collect(iter(next(it, 'lambda')))
     if (!isSymbol(rest) && !isNil(rest)) {
@@ -113,7 +113,7 @@ export class Lambda implements Box, TreeWalkEvaluator {
 class SetVar implements Box, TreeWalkEvaluator {
   type = 'set!'
 
-  eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: TreeWalk.Environment): Var {
     const it = iter(exprs)
     const name = next(it, 'set!')
     if (!isSymbol(name)) {
@@ -126,14 +126,14 @@ class SetVar implements Box, TreeWalkEvaluator {
   }
 }
 
-export function baseInit(env: Environment) {
+export function baseInit(env: TreeWalk.Environment) {
   env.define('def', new Def())
   env.define('cond', new Cond())
   env.define('lambda', new Lambda())
 }
 
 export function init(
-  env: Environment,
+  env: TreeWalk.Environment,
   nativeFn: (body: (...params: Var[]) => Var) => Fn,
 ) {
   env.define(

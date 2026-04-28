@@ -1,4 +1,4 @@
-import { Environment } from './env'
+import { TreeWalk } from './env'
 import type { Fn, SourceFn } from './fn'
 import { iter, next, type List } from './list'
 import { evaluate, Lambda } from './native'
@@ -15,11 +15,11 @@ class Co implements Box, TreeWalkEvaluator {
 
   pc = 0
   fn: SourceFn | null = null
-  env: Environment | null = null
+  env: TreeWalk.Environment | null = null
 
-  eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: TreeWalk.Environment): Var {
     this.fn = (new Lambda().eval(exprs, env) as Fn).value as SourceFn
-    this.env = new Environment(env)
+    this.env = new TreeWalk.Environment(env)
     return this
   }
 
@@ -40,7 +40,7 @@ class Co implements Box, TreeWalkEvaluator {
 class Yield implements Box, TreeWalkEvaluator {
   type = 'yield'
 
-  eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: TreeWalk.Environment): Var {
     const co = evaluate(next(iter(exprs), 'yield') as SExpr, env)
     if (!(co instanceof Co)) {
       throw Error(
@@ -54,7 +54,7 @@ class Yield implements Box, TreeWalkEvaluator {
 class Start implements Box, TreeWalkEvaluator {
   type = 'start'
 
-  eval(exprs: List, env: Environment): Var {
+  eval(exprs: List, env: TreeWalk.Environment): Var {
     let co = evaluate(next(iter(exprs), 'start') as SExpr, env)
     if (!(co instanceof Co)) {
       throw Error(
@@ -79,7 +79,7 @@ class SwitchSignal implements Box {
   constructor(public co: Co) {}
 }
 
-export function init(env: Environment) {
+export function init(env: TreeWalk.Environment) {
   env.define('co', () => new Co())
   env.define('yield', new Yield())
   env.define('start', new Start())

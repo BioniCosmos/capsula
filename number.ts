@@ -1,4 +1,4 @@
-import { Environment } from './env'
+import type { TreeWalk } from './env'
 import { Fn } from './fn'
 import type { Trait } from './trait'
 import { typeOf, type Var } from './types'
@@ -18,7 +18,7 @@ export function isNumber(x: Var): x is number {
 }
 
 export function init(
-  env: Environment,
+  env: TreeWalk.Environment,
   nativeFn: (body: (...params: Var[]) => Var) => Fn,
 ) {
   env.define('number?', nativeFn(isNumber))

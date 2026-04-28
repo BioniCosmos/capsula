@@ -1,4 +1,4 @@
-import { Environment } from './env'
+import type { TreeWalk } from './env'
 import { Fn } from './fn'
 import { car, cdr, isPair } from './pair'
 import { isNil, typeOf, type Var } from './types'
@@ -46,7 +46,7 @@ export function length(x: Var): number {
 }
 
 export function init(
-  env: Environment,
+  env: TreeWalk.Environment,
   nativeFn: (body: (...params: Var[]) => Var) => Fn,
 ) {
   env.define('list?', nativeFn(isList))
