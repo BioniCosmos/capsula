@@ -1,27 +1,28 @@
 import { Instruction, serialize } from './bytecode'
-import { Bytecode, TreeWalk } from './env'
+import { Bytecode, TreeWalk, type Environment } from './env'
 import { isList } from './list'
 import { evaluate } from './native'
 import { isNumber } from './number'
 import { car, cdr } from './pair'
 import { isString } from './string'
 import {
-  type SExpr,
   isBoolean,
   isBytecodeCompiler,
   isNil,
   isSymbol,
   typeOf,
+  type SExpr,
 } from './types'
 import { VM } from './vm'
 
-interface Backend<T> {
+export interface Backend<T> {
+  env: Environment
   compile(source: SExpr[]): T
   execute(artifact: T): void
 }
 
 export class TreeWalkBackend implements Backend<SExpr[]> {
-  readonly env = new TreeWalk.Environment()
+  readonly env = new TreeWalk.Env()
 
   compile(source: SExpr[]): SExpr[] {
     return source
@@ -39,7 +40,7 @@ export class TreeWalkBackend implements Backend<SExpr[]> {
 
 export class BytecodeBackend implements Backend<Instruction[]> {
   readonly #vm: VM
-  readonly env = new Bytecode.Environment()
+  readonly env = new Bytecode.Env()
 
   constructor() {
     this.#vm = new VM()

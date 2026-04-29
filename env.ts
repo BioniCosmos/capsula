@@ -1,20 +1,33 @@
-import type { BytecodeCompiler, Var } from './types'
+import {
+  type BytecodeCompiler,
+  type TreeWalkEvaluator,
+  type Unit,
+  type Var,
+} from './types'
+
+export interface Environment {
+  defineUnit(name: string, constructor: () => Unit): void
+}
 
 export namespace TreeWalk {
-  export class Environment {
-    readonly #vars = new Map<string, Var | (() => Var)>()
+  export class Env implements Environment {
+    readonly #vars = new Map<string, Var | (() => TreeWalkEvaluator)>()
 
-    constructor(private readonly parent: Environment | null = null) {}
+    constructor(private readonly parent: Env | null = null) {}
 
     get locals() {
       return this.#vars as ReadonlyMap<string, Var>
     }
 
-    define(name: string, value: Var | (() => Var)) {
+    defineUnit(name: string, constructor: () => TreeWalkEvaluator): void {
+      this.#vars.set(name, constructor)
+    }
+
+    define(name: string, value: Var) {
       this.#vars.set(name, value)
     }
 
-    lookup(name: string): Var {
+    lookup(name: string): Var | TreeWalkEvaluator {
       if (this.#vars.has(name)) {
         const v = this.#vars.get(name)!
         if (typeof v === 'function') {
@@ -47,13 +60,13 @@ export namespace TreeWalk {
 }
 
 export namespace Bytecode {
-  export class Environment {
-    readonly #vars = new Map<string, number | BytecodeCompiler>()
+  export class Env implements Environment {
+    readonly #vars = new Map<string, number | (() => BytecodeCompiler)>()
     #baseAddr = 0
 
-    constructor(private readonly parent: Environment | null = null) {}
+    constructor(private readonly parent: Env | null = null) {}
 
-    get locals(): ReadonlyMap<string, number | BytecodeCompiler> {
+    get locals(): ReadonlyMap<string, number | (() => BytecodeCompiler)> {
       return this.#vars
     }
 
@@ -63,13 +76,17 @@ export namespace Bytecode {
       return addr
     }
 
-    defineCompiler(name: string, compiler: BytecodeCompiler) {
+    defineUnit(name: string, compiler: () => BytecodeCompiler) {
       this.#vars.set(name, compiler)
     }
 
     lookup(name: string): number | BytecodeCompiler {
       if (this.#vars.has(name)) {
-        return this.#vars.get(name)!
+        const v = this.#vars.get(name)!
+        if (typeof v === 'function') {
+          return v()
+        }
+        return v
       }
 
       if (this.parent) {

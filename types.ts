@@ -17,8 +17,10 @@ export interface Box {
   type: string
 }
 
+export type Unit = TreeWalkEvaluator | BytecodeCompiler
+
 export interface TreeWalkEvaluator {
-  eval(exprs: List, env: TreeWalk.Environment): Var
+  eval(exprs: List, env: TreeWalk.Env): Var
 }
 
 export function isTreeWalkEvaluator(x: any): x is TreeWalkEvaluator {
