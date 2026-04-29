@@ -7,7 +7,7 @@ import {
   type Pointer,
 } from 'bun:ffi'
 import { isNumber } from './number'
-import type { Var } from './types'
+import type { Var } from './type'
 
 const symbols = {
   init: { returns: FFIType.ptr },

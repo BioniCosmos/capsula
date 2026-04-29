@@ -1,9 +1,4 @@
-import {
-  type BytecodeCompiler,
-  type TreeWalkEvaluator,
-  type Unit,
-  type Var,
-} from './types'
+import type { BytecodeCompiler, TreeWalkEvaluator, Unit, Var } from './type'
 
 export interface Environment {
   defineUnit(name: string, constructor: () => Unit): void

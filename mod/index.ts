@@ -1,5 +1,5 @@
-import type { Backend } from './backend'
-import { type Unit } from './types'
+import type { Backend } from '@/backend'
+import type { Unit } from '@/type'
 
 type Module = {
   name: string

@@ -1,5 +1,5 @@
 import { cons } from './pair'
-import { Sym, type SExpr } from './types'
+import { Sym, type SExpr } from './type'
 
 const digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
 

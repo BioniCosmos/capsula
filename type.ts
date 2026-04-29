@@ -1,7 +1,6 @@
 import type { BytecodeBackend, TreeWalkBackend } from './backend'
 import type { Instruction } from './bytecode'
 import type { Bytecode, TreeWalk } from './env'
-import { Fn } from './fn'
 import type { List } from './list'
 import type { Pair } from './pair'
 
@@ -74,13 +73,4 @@ export function isSymbol(x: Var): x is Sym {
 
 export function isBox(x: Var): x is Box {
   return typeOf(x) === 'box'
-}
-
-export function init(
-  env: TreeWalk.Environment,
-  nativeFn: (body: (...params: Var[]) => Var) => Fn,
-) {
-  env.define('nil?', nativeFn(isNil))
-  env.define('boolean?', nativeFn(isBoolean))
-  env.define('symbol?', nativeFn(isSymbol))
 }

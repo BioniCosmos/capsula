@@ -14,7 +14,7 @@ import {
   type SExpr,
   type TreeWalkEvaluator,
   type Var,
-} from './types'
+} from './type'
 import { VM } from './vm'
 
 export interface Backend<T> {
