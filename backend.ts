@@ -1,7 +1,6 @@
 import { Instruction, serialize } from './bytecode'
 import { Bytecode, TreeWalk, type Environment } from './env'
 import { isList } from './list'
-import { evaluate } from './native'
 import { isNumber } from './number'
 import { car, cdr } from './pair'
 import { isString } from './string'
@@ -10,8 +9,11 @@ import {
   isBytecodeCompiler,
   isNil,
   isSymbol,
+  isTreeWalkEvaluator,
   typeOf,
   type SExpr,
+  type TreeWalkEvaluator,
+  type Var,
 } from './types'
 import { VM } from './vm'
 
@@ -30,11 +32,28 @@ export class TreeWalkBackend implements Backend<SExpr[]> {
 
   execute(artifact: SExpr[]): void {
     for (const expr of artifact) {
-      const result = evaluate(expr, this.env)
+      const result = this.evaluate(expr, this.env)
       if (result !== null) {
         console.log(result)
       }
     }
+  }
+
+  evaluate(expr: SExpr, env: TreeWalk.Env): Var | TreeWalkEvaluator {
+    if (isNil(expr) || isBoolean(expr) || isNumber(expr) || isString(expr)) {
+      return expr
+    }
+    if (isSymbol(expr)) {
+      return env.lookup(expr.value)
+    }
+    if (!isList(expr)) {
+      throw Error('evaluating: expecting list, found pair')
+    }
+    const box = this.evaluate(car(expr) as SExpr, env)
+    if (isTreeWalkEvaluator(box)) {
+      return box.eval(this, cdr(expr), env)
+    }
+    throw Error('unreachable')
   }
 }
 
@@ -53,7 +72,7 @@ export class BytecodeBackend implements Backend<Instruction[]> {
   compile(source: SExpr[]) {
     const bytecode = Array.of<Instruction>()
     for (const expr of source) {
-      bytecode.push(...this.compileExpr(expr))
+      bytecode.push(...this.compileExpr(expr, this.env))
     }
     return bytecode
   }
@@ -62,7 +81,7 @@ export class BytecodeBackend implements Backend<Instruction[]> {
     this.#vm.execute(serialize(artifact))
   }
 
-  compileExpr(expr: SExpr) {
+  compileExpr(expr: SExpr, env: Bytecode.Env) {
     if (isNil(expr) || isBoolean(expr) || isNumber(expr) || isString(expr)) {
       return [Instruction.Push(this.#vm.addVar(expr))]
     }
@@ -82,7 +101,7 @@ export class BytecodeBackend implements Backend<Instruction[]> {
       if (!isBytecodeCompiler(compiler)) {
         throw Error('compiling: not callable')
       }
-      return compiler.compile(this, cdr(expr))
+      return compiler.compile(this, cdr(expr), env)
     }
     throw Error(`compiling: unexpected \`${expr}\``)
   }

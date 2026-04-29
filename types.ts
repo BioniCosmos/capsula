@@ -1,11 +1,11 @@
-import type { BytecodeBackend } from './backend'
+import type { BytecodeBackend, TreeWalkBackend } from './backend'
 import type { Instruction } from './bytecode'
-import type { TreeWalk } from './env'
+import type { Bytecode, TreeWalk } from './env'
 import { Fn } from './fn'
 import type { List } from './list'
 import type { Pair } from './pair'
 
-export type Var = SExpr | Box
+export type Var = SExpr | Box | Unit
 
 export type SExpr = null | boolean | number | string | Sym | Pair
 
@@ -20,7 +20,7 @@ export interface Box {
 export type Unit = TreeWalkEvaluator | BytecodeCompiler
 
 export interface TreeWalkEvaluator {
-  eval(exprs: List, env: TreeWalk.Env): Var
+  eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env): Var
 }
 
 export function isTreeWalkEvaluator(x: any): x is TreeWalkEvaluator {
@@ -28,7 +28,7 @@ export function isTreeWalkEvaluator(x: any): x is TreeWalkEvaluator {
 }
 
 export interface BytecodeCompiler {
-  compile(ctx: BytecodeBackend, exprs: List): Instruction[]
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env): Instruction[]
 }
 
 export function isBytecodeCompiler(x: any): x is BytecodeCompiler {
