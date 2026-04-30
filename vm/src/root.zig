@@ -31,8 +31,12 @@ export fn addI64(self: *VM, variable: i64) u16 {
 
 /// ## Error
 ///
-/// Return `false` if error occurred.
-export fn execute(self: *VM, bytecode: [*]const u8, len: u64) bool {
-    self.execute(bytecode[0..len]) catch return false;
-    return true;
+/// Return `null` if error occurred.
+export fn execute(self: *VM, bytecode: [*]const u8, len: u64) ?[*:0]const u8 {
+    return std.fmt.bufPrintSentinel(
+        &self.result_buf,
+        "{f}",
+        .{self.execute(bytecode[0..len]) catch return null},
+        0,
+    ) catch unreachable;
 }

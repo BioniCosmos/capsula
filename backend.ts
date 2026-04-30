@@ -78,7 +78,7 @@ export class BytecodeBackend implements Backend<Instruction[]> {
   }
 
   execute(artifact: Instruction[]): void {
-    this.#vm.execute(serialize(artifact))
+    console.log(this.#vm.execute(serialize(artifact)))
   }
 
   compileExpr(expr: SExpr, env: Bytecode.Env) {

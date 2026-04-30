@@ -1,4 +1,5 @@
 import {
+  CString,
   dlopen,
   FFIType,
   suffix,
@@ -16,7 +17,7 @@ const symbols = {
   addI64: { args: [FFIType.ptr, FFIType.i64], returns: FFIType.u16 },
   execute: {
     args: [FFIType.ptr, FFIType.ptr, FFIType.u64],
-    returns: FFIType.bool,
+    returns: FFIType.ptr,
   },
 } as const
 
@@ -57,8 +58,10 @@ export class VM {
   }
 
   execute(bytecode: Uint8Array) {
-    if (!this.#symbols.execute(this.#vm, bytecode, bytecode.length)) {
+    const result = this.#symbols.execute(this.#vm, bytecode, bytecode.length)
+    if (result === null) {
       throw Error(this.#err)
     }
+    return new CString(result).toString()
   }
 }

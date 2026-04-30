@@ -5,8 +5,19 @@ const heap = std.heap;
 const math = std.math;
 const mem = std.mem;
 
-const Var = union(VarType) { i64: i64, bool: bool };
-const VarType = enum { i64, bool };
+pub const Var = union(VarType) {
+    unit: void,
+    bool: bool,
+    i64: i64,
+
+    pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        switch (self) {
+            .unit => {},
+            inline else => |x| try writer.print("{}", .{x}),
+        }
+    }
+};
+const VarType = enum { unit, bool, i64 };
 
 pub const Instruction = enum(u8) { add, push, load, save };
 
@@ -25,6 +36,8 @@ stack: std.ArrayList(Var) = .empty,
 
 err_buf: [1024]u8 = undefined,
 err: []const u8 = "",
+
+result_buf: [1024]u8 = undefined,
 
 pub fn init() Self {
     const gpa = heap.c_allocator.create(heap.DebugAllocator(.{})) catch @panic("failed to create the allocator");
@@ -72,7 +85,6 @@ pub fn execute(self: *Self, bytecode: []const u8) Error!void {
                         return Error.Runtime;
                     },
                 };
-                debug.print("{}\n", .{lhs + rhs});
                 try self.pushToList(.{ .i64 = lhs + rhs }, &self.stack);
             },
             .push => try self.pushToList(self.vars.items[readAddr(bytecode, &i)], &self.stack),
@@ -80,6 +92,8 @@ pub fn execute(self: *Self, bytecode: []const u8) Error!void {
             .save => self.local[readAddr(bytecode, &i)] = self.pop(),
         }
     }
+
+    return self.stack.pop() orelse .{ .unit = {} };
 }
 
 pub fn addVar(self: *Self, variable: Var) Error!u16 {
