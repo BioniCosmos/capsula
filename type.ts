@@ -1,6 +1,6 @@
-import type { BytecodeBackend, TreeWalkBackend } from './backend'
+import type { BytecodeBackend, QBEBackend, TreeWalkBackend } from './backend'
 import type { Instruction } from './bytecode'
-import type { Bytecode, TreeWalk } from './env'
+import type { Bytecode, QBE, TreeWalk } from './env'
 import type { List } from './list'
 import type { Pair } from './pair'
 
@@ -16,7 +16,28 @@ export interface Box {
   type: string
 }
 
-export type Unit = TreeWalkEvaluator | BytecodeCompiler
+export type Unit = TreeWalkEvaluator | BytecodeCompiler | QBECompiler
+
+const unitConstructor = Symbol('unit-constructor')
+
+type UnitClass<T extends Unit> = new () => T
+
+export type UnitConstructor<T extends Unit> = {
+  (): T
+  readonly [unitConstructor]: true
+}
+
+export function constructor<T extends Unit>(Unit: UnitClass<T>) {
+  const cons = () => new Unit()
+  Object.defineProperty(cons, unitConstructor, { value: true })
+  return cons as UnitConstructor<T>
+}
+
+export function isUnitConstructor<T extends Unit>(
+  target: any,
+): target is UnitConstructor<T> {
+  return typeof target === 'function' && target[unitConstructor] === true
+}
 
 export interface TreeWalkEvaluator {
   eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env): Var
@@ -32,6 +53,14 @@ export interface BytecodeCompiler {
 
 export function isBytecodeCompiler(x: any): x is BytecodeCompiler {
   return typeof x?.compile === 'function'
+}
+
+export interface QBECompiler {
+  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env): string | null
+}
+
+export function isQBECompiler(x: any): x is QBECompiler {
+  return typeof x?.compileToQBE === 'function'
 }
 
 export function typeOf(x: Var) {

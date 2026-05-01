@@ -1,5 +1,6 @@
+import { $ } from 'bun'
 import { Instruction, serialize } from './bytecode'
-import { Bytecode, TreeWalk, type Environment } from './env'
+import { Bytecode, QBE, TreeWalk, type Environment } from './env'
 import { isList } from './list'
 import { isNumber } from './number'
 import { car, cdr } from './pair'
@@ -8,22 +9,26 @@ import {
   isBoolean,
   isBytecodeCompiler,
   isNil,
+  isQBECompiler,
   isSymbol,
   isTreeWalkEvaluator,
   typeOf,
+  type BytecodeCompiler,
+  type QBECompiler,
   type SExpr,
   type TreeWalkEvaluator,
+  type Unit,
   type Var,
 } from './type'
 import { VM } from './vm'
 
-export interface Backend<T> {
-  env: Environment
-  compile(source: SExpr[]): T
-  execute(artifact: T): void
+export interface Backend<U extends Unit, Artifact> {
+  readonly env: Environment<U>
+  compile(source: SExpr[]): Artifact
+  execute(artifact: Artifact): void
 }
 
-export class TreeWalkBackend implements Backend<SExpr[]> {
+export class TreeWalkBackend implements Backend<TreeWalkEvaluator, SExpr[]> {
   readonly env = new TreeWalk.Env()
 
   compile(source: SExpr[]): SExpr[] {
@@ -57,7 +62,10 @@ export class TreeWalkBackend implements Backend<SExpr[]> {
   }
 }
 
-export class BytecodeBackend implements Backend<Instruction[]> {
+export class BytecodeBackend implements Backend<
+  BytecodeCompiler,
+  Instruction[]
+> {
   readonly #vm: VM
   readonly env = new Bytecode.Env()
 
@@ -104,5 +112,50 @@ export class BytecodeBackend implements Backend<Instruction[]> {
       return compiler.compile(this, cdr(expr), env)
     }
     throw Error(`compiling: unexpected \`${expr}\``)
+  }
+}
+
+export class QBEBackend implements Backend<QBECompiler, void> {
+  readonly env = new QBE.Env()
+  readonly #code = Array.of<string>()
+
+  async compile(source: SExpr[]) {
+    this.emit(`export function w $main() {\n@start`)
+    for (const expr of source) {
+      this.compileExpr(expr, this.env)
+    }
+    this.emit('ret 0\n}')
+    const code = this.#code.join('\n')
+    await $`qbe < ${new Response(code)} | clang -x assembler -`
+  }
+
+  execute(_artifact: void): void {
+    throw new Error('Method not implemented.')
+  }
+
+  compileExpr(expr: SExpr, env: QBE.Env) {
+    if (isNumber(expr)) {
+      return expr.toString()
+    }
+    if (isList(expr) && !isNil(expr)) {
+      const sym = car(expr)
+      if (!isSymbol(sym)) {
+        throw Error(`compiling: expecting symbol, found \`${typeOf(sym)}\``)
+      }
+      const compiler = this.env.lookup(sym.value)
+      if (!isQBECompiler(compiler)) {
+        throw Error('compiling: not callable')
+      }
+      return compiler.compileToQBE(this, cdr(expr), env)
+    }
+    throw Error(`compiling: unexpected \`${expr}\``)
+  }
+
+  emit(code: string) {
+    this.#code.push(code)
+  }
+
+  emitGlobal(code: string) {
+    this.#code.unshift(code)
   }
 }
