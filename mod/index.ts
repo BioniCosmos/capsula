@@ -1,16 +1,24 @@
 import type { Backend } from '@/backend'
-import type { Unit } from '@/type'
+import type { UnitConstructor } from '@/type'
 
-type Module = {
+export type Module = {
   name: string
   dependencies: string[]
-  unitConstructors: Record<string, () => Unit>
+  unitConstructors: Record<string, UnitConstructor<any>>
   prelude: string
 }
 
-const moduleRegistry = new Map<string, Module>()
+export async function init(ctx: Backend<any, unknown>) {
+  const moduleRegistry = new Map<string, Module>()
+  function registerModule(mod: Module) {
+    moduleRegistry.set(mod.name, mod)
+  }
 
-export function init(ctx: Backend<unknown>) {
+  const sources = ['./int']
+  for (const source of sources) {
+    registerModule((await import(source)).default)
+  }
+
   const initOrder = resolveOrder(moduleRegistry)
   for (const modName of initOrder) {
     const mod = moduleRegistry.get(modName)!
@@ -19,10 +27,6 @@ export function init(ctx: Backend<unknown>) {
     }
     // TODO: prelude
   }
-}
-
-export function registerModule(mod: Module) {
-  moduleRegistry.set(mod.name, mod)
 }
 
 function resolveOrder(mods: ReadonlyMap<string, Module>) {

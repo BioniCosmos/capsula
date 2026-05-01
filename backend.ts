@@ -35,7 +35,7 @@ export class TreeWalkBackend implements Backend<TreeWalkEvaluator, SExpr[]> {
     return source
   }
 
-  execute(artifact: SExpr[]): void {
+  execute(artifact: SExpr[]) {
     for (const expr of artifact) {
       const result = this.evaluate(expr, this.env)
       if (result !== null) {
@@ -67,6 +67,7 @@ export class BytecodeBackend implements Backend<
   Instruction[]
 > {
   readonly #vm: VM
+
   readonly env = new Bytecode.Env()
 
   constructor() {
@@ -85,7 +86,7 @@ export class BytecodeBackend implements Backend<
     return bytecode
   }
 
-  execute(artifact: Instruction[]): void {
+  execute(artifact: Instruction[]) {
     console.log(this.#vm.execute(serialize(artifact)))
   }
 
@@ -129,7 +130,7 @@ export class QBEBackend implements Backend<QBECompiler, void> {
     await $`qbe < ${new Response(code)} | clang -x assembler -`
   }
 
-  execute(_artifact: void): void {
+  execute() {
     throw new Error('Method not implemented.')
   }
 

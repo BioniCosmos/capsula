@@ -18,25 +18,25 @@ export interface Box {
 
 export type Unit = TreeWalkEvaluator | BytecodeCompiler | QBECompiler
 
-const unitConstructor = Symbol('unit-constructor')
+const unitConstructorSymbol = Symbol('unit-constructor')
 
 type UnitClass<T extends Unit> = new () => T
 
 export type UnitConstructor<T extends Unit> = {
   (): T
-  readonly [unitConstructor]: true
+  readonly [unitConstructorSymbol]: true
 }
 
-export function constructor<T extends Unit>(Unit: UnitClass<T>) {
+export function unitConstructor<T extends Unit>(Unit: UnitClass<T>) {
   const cons = () => new Unit()
-  Object.defineProperty(cons, unitConstructor, { value: true })
+  Object.defineProperty(cons, unitConstructorSymbol, { value: true })
   return cons as UnitConstructor<T>
 }
 
 export function isUnitConstructor<T extends Unit>(
   target: any,
 ): target is UnitConstructor<T> {
-  return typeof target === 'function' && target[unitConstructor] === true
+  return typeof target === 'function' && target[unitConstructorSymbol] === true
 }
 
 export interface TreeWalkEvaluator {

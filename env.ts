@@ -22,10 +22,7 @@ export namespace TreeWalk {
       return this.#vars as ReadonlyMap<string, Var>
     }
 
-    defineUnit(
-      name: string,
-      constructor: UnitConstructor<TreeWalkEvaluator>,
-    ): void {
+    defineUnit(name: string, constructor: UnitConstructor<TreeWalkEvaluator>) {
       this.#vars.set(name, constructor)
     }
 
@@ -118,7 +115,7 @@ export namespace QBE {
       return this.parent === null
     }
 
-    defineUnit(name: string, constructor: UnitConstructor<QBECompiler>): void {
+    defineUnit(name: string, constructor: UnitConstructor<QBECompiler>) {
       this.#vars.set(name, constructor)
     }
 
