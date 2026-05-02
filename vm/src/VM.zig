@@ -52,7 +52,7 @@ pub fn deinit(self: *Self) void {
     heap.c_allocator.destroy(self.gpa);
 }
 
-pub fn execute(self: *Self, bytecode: []const u8) Error!void {
+pub fn execute(self: *Self, bytecode: []const u8) Error!Var {
     defer {
         debug.print("vars: {any}\n", .{self.vars.items});
         debug.print("stack: {any}\n", .{self.stack.items});
@@ -62,31 +62,7 @@ pub fn execute(self: *Self, bytecode: []const u8) Error!void {
     while (i < bytecode.len) : (i += 1) {
         const instruction: Instruction = @enumFromInt(bytecode[i]);
         switch (instruction) {
-            .add => {
-                const lhs = switch (self.pop()) {
-                    .i64 => |v| v,
-                    else => |v| {
-                        self.err = fmt.bufPrint(
-                            &self.err_buf,
-                            "evaluating `add`: expecting `i64`, found `{t}`",
-                            .{v},
-                        ) catch unreachable;
-                        return Error.Runtime;
-                    },
-                };
-                const rhs = switch (self.pop()) {
-                    .i64 => |v| v,
-                    else => |v| {
-                        self.err = fmt.bufPrint(
-                            &self.err_buf,
-                            "evaluating `add`: expecting `i64`, found `{t}`",
-                            .{v},
-                        ) catch unreachable;
-                        return Error.Runtime;
-                    },
-                };
-                try self.pushToList(.{ .i64 = lhs + rhs }, &self.stack);
-            },
+            .add => try self.pushToList(.{ .i64 = self.pop().i64 + self.pop().i64 }, &self.stack),
             .push => try self.pushToList(self.vars.items[readAddr(bytecode, &i)], &self.stack),
             .load => try self.pushToList(self.local[readAddr(bytecode, &i)], &self.stack),
             .save => self.local[readAddr(bytecode, &i)] = self.pop(),
