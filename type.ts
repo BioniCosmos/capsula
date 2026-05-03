@@ -6,7 +6,7 @@ import type { Pair } from './pair'
 
 export type Var = SExpr | Box | Unit
 
-export type SExpr = null | boolean | number | string | Sym | Pair
+export type SExpr = void | null | boolean | number | string | Sym | Pair
 
 export class Sym {
   constructor(public value: string) {}
@@ -40,7 +40,7 @@ export function isUnitConstructor<T extends Unit>(
 }
 
 export interface TreeWalkEvaluator {
-  eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env): Var
+  eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env): Promise<Var>
 }
 
 export function isTreeWalkEvaluator(x: any): x is TreeWalkEvaluator {

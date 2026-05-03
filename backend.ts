@@ -31,20 +31,23 @@ export interface Backend<U extends Unit, Artifact> {
 export class TreeWalkBackend implements Backend<TreeWalkEvaluator, SExpr[]> {
   readonly env = new TreeWalk.Env()
 
-  compile(source: SExpr[]): SExpr[] {
+  compile(source: SExpr[]) {
     return source
   }
 
-  execute(artifact: SExpr[]) {
+  async execute(artifact: SExpr[]) {
     for (const expr of artifact) {
-      const result = this.evaluate(expr, this.env)
-      if (result !== null) {
+      const result = await this.evaluate(expr, this.env)
+      if (result !== undefined) {
         console.log(result)
       }
     }
   }
 
-  evaluate(expr: SExpr, env: TreeWalk.Env): Var | TreeWalkEvaluator {
+  async evaluate(
+    expr: SExpr,
+    env: TreeWalk.Env,
+  ): Promise<Var | TreeWalkEvaluator> {
     if (isNil(expr) || isBoolean(expr) || isNumber(expr) || isString(expr)) {
       return expr
     }
@@ -54,7 +57,7 @@ export class TreeWalkBackend implements Backend<TreeWalkEvaluator, SExpr[]> {
     if (!isList(expr)) {
       throw Error('evaluating: expecting list, found pair')
     }
-    const box = this.evaluate(car(expr) as SExpr, env)
+    const box = await this.evaluate(car(expr) as SExpr, env)
     if (isTreeWalkEvaluator(box)) {
       return box.eval(this, cdr(expr), env)
     }

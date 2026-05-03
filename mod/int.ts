@@ -8,27 +8,26 @@ import {
   type QBECompiler,
   type SExpr,
   type TreeWalkEvaluator,
-  type Var,
 } from '@/type'
 import type { Module } from '.'
 
 class Add implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env): Var {
+  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
     const it = iter(exprs)
     return (
-      (ctx.evaluate(next(it, 'add') as SExpr, env) as number) +
-      (ctx.evaluate(next(it, 'add') as SExpr, env) as number)
+      ((await ctx.evaluate(next(it, 'add') as SExpr, env)) as number) +
+      ((await ctx.evaluate(next(it, 'add') as SExpr, env)) as number)
     )
   }
 
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env): Instruction[] {
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const it = iter(exprs)
     const lhs = ctx.compileExpr(next(it, 'add') as SExpr, env)
     const rhs = ctx.compileExpr(next(it, 'add') as SExpr, env)
     return [...rhs, ...lhs, Instruction.Add]
   }
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env): string | null {
+  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
     const it = iter(exprs)
     const name = env.defineTemp()
     const lhs = ctx.compileExpr(next(it, 'add') as SExpr, env)

@@ -8,6 +8,7 @@ import {
   type Var,
 } from './type'
 
+// TODO: improve `isUnitConstructor` check in `lookup` to more specific type check
 export interface Environment<T extends Unit> {
   defineUnit(name: string, constructor: UnitConstructor<T>): void
 }
