@@ -1,5 +1,6 @@
 export const Instruction = {
   Add: { type: 'Add' },
+  Sub: { type: 'Sub' },
   Push: (addr: number) => ({ type: 'Push', addr }) as const,
   Load: (addr: number) => ({ type: 'Load', addr }) as const,
   Save: (addr: number) => ({ type: 'Save', addr }) as const,
