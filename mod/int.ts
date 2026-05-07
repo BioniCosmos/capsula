@@ -63,9 +63,39 @@ class Sub implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
+class Mul implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
+  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
+    const it = iter(exprs)
+    return (
+      ((await ctx.evaluate(next(it, 'mul') as SExpr, env)) as number) *
+      ((await ctx.evaluate(next(it, 'mul') as SExpr, env)) as number)
+    )
+  }
+
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
+    const it = iter(exprs)
+    const lhs = ctx.compileExpr(next(it, 'mul') as SExpr, env)
+    const rhs = ctx.compileExpr(next(it, 'mul') as SExpr, env)
+    return [...rhs, ...lhs, Instruction.Mul]
+  }
+
+  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
+    const it = iter(exprs)
+    const name = env.defineTemp()
+    const lhs = ctx.compileExpr(next(it, 'mul') as SExpr, env)
+    const rhs = ctx.compileExpr(next(it, 'mul') as SExpr, env)
+    ctx.emit(`${name} =l mul ${lhs}, ${rhs}`)
+    return name
+  }
+}
+
 export default {
   name: 'integer',
   dependencies: [],
-  unitConstructors: { '+': unitConstructor(Add), '-': unitConstructor(Sub) },
+  unitConstructors: {
+    '+': unitConstructor(Add),
+    '-': unitConstructor(Sub),
+    '*': unitConstructor(Mul),
+  },
   prelude: '',
 } satisfies Module
