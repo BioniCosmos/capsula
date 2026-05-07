@@ -16,18 +16,10 @@ export type Instruction = GetValueOrReturnValue<
 export function length(bytecode: Instruction[]) {
   let len = 0
   for (const code of bytecode) {
-    if (typeof code === 'number') {
-      len += 2
+    if (code.type === 'Push' || code.type === 'Load' || code.type === 'Save') {
+      len += 3
     } else {
-      if (
-        code.type === 'Push' ||
-        code.type === 'Load' ||
-        code.type === 'Save'
-      ) {
-        len += 3
-      } else {
-        len += 1
-      }
+      len += 1
     }
   }
   return len
@@ -38,19 +30,10 @@ export function serialize(bytecode: Instruction[]) {
   let view = new DataView(buf)
   let i = 0
   for (const code of bytecode) {
-    if (typeof code === 'number') {
-      view.setUint16(i, code, true)
+    view.setUint8(i++, serializeCmd.get(code.type)!)
+    if (code.type === 'Push' || code.type === 'Load' || code.type === 'Save') {
+      view.setUint16(i, code.addr, true)
       i += 2
-    } else {
-      view.setUint8(i++, serializeCmd.get(code.type)!)
-      if (
-        code.type === 'Push' ||
-        code.type === 'Load' ||
-        code.type === 'Save'
-      ) {
-        view.setUint16(i, code.addr, true)
-        i += 2
-      }
     }
   }
   return new Uint8Array(buf)
