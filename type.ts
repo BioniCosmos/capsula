@@ -20,7 +20,7 @@ export type Unit = TreeWalkEvaluator | BytecodeCompiler | QBECompiler
 
 const unitConstructorSymbol = Symbol('unit-constructor')
 
-type UnitClass<T extends Unit> = new () => T
+export type UnitClass<T extends Unit = Unit> = new () => T
 
 export type UnitConstructor<T extends Unit> = {
   (): T

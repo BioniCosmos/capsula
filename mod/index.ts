@@ -1,10 +1,10 @@
 import type { Backend } from '@/backend'
-import type { UnitConstructor } from '@/type'
+import { unitConstructor, type UnitClass } from '@/type'
 
 export type Module = {
   name: string
   dependencies: string[]
-  unitConstructors: Record<string, UnitConstructor<any>>
+  units: Record<string, UnitClass>
   prelude: string
 }
 
@@ -22,8 +22,8 @@ export async function init(ctx: Backend<any, unknown>) {
   const initOrder = resolveOrder(moduleRegistry)
   for (const modName of initOrder) {
     const mod = moduleRegistry.get(modName)!
-    for (const [name, constructor] of Object.entries(mod.unitConstructors)) {
-      ctx.env.defineUnit(name, constructor)
+    for (const [name, Unit] of Object.entries(mod.units)) {
+      ctx.env.defineUnit(name, unitConstructor(Unit))
     }
     // TODO: prelude
   }

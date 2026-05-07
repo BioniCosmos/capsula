@@ -2,12 +2,7 @@ import type { QBEBackend, TreeWalkBackend } from '@/backend'
 import type { QBE, TreeWalk } from '@/env'
 import type { List } from '@/list'
 import { car } from '@/pair'
-import {
-  unitConstructor,
-  type QBECompiler,
-  type SExpr,
-  type TreeWalkEvaluator,
-} from '@/type'
+import type { QBECompiler, SExpr, TreeWalkEvaluator } from '@/type'
 import type { Module } from '.'
 
 class Print implements TreeWalkEvaluator, QBECompiler {
@@ -33,6 +28,6 @@ class Print implements TreeWalkEvaluator, QBECompiler {
 export default {
   name: 'IO',
   dependencies: [],
-  unitConstructors: { print: unitConstructor(Print) },
+  units: { print: Print },
   prelude: '',
 } satisfies Module

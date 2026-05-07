@@ -3,7 +3,6 @@ import { Instruction } from '@/bytecode'
 import type { Bytecode, QBE, TreeWalk } from '@/env'
 import { iter, next, type List } from '@/list'
 import {
-  unitConstructor,
   type BytecodeCompiler,
   type QBECompiler,
   type SExpr,
@@ -92,10 +91,6 @@ class Mul implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
 export default {
   name: 'integer',
   dependencies: [],
-  unitConstructors: {
-    '+': unitConstructor(Add),
-    '-': unitConstructor(Sub),
-    '*': unitConstructor(Mul),
-  },
+  units: { '+': Add, '-': Sub, '*': Mul },
   prelude: '',
 } satisfies Module
