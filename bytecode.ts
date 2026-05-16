@@ -3,6 +3,7 @@ export const Instruction = {
   Sub: { type: 'Sub' },
   Mul: { type: 'Mul' },
   Div: { type: 'Div' },
+  Rem: { type: 'Rem' },
   Push: (addr: number) => ({ type: 'Push', addr }) as const,
   Load: (addr: number) => ({ type: 'Load', addr }) as const,
   Save: (addr: number) => ({ type: 'Save', addr }) as const,

@@ -114,9 +114,35 @@ class Div implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
+class Rem implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
+  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
+    const it = iter(exprs)
+    return (
+      ((await ctx.evaluate(next(it, 'rem') as SExpr, env)) as number) %
+      ((await ctx.evaluate(next(it, 'rem') as SExpr, env)) as number)
+    )
+  }
+
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
+    const it = iter(exprs)
+    const lhs = ctx.compileExpr(next(it, 'rem') as SExpr, env)
+    const rhs = ctx.compileExpr(next(it, 'rem') as SExpr, env)
+    return [...rhs, ...lhs, Instruction.Rem]
+  }
+
+  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
+    const it = iter(exprs)
+    const name = env.defineTemp()
+    const lhs = ctx.compileExpr(next(it, 'rem') as SExpr, env)
+    const rhs = ctx.compileExpr(next(it, 'rem') as SExpr, env)
+    ctx.emit(`${name} =l rem ${lhs}, ${rhs}`)
+    return name
+  }
+}
+
 export default {
   name: 'integer',
   dependencies: [],
-  units: { '+': Add, '-': Sub, '*': Mul, '/': Div },
+  units: { '+': Add, '-': Sub, '*': Mul, '/': Div, '%': Rem },
   prelude: '',
 } satisfies Module
