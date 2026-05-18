@@ -25,6 +25,13 @@ export fn err(self: *VM) [*:0]const u8 {
 /// ## Error
 ///
 /// Return `65535` if `vars` is full.
+export fn addBool(self: *VM, variable: bool) u16 {
+    return self.addVar(.{ .bool = variable }) catch VM.max_slot_size;
+}
+
+/// ## Error
+///
+/// Return `65535` if `vars` is full.
 export fn addI64(self: *VM, variable: i64) u16 {
     return self.addVar(.{ .i64 = variable }) catch VM.max_slot_size;
 }

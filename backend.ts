@@ -137,9 +137,19 @@ export class QBEBackend implements Backend<QBECompiler, void> {
     throw new Error('Method not implemented.')
   }
 
+  /**
+   * - pointer: 000
+   * - bool: 001
+   *   - false = 0001
+   *   - true = 1001
+   * - i64 (small): 010
+   */
   compileExpr(expr: SExpr, env: QBE.Env) {
+    if (isBoolean(expr)) {
+      return expr ? (0b1001).toString() : (0b0001).toString()
+    }
     if (isNumber(expr)) {
-      return expr.toString()
+      return ((expr << 3) | 0b010).toString()
     }
     if (isList(expr) && !isNil(expr)) {
       const sym = car(expr)

@@ -8,12 +8,13 @@ import {
   type Pointer,
 } from 'bun:ffi'
 import { isNumber } from './number'
-import type { Var } from './type'
+import { isBoolean, type Var } from './type'
 
 const symbols = {
   init: { returns: FFIType.ptr },
   deinit: { args: [FFIType.ptr] },
   err: { args: [FFIType.ptr], returns: FFIType.cstring },
+  addBool: { args: [FFIType.ptr, FFIType.bool], returns: FFIType.u16 },
   addI64: { args: [FFIType.ptr, FFIType.i64], returns: FFIType.u16 },
   execute: {
     args: [FFIType.ptr, FFIType.ptr, FFIType.u64],
@@ -47,14 +48,18 @@ export class VM {
   }
 
   addVar(variable: Var) {
+    let result: number
     if (isNumber(variable) && Number.isInteger(variable)) {
-      const result = this.#symbols.addI64(this.#vm, variable)
-      if (result === 65535) {
-        throw Error(this.#err)
-      }
-      return result
+      result = this.#symbols.addI64(this.#vm, variable)
+    } else if (isBoolean(variable)) {
+      result = this.#symbols.addBool(this.#vm, variable)
+    } else {
+      throw Error('TODO: unsupported type')
     }
-    throw Error('TODO: unsupported type')
+    if (result === 65535) {
+      throw Error(this.#err)
+    }
+    return result
   }
 
   execute(bytecode: Uint8Array) {
