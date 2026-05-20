@@ -130,6 +130,10 @@ export namespace QBE {
       return id
     }
 
+    defineBlock() {
+      return `@b_${this.#counter++}`
+    }
+
     lookup(name: string): string | QBECompiler {
       if (this.#vars.has(name)) {
         const item = this.#vars.get(name)!

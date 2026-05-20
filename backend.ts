@@ -142,9 +142,13 @@ export class QBEBackend implements Backend<QBECompiler, void> {
    * - bool: 001
    *   - false = 0001
    *   - true = 1001
+   * - void = 10001
    * - i64 (small): 010
    */
   compileExpr(expr: SExpr, env: QBE.Env) {
+    if (expr === undefined) {
+      return (0b10001).toString()
+    }
     if (isBoolean(expr)) {
       return expr ? (0b1001).toString() : (0b0001).toString()
     }
