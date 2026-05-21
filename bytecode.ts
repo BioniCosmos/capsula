@@ -17,60 +17,94 @@ export type Instruction = GetValueOrReturnValue<
   (typeof Instruction)[keyof typeof Instruction]
 >
 
-export function length(bytecode: Instruction[]) {
-  let len = 0
-  for (const code of bytecode) {
-    if (hasParam(code)) {
-      len += 3
-    } else {
-      len += 1
-    }
+export class CodeBuffer {
+  static readonly maxInstructionSize = 3
+  static readonly maxGrowth = 1024 * 1024
+
+  #buf = new ArrayBuffer(1024, { maxByteLength: CodeBuffer.maxGrowth })
+  len = 0
+
+  get #view() {
+    return new DataView(this.#buf)
   }
-  return len
-}
 
-// TODO: refactor to fix the wrong offset
-export function serialize(bytecode: Instruction[]) {
-  let buf = new ArrayBuffer(length(bytecode))
-  let view = new DataView(buf)
-
-  let i = 0
-  for (const code of bytecode) {
-    view.setUint8(i++, serializeCmd.get(code.type)!)
-    if (hasParam(code)) {
-      if ('offset' in code) {
-        view.setUint16(i, code.offset, true)
-      } else if ('addr' in code) {
-        view.setUint16(i, code.addr, true)
+  push(code: Instruction) {
+    if (this.len + CodeBuffer.maxInstructionSize > this.#buf.byteLength) {
+      const newLength = this.#buf.byteLength * 2
+      if (newLength <= CodeBuffer.maxGrowth) {
+        this.#buf.resize(newLength)
+      } else {
+        this.#buf = this.#buf.transferToFixedLength(newLength)
       }
-      i += 2
     }
+
+    const start = this.len
+
+    this.#view.setUint8(this.len++, serializeCmd.get(code.type)!)
+    switch (code.type) {
+      case 'Jump':
+      case 'BEQZ':
+        this.#view.setInt16(this.len, code.offset, true)
+        this.len += 2
+        break
+      case 'Push':
+      case 'Load':
+      case 'Save':
+        this.#view.setUint16(this.len, code.addr, true)
+        this.len += 2
+        break
+    }
+
+    return new DataView(this.#buf, start, this.len - start)
   }
 
-  return new Uint8Array(buf)
+  get u8Array() {
+    return new Uint8Array(this.#buf, 0, this.len)
+  }
+
+  toString() {
+    const display = Array.of<string>()
+
+    let i = 0
+    while (i < this.len) {
+      const type = deserializeCmd.get(this.#view.getUint8(i))
+      let code = `${i}: ${type}`
+      switch (type) {
+        case 'Jump':
+        case 'BEQZ':
+          code += `: offset=${this.#view.getInt16(i + 1, true)}`
+          i += 2
+          break
+        case 'Push':
+        case 'Load':
+        case 'Save':
+          code += `: addr=${this.#view.getUint16(i + 1, true)}`
+          i += 2
+          break
+      }
+      display.push(code)
+      i++
+    }
+
+    return display.join('\n')
+  }
 }
 
-export const serializeCmd = new Map(
-  Object.keys(Instruction).map((k, i) => [k, i]),
-)
+const serializeCmd = new Map(Object.keys(Instruction).map((k, i) => [k, i]))
+const deserializeCmd = new Map(Array.from(serializeCmd, ([k, v]) => [v, k]))
 
-function hasParam(instruction: Instruction) {
-  return ['Jump', 'BEQZ', 'Push', 'Load', 'Save'].includes(instruction.type)
-}
-
-export type JumpableEntry = { index: number; instruction: { offset: number } }
+export type JumpableEntry = { from: number; fill: (offset: number) => void }
 
 export class Label {
-  #from = Array.of<JumpableEntry>()
-  target = 0
+  readonly #from = Array.of<JumpableEntry>()
 
   jumpFrom(entry: JumpableEntry) {
     this.#from.push(entry)
   }
 
-  fillOffset() {
-    for (const { index: from, instruction } of this.#from) {
-      instruction.offset = this.target - from
+  fillOffset(target: number) {
+    for (const { from, fill } of this.#from) {
+      fill(target - from)
     }
   }
 }

@@ -42,9 +42,7 @@ class Cond implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
     return undefined
   }
 
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
-    const bytecode = Array.of<Instruction>()
-
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env): void {
     const end = new Label()
 
     let nextClause = new Label()
@@ -55,36 +53,31 @@ class Cond implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
         )
       }
 
-      nextClause.target = bytecode.length
-      nextClause.fillOffset()
+      nextClause.fillOffset(ctx.code.len)
       nextClause = new Label()
 
       const it = iter(clause)
-      const condition = ctx.compileExpr(next(it, 'cond') as SExpr, env)
+      ctx.compileExpr(next(it, 'cond') as SExpr, env)
       // TODO: check type
-      bytecode.push(...condition)
 
-      const jumpToNext = Instruction.BEQZ(0)
-      nextClause.jumpFrom({ index: bytecode.length, instruction: jumpToNext })
-      bytecode.push(jumpToNext)
-      bytecode.push(
-        ...it.reduce(
-          (_, x) => ctx.compileExpr(x as SExpr, env),
-          Array.of<Instruction>(),
-        ),
-      )
+      const jumpToNextFrom = ctx.code.len
+      const jumpToNext = ctx.emit(Instruction.BEQZ(0))
+      nextClause.jumpFrom({
+        from: jumpToNextFrom,
+        fill: (offset) => jumpToNext.setInt16(1, offset, true),
+      })
+      it.forEach((x) => ctx.compileExpr(x as SExpr, env))
 
-      const jumpToEnd = Instruction.Jump(0)
-      end.jumpFrom({ index: bytecode.length, instruction: jumpToEnd })
-      bytecode.push(jumpToEnd)
+      const jumpToEndFrom = ctx.code.len
+      const jumpToEnd = ctx.emit(Instruction.Jump(0))
+      end.jumpFrom({
+        from: jumpToEndFrom,
+        fill: (offset) => jumpToEnd.setInt16(1, offset, true),
+      })
     }
-    nextClause.target = bytecode.length
-    nextClause.fillOffset()
+    nextClause.fillOffset(ctx.code.len)
 
-    end.target = bytecode.length
-    end.fillOffset()
-
-    return bytecode
+    end.fillOffset(ctx.code.len)
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {

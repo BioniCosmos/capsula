@@ -67,16 +67,20 @@ pub fn execute(self: *Self, bytecode: []const u8) Error!Var {
             .mul => try self.pushToList(.{ .i64 = self.pop().i64 * self.pop().i64 }, &self.stack),
             .div => try self.pushToList(.{ .i64 = @divTrunc(self.pop().i64, self.pop().i64) }, &self.stack),
             .rem => try self.pushToList(.{ .i64 = @rem(self.pop().i64, self.pop().i64) }, &self.stack),
-            .jump => i += readU16(bytecode, &i),
+            .jump => {
+                const current = i;
+                i = jump(current, read(i16, bytecode, &i));
+            },
             .beqz => {
-                const offset = readU16(bytecode, &i);
+                const current = i;
+                const offset = read(i16, bytecode, &i);
                 if (!self.pop().bool) {
-                    i += offset;
+                    i = jump(current, offset);
                 }
             },
-            .push => try self.pushToList(self.vars.items[readU16(bytecode, &i)], &self.stack),
-            .load => try self.pushToList(self.local[readU16(bytecode, &i)], &self.stack),
-            .save => self.local[readU16(bytecode, &i)] = self.pop(),
+            .push => try self.pushToList(self.vars.items[read(u16, bytecode, &i)], &self.stack),
+            .load => try self.pushToList(self.local[read(u16, bytecode, &i)], &self.stack),
+            .save => self.local[read(u16, bytecode, &i)] = self.pop(),
         }
     }
 
@@ -107,8 +111,13 @@ fn pushToList(self: *Self, x: Var, xs: *std.ArrayList(Var)) !void {
     };
 }
 
-fn readU16(bytecode: []const u8, i: *usize) u16 {
-    const addr = mem.readVarInt(u16, bytecode[i.* + 1 .. i.* + 3], .little);
-    i.* += 2;
+fn read(T: type, bytecode: []const u8, i: *usize) T {
+    const size = @sizeOf(T);
+    const addr = mem.readVarInt(T, bytecode[i.* + 1 .. i.* + size + 1], .little);
+    i.* += size;
     return addr;
+}
+
+fn jump(from: usize, offset: i16) usize {
+    return @intCast(@as(isize, @intCast(from)) + @as(isize, @intCast(offset)) - 1);
 }

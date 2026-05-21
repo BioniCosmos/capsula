@@ -1,5 +1,4 @@
 import type { BytecodeBackend, QBEBackend, TreeWalkBackend } from './backend'
-import type { Instruction } from './bytecode'
 import type { Bytecode, QBE, TreeWalk } from './env'
 import type { List } from './list'
 import type { Pair } from './pair'
@@ -48,7 +47,7 @@ export function isTreeWalkEvaluator(x: any): x is TreeWalkEvaluator {
 }
 
 export interface BytecodeCompiler {
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env): Instruction[]
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env): void
 }
 
 export function isBytecodeCompiler(x: any): x is BytecodeCompiler {

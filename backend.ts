@@ -1,5 +1,5 @@
 import { $ } from 'bun'
-import { Instruction, serialize } from './bytecode'
+import { CodeBuffer, Instruction } from './bytecode'
 import { Bytecode, QBE, TreeWalk, type Environment } from './env'
 import { isList } from './list'
 import { isNumber } from './number'
@@ -65,13 +65,11 @@ export class TreeWalkBackend implements Backend<TreeWalkEvaluator, SExpr[]> {
   }
 }
 
-export class BytecodeBackend implements Backend<
-  BytecodeCompiler,
-  Instruction[]
-> {
+export class BytecodeBackend implements Backend<BytecodeCompiler, void> {
   readonly #vm: VM
 
   readonly env = new Bytecode.Env()
+  readonly code = new CodeBuffer()
 
   constructor() {
     this.#vm = new VM()
@@ -82,27 +80,27 @@ export class BytecodeBackend implements Backend<
   }
 
   compile(source: SExpr[]) {
-    const bytecode = Array.of<Instruction>()
     for (const expr of source) {
-      bytecode.push(...this.compileExpr(expr, this.env))
+      this.compileExpr(expr, this.env)
     }
-    return bytecode
   }
 
-  execute(artifact: Instruction[]) {
-    console.log(this.#vm.execute(serialize(artifact)))
+  execute() {
+    console.log(this.#vm.execute(this.code.u8Array))
   }
 
   compileExpr(expr: SExpr, env: Bytecode.Env) {
     if (isNil(expr) || isBoolean(expr) || isNumber(expr) || isString(expr)) {
-      return [Instruction.Push(this.#vm.addVar(expr))]
+      this.emit(Instruction.Push(this.#vm.addVar(expr)))
+      return
     }
     if (isSymbol(expr)) {
       const value = this.env.lookup(expr.value)
       if (typeof value !== 'number') {
         throw Error('TODO: `BytecodeCompiler.toString()`')
       }
-      return [Instruction.Load(value)]
+      this.emit(Instruction.Load(value))
+      return
     }
     if (isList(expr)) {
       const sym = car(expr)
@@ -113,9 +111,14 @@ export class BytecodeBackend implements Backend<
       if (!isBytecodeCompiler(compiler)) {
         throw Error('compiling: not callable')
       }
-      return compiler.compile(this, cdr(expr), env)
+      compiler.compile(this, cdr(expr), env)
+      return
     }
     throw Error(`compiling: unexpected \`${expr}\``)
+  }
+
+  emit(code: Instruction) {
+    return this.code.push(code)
   }
 }
 
