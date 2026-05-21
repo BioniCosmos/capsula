@@ -1,5 +1,5 @@
 import type { BytecodeBackend, QBEBackend, TreeWalkBackend } from '@/backend'
-import type { Instruction } from '@/bytecode'
+import { Instruction, Label } from '@/bytecode'
 import type { Bytecode, QBE, TreeWalk } from '@/env'
 import { isList, iter, next, type List } from '@/list'
 import {
@@ -42,8 +42,49 @@ class Cond implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
     return undefined
   }
 
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env): Instruction[] {
-    return []
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
+    const bytecode = Array.of<Instruction>()
+
+    const end = new Label()
+
+    let nextClause = new Label()
+    for (const clause of iter(exprs)) {
+      if (!isList(clause) || isNil(clause)) {
+        throw Error(
+          `evaluating \`cond\`: expecting non-empty \`list\`, found \`${typeOf(clause)}\``,
+        )
+      }
+
+      nextClause.target = bytecode.length
+      nextClause.fillOffset()
+      nextClause = new Label()
+
+      const it = iter(clause)
+      const condition = ctx.compileExpr(next(it, 'cond') as SExpr, env)
+      // TODO: check type
+      bytecode.push(...condition)
+
+      const jumpToNext = Instruction.BEQZ(0)
+      nextClause.jumpFrom({ index: bytecode.length, instruction: jumpToNext })
+      bytecode.push(jumpToNext)
+      bytecode.push(
+        ...it.reduce(
+          (_, x) => ctx.compileExpr(x as SExpr, env),
+          Array.of<Instruction>(),
+        ),
+      )
+
+      const jumpToEnd = Instruction.Jump(0)
+      end.jumpFrom({ index: bytecode.length, instruction: jumpToEnd })
+      bytecode.push(jumpToEnd)
+    }
+    nextClause.target = bytecode.length
+    nextClause.fillOffset()
+
+    end.target = bytecode.length
+    end.fillOffset()
+
+    return bytecode
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {

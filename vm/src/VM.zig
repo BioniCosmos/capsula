@@ -19,7 +19,7 @@ pub const Var = union(VarType) {
 };
 const VarType = enum { unit, bool, i64 };
 
-pub const Instruction = enum(u8) { add, sub, mul, div, rem, push, load, save };
+pub const Instruction = enum(u8) { add, sub, mul, div, rem, jump, beqz, push, load, save };
 
 const Error = error{ Runtime, MaxVariableNumberExceeded } || mem.Allocator.Error;
 
@@ -67,9 +67,16 @@ pub fn execute(self: *Self, bytecode: []const u8) Error!Var {
             .mul => try self.pushToList(.{ .i64 = self.pop().i64 * self.pop().i64 }, &self.stack),
             .div => try self.pushToList(.{ .i64 = @divTrunc(self.pop().i64, self.pop().i64) }, &self.stack),
             .rem => try self.pushToList(.{ .i64 = @rem(self.pop().i64, self.pop().i64) }, &self.stack),
-            .push => try self.pushToList(self.vars.items[readAddr(bytecode, &i)], &self.stack),
-            .load => try self.pushToList(self.local[readAddr(bytecode, &i)], &self.stack),
-            .save => self.local[readAddr(bytecode, &i)] = self.pop(),
+            .jump => i += readU16(bytecode, &i),
+            .beqz => {
+                const offset = readU16(bytecode, &i);
+                if (!self.pop().bool) {
+                    i += offset;
+                }
+            },
+            .push => try self.pushToList(self.vars.items[readU16(bytecode, &i)], &self.stack),
+            .load => try self.pushToList(self.local[readU16(bytecode, &i)], &self.stack),
+            .save => self.local[readU16(bytecode, &i)] = self.pop(),
         }
     }
 
@@ -100,7 +107,7 @@ fn pushToList(self: *Self, x: Var, xs: *std.ArrayList(Var)) !void {
     };
 }
 
-fn readAddr(bytecode: []const u8, i: *usize) u16 {
+fn readU16(bytecode: []const u8, i: *usize) u16 {
     const addr = mem.readVarInt(u16, bytecode[i.* + 1 .. i.* + 3], .little);
     i.* += 2;
     return addr;
