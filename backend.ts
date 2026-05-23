@@ -2,13 +2,13 @@ import { $ } from 'bun'
 import { CodeBuffer, Instruction } from './bytecode'
 import { Bytecode, QBE, TreeWalk, type Environment } from './env'
 import { isList } from './list'
-import { isNumber } from './number'
 import { car, cdr } from './pair'
 import { isString } from './string'
 import {
   isBoolean,
   isBytecodeCompiler,
   isNil,
+  isNumber,
   isQBECompiler,
   isSymbol,
   isTreeWalkEvaluator,

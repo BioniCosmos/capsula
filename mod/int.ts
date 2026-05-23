@@ -140,9 +140,43 @@ class Rem implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
+class IsI64 implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
+  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
+    const args = iter(exprs).toArray()
+    if (args.length !== 1) {
+      throw Error(`\`i64?\`: expecting 1 argument, found ${args.length}`)
+    }
+    const x = await ctx.evaluate(args[0] as SExpr, env)
+    return typeof x === 'number'
+  }
+
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env): void {
+    const args = iter(exprs).toArray()
+    if (args.length !== 1) {
+      throw Error(`\`i64?\`: expecting 1 argument, found ${args.length}`)
+    }
+    ctx.compileExpr(args[0] as SExpr, env)
+    ctx.emit(Instruction.IsI64)
+  }
+
+  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env): string | null {
+    const args = iter(exprs).toArray()
+    if (args.length !== 1) {
+      throw Error(`\`i64?\`: expecting 1 argument, found ${args.length}`)
+    }
+
+    const x = ctx.compileExpr(args[0] as SExpr, env)!
+    const tag = ctx.tag(x, env)
+
+    const result = env.defineTemp()
+    ctx.emit(`${result} =l ceql ${tag}, ${0b010}`)
+    return ctx.wrapBool(result, env)
+  }
+}
+
 export default {
   name: 'integer',
   dependencies: [],
-  units: { '+': Add, '-': Sub, '*': Mul, '/': Div, '%': Rem },
+  units: { '+': Add, '-': Sub, '*': Mul, '/': Div, '%': Rem, 'i64?': IsI64 },
   prelude: '',
 } satisfies Module

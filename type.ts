@@ -95,6 +95,10 @@ export function isBoolean(x: Var): x is boolean {
   return typeOf(x) === 'bool'
 }
 
+export function isNumber(x: Var): x is number {
+  return typeOf(x) === 'num'
+}
+
 export function isSymbol(x: Var): x is Sym {
   return typeOf(x) === 'sym'
 }

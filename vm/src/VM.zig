@@ -19,7 +19,7 @@ pub const Var = union(VarType) {
 };
 const VarType = enum { unit, bool, i64 };
 
-pub const Instruction = enum(u8) { add, sub, mul, div, rem, jump, beqz, push, load, save };
+pub const Instruction = enum(u8) { add, sub, mul, div, rem, jump, beqz, push, load, save, is_i64 };
 
 const Error = error{ Runtime, MaxVariableNumberExceeded } || mem.Allocator.Error;
 
@@ -81,6 +81,7 @@ pub fn execute(self: *Self, bytecode: []const u8) Error!Var {
             .push => try self.pushToList(self.vars.items[read(u16, bytecode, &i)], &self.stack),
             .load => try self.pushToList(self.local[read(u16, bytecode, &i)], &self.stack),
             .save => self.local[read(u16, bytecode, &i)] = self.pop(),
+            .is_i64 => try self.pushToList(.{ .bool = self.pop() == .i64 }, &self.stack),
         }
     }
 
