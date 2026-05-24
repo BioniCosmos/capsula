@@ -7,8 +7,7 @@ import {
   type Library,
   type Pointer,
 } from 'bun:ffi'
-import { isNumber } from './number'
-import { isBoolean, type Var } from './type'
+import { isBoolean, isNumber, type Var } from './type'
 
 const symbols = {
   init: { returns: FFIType.ptr },

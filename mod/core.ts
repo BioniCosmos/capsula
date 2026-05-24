@@ -1,7 +1,7 @@
 import type { BytecodeBackend, QBEBackend, TreeWalkBackend } from '@/backend'
 import { Instruction, Label } from '@/bytecode'
 import type { Bytecode, QBE, TreeWalk } from '@/env'
-import { isList, iter, next, type List } from '@/list'
+import { build, isList, iter, next, type List } from '@/list'
 import {
   isBoolean,
   isNil,
@@ -125,9 +125,50 @@ class Cond implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
+class If implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
+  eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env): Promise<Var> {
+    const cond = env.lookup('cond') as TreeWalkEvaluator
+    const it = iter(exprs)
+    const condition = next(it, 'if')
+    const then = next(it, 'if')
+    const elseExpr = next(it, 'if')
+    return cond.eval(
+      ctx,
+      build(build(condition, then), build(true, elseExpr)),
+      env,
+    )
+  }
+
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env): void {
+    const cond = env.lookup('cond') as BytecodeCompiler
+    const it = iter(exprs)
+    const condition = next(it, 'if')
+    const then = next(it, 'if')
+    const elseExpr = next(it, 'if')
+    return cond.compile(
+      ctx,
+      build(build(condition, then), build(true, elseExpr)),
+      env,
+    )
+  }
+
+  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env): string | null {
+    const cond = env.lookup('cond') as QBECompiler
+    const it = iter(exprs)
+    const condition = next(it, 'if')
+    const then = next(it, 'if')
+    const elseExpr = next(it, 'if')
+    return cond.compileToQBE(
+      ctx,
+      build(build(condition, then), build(true, elseExpr)),
+      env,
+    )
+  }
+}
+
 export default {
   name: 'core',
   dependencies: [],
-  units: { cond: Cond },
+  units: { cond: Cond, if: If },
   prelude: '',
 } satisfies Module

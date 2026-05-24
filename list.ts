@@ -1,7 +1,7 @@
 import type { TreeWalk } from './env'
 import { Fn } from './fn'
-import { car, cdr, isPair } from './pair'
-import { isNil, typeOf, type Var } from './types'
+import { car, cdr, cons, isPair } from './pair'
+import { isNil, typeOf, type Var } from './type'
 
 export type List = null | [Var, List]
 
@@ -29,6 +29,10 @@ export function collect<T, U>(iter: Iterator<T, U>): [T[], U] {
     x = iter.next()
   }
   return [xs, x.value]
+}
+
+export function build(...xs: Var[]) {
+  return xs.reduceRight<List>((cdr, x) => cons(x, cdr) as List, null)
 }
 
 export function isList(x: Var): x is List {

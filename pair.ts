@@ -1,7 +1,7 @@
 import type { TreeWalk } from './env'
 import { Fn } from './fn'
 import type { List } from './list'
-import { typeOf, type Var } from './types'
+import { typeOf, type Var } from './type'
 
 export type Pair = [Var, Var]
 
