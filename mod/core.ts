@@ -14,6 +14,31 @@ import {
 } from '@/type'
 import type { Module } from '.'
 
+class Eq implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
+  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
+    const it = iter(exprs)
+    const lhs = await ctx.evaluate(next(it, '=') as SExpr, env)
+    const rhs = await ctx.evaluate(next(it, '=') as SExpr, env)
+    return lhs === rhs
+  }
+
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
+    const it = iter(exprs)
+    ctx.compileExpr(next(it, '=') as SExpr, env)
+    ctx.compileExpr(next(it, '=') as SExpr, env)
+    ctx.emit(Instruction.Eq)
+  }
+
+  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
+    const it = iter(exprs)
+    const lhs = ctx.compileExpr(next(it, '=') as SExpr, env)
+    const rhs = ctx.compileExpr(next(it, '=') as SExpr, env)
+    const result = env.defineTemp()
+    ctx.emit(`${result} =l ceql ${lhs}, ${rhs}`)
+    return ctx.wrapBool(result, env)
+  }
+}
+
 // TODO: support `else`
 class Cond implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
@@ -61,7 +86,7 @@ class Cond implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
       // TODO: check type
 
       const jumpToNextFrom = ctx.code.len
-      const jumpToNext = ctx.emit(Instruction.BEQZ(0))
+      const jumpToNext = ctx.emit(Instruction.BEqZ(0))
       nextClause.jumpFrom({
         from: jumpToNextFrom,
         fill: (offset) => jumpToNext.setInt16(1, offset, true),
@@ -169,6 +194,6 @@ class If implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
 export default {
   name: 'core',
   dependencies: [],
-  units: { cond: Cond, if: If },
+  units: { '=': Eq, cond: Cond, if: If },
   prelude: '',
 } satisfies Module

@@ -1,5 +1,13 @@
 import { QBEBackend } from '@/backend'
 import type { QBE } from '@/env'
+import type { Module } from '.'
+
+export default {
+  name: 'bool',
+  dependencies: [],
+  units: {},
+  prelude: '',
+} satisfies Module
 
 declare module '@/backend' {
   interface QBEBackend {

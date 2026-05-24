@@ -14,7 +14,7 @@ export async function init(ctx: Backend<any, unknown>) {
     moduleRegistry.set(mod.name, mod)
   }
 
-  const sources = ['./core', './int', './io']
+  const sources = ['./core', './type', './bool', './int', './io']
   for (const source of sources) {
     registerModule((await import(source)).default)
   }

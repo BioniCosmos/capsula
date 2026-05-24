@@ -4,6 +4,7 @@ const fmt = std.fmt;
 const heap = std.heap;
 const math = std.math;
 const mem = std.mem;
+const meta = std.meta;
 
 pub const Var = union(VarType) {
     unit: void,
@@ -19,7 +20,7 @@ pub const Var = union(VarType) {
 };
 const VarType = enum { unit, bool, i64 };
 
-pub const Instruction = enum(u8) { add, sub, mul, div, rem, jump, beqz, push, load, save, is_i64 };
+pub const Instruction = enum(u8) { add, sub, mul, div, rem, eq, push, load, save, jump, beqz, is_i64 };
 
 const Error = error{ Runtime, MaxVariableNumberExceeded } || mem.Allocator.Error;
 
@@ -67,6 +68,10 @@ pub fn execute(self: *Self, bytecode: []const u8) Error!Var {
             .mul => try self.pushToList(.{ .i64 = self.pop().i64 * self.pop().i64 }, &self.stack),
             .div => try self.pushToList(.{ .i64 = @divTrunc(self.pop().i64, self.pop().i64) }, &self.stack),
             .rem => try self.pushToList(.{ .i64 = @rem(self.pop().i64, self.pop().i64) }, &self.stack),
+            .eq => try self.pushToList(.{ .bool = meta.eql(self.pop(), self.pop()) }, &self.stack),
+            .push => try self.pushToList(self.vars.items[read(u16, bytecode, &i)], &self.stack),
+            .load => try self.pushToList(self.local[read(u16, bytecode, &i)], &self.stack),
+            .save => self.local[read(u16, bytecode, &i)] = self.pop(),
             .jump => {
                 const current = i;
                 i = jump(current, read(i16, bytecode, &i));
@@ -78,9 +83,6 @@ pub fn execute(self: *Self, bytecode: []const u8) Error!Var {
                     i = jump(current, offset);
                 }
             },
-            .push => try self.pushToList(self.vars.items[read(u16, bytecode, &i)], &self.stack),
-            .load => try self.pushToList(self.local[read(u16, bytecode, &i)], &self.stack),
-            .save => self.local[read(u16, bytecode, &i)] = self.pop(),
             .is_i64 => try self.pushToList(.{ .bool = self.pop() == .i64 }, &self.stack),
         }
     }
