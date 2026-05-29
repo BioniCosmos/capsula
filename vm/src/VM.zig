@@ -3,6 +3,7 @@ const debug = std.debug;
 const fmt = std.fmt;
 const heap = std.heap;
 const Io = std.Io;
+const log = std.log;
 const math = std.math;
 const mem = std.mem;
 const meta = std.meta;
@@ -48,19 +49,19 @@ pub const Var = union(VarType) {
 
 const VarType = enum { unit, bool, i64 };
 
-pub const Instruction = enum(u8) { add, sub, mul, div, rem, eq, push, load, save, jump, beqz, is_i64 };
+pub const Instruction = enum(u8) { add, sub, mul, div, rem, eq, push, load, save, jump, beqz, is_i64, print };
 
-const Error = error{ Runtime, MaxVariableNumberExceeded } || mem.Allocator.Error;
+const Error = error{MaxVariableNumberExceeded} || mem.Allocator.Error || Io.Writer.Error;
 
 const Self = @This();
 
 pub const max_slot_size = math.maxInt(u16);
 
-gpa: *heap.DebugAllocator(.{}),
 allocator: mem.Allocator,
+io: Io,
 
 vars: std.ArrayList(Var) = .empty,
-local: [1024 * 1024]Var = undefined,
+local: [1024]Var = undefined,
 stack: std.ArrayList(Var) = .empty,
 
 err_buf: [1024]u8 = undefined,
@@ -68,17 +69,28 @@ err: []const u8 = "",
 
 result_buf: [1024]u8 = undefined,
 
-pub fn init() Self {
-    const gpa = heap.c_allocator.create(heap.DebugAllocator(.{})) catch @panic("failed to create the allocator");
-    gpa.* = .init;
-    return .{ .gpa = gpa, .allocator = gpa.allocator() };
+stdout_buf: [1024]u8 = undefined,
+stdout_writer: Io.File.Writer = undefined,
+stdout: *Io.Writer = undefined,
+
+pub fn init(allocator: mem.Allocator, io: Io) !*Self {
+    const vm = try allocator.create(Self);
+    vm.* = .{ .allocator = allocator, .io = io };
+
+    vm.stdout_writer = Io.File.stdout().writer(vm.io, &vm.stdout_buf);
+    vm.stdout = &vm.stdout_writer.interface;
+
+    return vm;
 }
 
 pub fn deinit(self: *Self) void {
+    self.stdout.flush() catch |e| log.warn("VM.deinit: failed to flush stdout: {}", .{e});
+
     self.vars.deinit(self.allocator);
     self.stack.deinit(self.allocator);
-    debug.assert(self.gpa.deinit() == .ok);
-    heap.c_allocator.destroy(self.gpa);
+
+    const allocator = self.allocator;
+    allocator.destroy(self);
 }
 
 pub fn execute(self: *Self, bytecode: []const u8) Error!Var {
@@ -112,6 +124,16 @@ pub fn execute(self: *Self, bytecode: []const u8) Error!Var {
                 }
             },
             .is_i64 => try self.pushToList(.{ .bool = self.pop() == .i64 }, &self.stack),
+            .print => {
+                self.stdout.print("{f}", .{self.pop()}) catch |err| {
+                    self.err = fmt.bufPrint(&self.err_buf, "failed to print", .{}) catch unreachable;
+                    return err;
+                };
+                self.stdout.flush() catch |err| {
+                    self.err = fmt.bufPrint(&self.err_buf, "failed to flush", .{}) catch unreachable;
+                    return err;
+                };
+            },
         }
     }
 
