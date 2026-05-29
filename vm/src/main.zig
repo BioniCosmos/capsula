@@ -1,27 +1,43 @@
 const std = @import("std");
-const vm = @import("vm");
+const debug = std.debug;
+const Io = std.Io;
+const process = std.process;
 
-pub fn main() !void {
-    // Prints to stderr, ignoring potential errors.
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-    try vm.bufferedPrint();
-}
+const msgpack = @import("msgpack");
 
-test "simple test" {
-    const gpa = std.testing.allocator;
-    var list: std.ArrayList(i32) = .empty;
-    defer list.deinit(gpa); // Try commenting this out and see if zig detects the memory leak!
-    try list.append(gpa, 42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
-}
+const VM = @import("./VM.zig");
 
-test "fuzz example" {
-    const Context = struct {
-        fn testOne(context: @This(), input: []const u8) anyerror!void {
-            _ = context;
-            // Try passing `--fuzz` to `zig build test` and see if it manages to fail this test case!
-            try std.testing.expect(!std.mem.eql(u8, "canyoufindme", input));
-        }
-    };
-    try std.testing.fuzz(Context{}, Context.testOne, .{});
+pub fn main(init: process.Init) !void {
+    const allocator = init.arena.allocator();
+    const temp_allocator = init.gpa;
+    const io = init.io;
+
+    const args = try init.minimal.args.toSlice(allocator);
+    if (args.len < 2) {
+        debug.print("bytecode file path required\n", .{});
+        return;
+    }
+    const path = args[1];
+
+    const file = try Io.Dir.cwd().openFile(io, path, .{});
+    defer file.close(io);
+
+    var buf: [1024]u8 = undefined;
+    var reader = file.reader(io, &buf);
+
+    var packer = msgpack.packIO(&reader.interface, @constCast(&Io.Writer.failing));
+    const payload = try packer.read(temp_allocator);
+
+    const vm = try VM.init(allocator, io);
+    defer vm.deinit();
+
+    for (0..try payload.getArrLen()) |i| {
+        _ = try vm.addVar(try VM.Var.deserialize(try payload.getArrElement(i)));
+    }
+
+    payload.free(temp_allocator);
+
+    const bytecode = try reader.interface.allocRemaining(temp_allocator, .unlimited);
+    _ = try vm.execute(bytecode);
+    temp_allocator.free(bytecode);
 }
