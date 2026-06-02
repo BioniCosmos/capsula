@@ -5,7 +5,7 @@ const process = std.process;
 
 const msgpack = @import("msgpack");
 
-const VM = @import("./VM.zig");
+const VM = @import("VM.zig");
 
 pub fn main(init: process.Init) !void {
     const allocator = init.arena.allocator();
