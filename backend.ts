@@ -1,3 +1,4 @@
+import { encode } from '@msgpack/msgpack'
 import { $ } from 'bun'
 import { CodeBuffer, Instruction } from './bytecode'
 import { Bytecode, QBE, TreeWalk, type Environment } from './env'
@@ -20,7 +21,6 @@ import {
   type Unit,
   type Var,
 } from './type'
-import { VM } from './vm'
 
 export interface Backend<U extends Unit, Artifact> {
   readonly env: Environment<U>
@@ -66,32 +66,39 @@ export class TreeWalkBackend implements Backend<TreeWalkEvaluator, SExpr[]> {
 }
 
 export class BytecodeBackend implements Backend<BytecodeCompiler, void> {
-  readonly #vm: VM
-
   readonly env = new Bytecode.Env()
   readonly code = new CodeBuffer()
+  readonly constants = Array.of<SExpr>()
 
-  constructor() {
-    this.#vm = new VM()
-  }
-
-  [Symbol.dispose]() {
-    this.#vm[Symbol.dispose]()
-  }
-
-  compile(source: SExpr[]) {
+  async compile(source: SExpr[]) {
     for (const expr of source) {
       this.compileExpr(expr, this.env)
     }
+
+    const writer = Bun.file('bytecode.💊').writer()
+    await writer.write(
+      encode(
+        this.constants.map((x) => {
+          switch (typeOf(x)) {
+            case 'bool':
+              return [1, x]
+            case 'num':
+              return [2, x]
+          }
+        }),
+      ),
+    )
+    await writer.write(this.code.u8Array)
+    await writer.end()
   }
 
   execute() {
-    console.log(this.#vm.execute(this.code.u8Array))
+    throw Error('unimplemented')
   }
 
   compileExpr(expr: SExpr, env: Bytecode.Env) {
     if (isNil(expr) || isBoolean(expr) || isNumber(expr) || isString(expr)) {
-      this.emit(Instruction.Push(this.#vm.addVar(expr)))
+      this.emit(Instruction.Push(this.constants.push(expr) - 1))
       return
     }
     if (isSymbol(expr)) {
