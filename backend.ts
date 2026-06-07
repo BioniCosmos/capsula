@@ -75,7 +75,10 @@ export class BytecodeBackend implements Backend<BytecodeCompiler, void> {
       this.compileExpr(expr, this.env)
     }
 
-    const writer = Bun.file('bytecode.💊').writer()
+    const file = Bun.file('bytecode.💊')
+    await file.write('')
+
+    const writer = file.writer()
     await writer.write(
       encode(
         this.constants.map((x) => {
