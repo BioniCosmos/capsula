@@ -164,6 +164,34 @@ class Rem implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
+class Lt implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
+  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
+    const it = iter(exprs)
+    return (
+      ((await ctx.evaluate(next(it, '<') as SExpr, env)) as number) <
+      ((await ctx.evaluate(next(it, '<') as SExpr, env)) as number)
+    )
+  }
+
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
+    const it = iter(exprs)
+    const lhs = next(it, '<') as SExpr
+    const rhs = next(it, '<') as SExpr
+    ctx.compileExpr(rhs, env)
+    ctx.compileExpr(lhs, env)
+    ctx.emit(Instruction.Lt)
+  }
+
+  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
+    const it = iter(exprs)
+    const result = env.defineTemp()
+    const lhs = ctx.compileExpr(next(it, '<') as SExpr, env)!
+    const rhs = ctx.compileExpr(next(it, '<') as SExpr, env)!
+    ctx.emit(`${result} =l csltl ${lhs}, ${rhs}`)
+    return ctx.wrapBool(result, env)
+  }
+}
+
 class IsI64 implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
     const args = iter(exprs).toArray()
@@ -201,7 +229,15 @@ class IsI64 implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
 export default {
   name: 'integer',
   dependencies: [],
-  units: { '+': Add, '-': Sub, '*': Mul, '/': Div, '%': Rem, 'i64?': IsI64 },
+  units: {
+    '+': Add,
+    '-': Sub,
+    '*': Mul,
+    '/': Div,
+    '%': Rem,
+    '<': Lt,
+    'i64?': IsI64,
+  },
   prelude: '',
 } satisfies Module
 

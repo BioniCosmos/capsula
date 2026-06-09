@@ -5,12 +5,14 @@ export const Instruction = {
   Div: { type: 'Div' },
   Rem: { type: 'Rem' },
   Eq: { type: 'Eq' },
+  Lt: { type: 'Lt' },
   Push: (addr: number) => ({ type: 'Push', addr }) as const,
   Load: (addr: number) => ({ type: 'Load', addr }) as const,
   Save: (addr: number) => ({ type: 'Save', addr }) as const,
   Jump: (offset: number) => ({ type: 'Jump', offset }) as const,
   BEqZ: (offset: number) => ({ type: 'BEqZ', offset }) as const,
   IsI64: { type: 'IsI64' },
+  Print: { type: 'Print' },
 } as const
 
 type GetValueOrReturnValue<T> = T extends (...args: any[]) => infer R ? R : T
