@@ -5,6 +5,7 @@ import { build, isList, iter, next, type List } from '@/list'
 import {
   isBoolean,
   isNil,
+  isSymbol,
   typeOf,
   type BytecodeCompiler,
   type QBECompiler,
@@ -191,9 +192,48 @@ class If implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
+class Def implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
+  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
+    const it = iter(exprs)
+    const sym = next(it, 'def')
+    if (!isSymbol(sym)) {
+      throw Error(
+        `evaluating \`def\`: expecting symbol, found \`${typeOf(sym)}\``,
+      )
+    }
+    env.define(sym.value, await ctx.evaluate(next(it, 'def') as SExpr, env))
+  }
+
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
+    const it = iter(exprs)
+    const sym = next(it, 'def')
+    if (!isSymbol(sym)) {
+      throw Error(
+        `evaluating \`def\`: expecting symbol, found \`${typeOf(sym)}\``,
+      )
+    }
+    ctx.compileExpr(next(it, 'def') as SExpr, env)
+    ctx.emit(Instruction.Save(env.defineVar(sym.value)))
+  }
+
+  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
+    const it = iter(exprs)
+    const sym = next(it, 'def')
+    if (!isSymbol(sym)) {
+      throw Error(
+        `evaluating \`def\`: expecting symbol, found \`${typeOf(sym)}\``,
+      )
+    }
+    ctx.emit(
+      `${env.defineVar(sym.value)} =l copy ${ctx.compileExpr(next(it, 'def') as SExpr, env)}`,
+    )
+    return null
+  }
+}
+
 export default {
   name: 'core',
   dependencies: [],
-  units: { '=': Eq, cond: Cond, if: If },
+  units: { '=': Eq, cond: Cond, if: If, def: Def },
   prelude: '',
 } satisfies Module

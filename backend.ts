@@ -138,8 +138,9 @@ export class QBEBackend implements Backend<QBECompiler, void> {
 
   async compile(source: SExpr[]) {
     this.emit(`export function w $main() {\n@start`)
+    const env = new QBE.Env(this.env)
     for (const expr of source) {
-      this.compileExpr(expr, this.env)
+      this.compileExpr(expr, env)
     }
     this.emit('ret 0\n}')
     const code = this.#code.join('\n')
@@ -167,6 +168,9 @@ export class QBEBackend implements Backend<QBECompiler, void> {
     }
     if (isNumber(expr)) {
       return ((expr << 3) | 0b010).toString()
+    }
+    if (isSymbol(expr)) {
+      return env.lookup(expr.value) as string
     }
     if (isList(expr) && !isNil(expr)) {
       const sym = car(expr)
