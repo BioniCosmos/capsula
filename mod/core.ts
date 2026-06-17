@@ -231,9 +231,40 @@ class Def implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
+class Loop implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
+  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
+    while (true) {
+      try {
+        for (const expr of iter(exprs)) {
+          await ctx.evaluate(expr as SExpr, env)
+        }
+      } catch {}
+    }
+  }
+
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
+    const start = ctx.code.len
+    for (const expr of iter(exprs)) {
+      ctx.compileExpr(expr as SExpr, env)
+    }
+    ctx.emit(Instruction.Jump(start - ctx.code.len))
+  }
+
+  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
+    const loop = env.defineBlock()
+    ctx.emit(loop)
+    for (const expr of iter(exprs)) {
+      ctx.compileExpr(expr as SExpr, env)
+    }
+    ctx.emit(`jmp ${loop}`)
+    ctx.emit(env.defineBlock())
+    return null
+  }
+}
+
 export default {
   name: 'core',
   dependencies: [],
-  units: { '=': Eq, cond: Cond, if: If, def: Def },
+  units: { '=': Eq, cond: Cond, if: If, def: Def, loop: Loop },
   prelude: '',
 } satisfies Module

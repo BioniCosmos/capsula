@@ -118,7 +118,14 @@ pub fn execute(self: *Self, bytecode: []const u8) Error!Var {
     }
 
     var i: usize = 0;
-    while (i < bytecode.len) : (i += 1) {
+    var stop_add = false;
+    while (i < bytecode.len) : ({
+        if (stop_add) {
+            stop_add = false;
+        } else {
+            i += 1;
+        }
+    }) {
         const instruction: Instruction = @enumFromInt(bytecode[i]);
         switch (instruction) {
             .add => try self.pushToList(.{ .i64 = self.pop().i64 + self.pop().i64 }, &self.stack),
@@ -137,12 +144,14 @@ pub fn execute(self: *Self, bytecode: []const u8) Error!Var {
             .jump => {
                 const current = i;
                 i = jump(current, read(i16, bytecode, &i));
+                stop_add = true;
             },
             .beqz => {
                 const current = i;
                 const offset = read(i16, bytecode, &i);
                 if (!self.pop().bool) {
                     i = jump(current, offset);
+                    stop_add = true;
                 }
             },
             .is_i64 => try self.pushToList(.{ .bool = self.pop() == .i64 }, &self.stack),
@@ -194,5 +203,5 @@ fn read(T: type, bytecode: []const u8, i: *usize) T {
 }
 
 fn jump(from: usize, offset: i16) usize {
-    return @intCast(@as(isize, @intCast(from)) + @as(isize, @intCast(offset)) - 1);
+    return @intCast(@as(isize, @intCast(from)) + @as(isize, @intCast(offset)));
 }
