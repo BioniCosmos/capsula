@@ -39,7 +39,7 @@ export function isUnitConstructor<T extends Unit>(
 }
 
 export interface TreeWalkEvaluator {
-  eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env): Promise<Var>
+  eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env): Var | Promise<Var>
 }
 
 export function isTreeWalkEvaluator(x: any): x is TreeWalkEvaluator {
