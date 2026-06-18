@@ -286,7 +286,7 @@ class IsI64 implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
     return typeof x === 'number'
   }
 
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env): void {
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const args = iter(exprs).toArray()
     if (args.length !== 1) {
       throw Error(`\`i64?\`: expecting 1 argument, found ${args.length}`)
@@ -295,7 +295,7 @@ class IsI64 implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
     ctx.emit(Instruction.IsI64)
   }
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env): string | null {
+  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
     const args = iter(exprs).toArray()
     if (args.length !== 1) {
       throw Error(`\`i64?\`: expecting 1 argument, found ${args.length}`)

@@ -20,13 +20,11 @@ class VarArray implements Box {
 
 class ArrayOf implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    return new VarArray(
-      await Promise.all(
-        iter(exprs)
-          .map(async (expr) => await ctx.evaluate(expr as SExpr, env))
-          .toArray(),
-      ),
-    )
+    const xs = Array.of<Var>()
+    for (const expr of iter(exprs)) {
+      xs.push(await ctx.evaluate(expr as SExpr, env))
+    }
+    return new VarArray(xs)
   }
 
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {

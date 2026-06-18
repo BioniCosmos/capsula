@@ -5,7 +5,7 @@ import { isNil, typeOf, type Var } from './type'
 
 export type List = null | [Var, List]
 
-export function* iter(xs: Var) {
+export function* iter(xs: Var): Generator<Var, Var, void> {
   while (isPair(xs)) {
     yield car(xs)
     xs = cdr(xs)
@@ -13,7 +13,7 @@ export function* iter(xs: Var) {
   return xs
 }
 
-export function next(iter: Iterator<Var>, form: string): Var {
+export function next(iter: Iterator<Var, unknown, never>, form: string): Var {
   const r = iter.next()
   if (r.done) {
     throw Error(`evaluating \`${form}\`: missing arguments`)
@@ -21,7 +21,7 @@ export function next(iter: Iterator<Var>, form: string): Var {
   return r.value
 }
 
-export function collect<T, U>(iter: Iterator<T, U>): [T[], U] {
+export function collect<T, U>(iter: Iterator<T, U, never>): [T[], U] {
   let x = iter.next()
   const xs = Array.of<T>()
   while (!x.done) {

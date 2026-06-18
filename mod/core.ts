@@ -43,6 +43,8 @@ class Eq implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
 // TODO: support `else`
 class Cond implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
+    let result: Var = undefined
+
     for (const clause of iter(exprs)) {
       if (!isList(clause) || isNil(clause)) {
         throw Error(
@@ -59,16 +61,17 @@ class Cond implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
       }
 
       if (condition) {
-        return it.reduce<Promise<Var>>(
-          (_, x) => ctx.evaluate(x as SExpr, env),
-          Promise.resolve(undefined),
-        )
+        for (const x of it) {
+          result = await ctx.evaluate(x as SExpr, env)
+        }
+        break
       }
     }
-    return undefined
+
+    return result
   }
 
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env): void {
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const end = new Label()
 
     let nextClause = new Label()
@@ -152,7 +155,7 @@ class Cond implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
 }
 
 class If implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env): Promise<Var> {
+  eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
     const cond = env.lookup('cond') as TreeWalkEvaluator
     const it = iter(exprs)
     const condition = next(it, 'if')
@@ -165,7 +168,7 @@ class If implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
     )
   }
 
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env): void {
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const cond = env.lookup('cond') as BytecodeCompiler
     const it = iter(exprs)
     const condition = next(it, 'if')
@@ -178,7 +181,7 @@ class If implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
     )
   }
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env): string | null {
+  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
     const cond = env.lookup('cond') as QBECompiler
     const it = iter(exprs)
     const condition = next(it, 'if')
