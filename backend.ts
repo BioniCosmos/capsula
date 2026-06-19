@@ -134,16 +134,22 @@ export class BytecodeBackend implements Backend<BytecodeCompiler, void> {
 
 export class QBEBackend implements Backend<QBECompiler, void> {
   readonly env = new QBE.Env()
-  readonly #code = Array.of<string>()
+  readonly #fnCode: string[][] = []
+  readonly #currentFn: number[] = []
+  readonly #global = Array.of<string>()
 
   async compile(source: SExpr[]) {
-    this.emit(`export function w $main() {\n@start`)
+    this.startFn('$main', '', 'w', true)
     const env = new QBE.Env(this.env)
     for (const expr of source) {
       this.compileExpr(expr, env)
     }
-    this.emit('ret 0\n}')
-    const code = this.#code.join('\n')
+    this.endFn('0')
+
+    const code =
+      this.#global.join('\n') +
+      '\n' +
+      this.#fnCode.map((code) => code.join('\n')).join('\n')
     await $`qbe < ${new Response(code)} | clang -x assembler -`
   }
 
@@ -177,7 +183,7 @@ export class QBEBackend implements Backend<QBECompiler, void> {
       if (!isSymbol(sym)) {
         throw Error(`compiling: expecting symbol, found \`${typeOf(sym)}\``)
       }
-      const compiler = this.env.lookup(sym.value)
+      const compiler = env.lookup(sym.value)
       if (!isQBECompiler(compiler)) {
         throw Error('compiling: not callable')
       }
@@ -186,11 +192,23 @@ export class QBEBackend implements Backend<QBECompiler, void> {
     throw Error(`compiling: unexpected \`${expr}\``)
   }
 
+  startFn(id: string, params: string, type = 'l', isExport = false) {
+    this.#fnCode.push([
+      `${isExport ? 'export ' : ''}function ${type} ${id}(${params}) {\n@start`,
+    ])
+    this.#currentFn.push(this.#fnCode.length - 1)
+  }
+
+  endFn(x: string) {
+    this.emit(`ret ${x}\n}`)
+    this.#currentFn.pop()
+  }
+
   emit(code: string) {
-    this.#code.push(code)
+    this.#fnCode[this.#currentFn.at(-1)!].push(code)
   }
 
   emitGlobal(code: string) {
-    this.#code.unshift(code)
+    this.#global.push(code)
   }
 }

@@ -1,3 +1,4 @@
+import { QBEFn } from '@/mod/fn'
 import {
   isUnitConstructor,
   type BytecodeCompiler,
@@ -13,6 +14,8 @@ export interface Environment<T extends Unit> {
   defineUnit(name: string, constructor: UnitConstructor<T>): void
 }
 
+// TODO: Remove namespaces.
+// TODO: Tidy up functions. (defineVar + defineUnit + lookup ?)
 export namespace TreeWalk {
   export class Env implements Environment<TreeWalkEvaluator> {
     readonly #vars = new Map<string, Var | UnitConstructor<TreeWalkEvaluator>>()
@@ -105,9 +108,14 @@ export namespace Bytecode {
   }
 }
 
+// TODO: Remove the circular import between `env` and `mod/fn`.
+// TODO: Distinguish the identifier of the builtin and the external.
 export namespace QBE {
   export class Env implements Environment<QBECompiler> {
-    readonly #vars = new Map<string, string | UnitConstructor<QBECompiler>>()
+    readonly #vars = new Map<
+      string,
+      string | UnitConstructor<QBECompiler> | QBEFn
+    >()
     #counter = 0
 
     constructor(private readonly parent: Env | null = null) {}
@@ -125,13 +133,17 @@ export namespace QBE {
     }
 
     defineVar(name: string) {
-      const id = `${this.#isGlobal ? '$' : '%'}v_${this.#counter++}_${name}`
+      const id = `${this.#isGlobal ? '$' : '%'}v_${this.#counter++}`
       this.#vars.set(name, id)
       return id
     }
 
     defineBlock() {
       return `@b_${this.#counter++}`
+    }
+
+    defineFn(name: string, fn: QBEFn) {
+      this.#vars.set(name, fn)
     }
 
     lookup(name: string): string | QBECompiler {

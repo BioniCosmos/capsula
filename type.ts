@@ -5,12 +5,14 @@ import type { Pair } from './pair'
 
 export type Var = SExpr | Box | Unit
 
+// TODO: Redesign/Tidy up. Remove null. Distinguish compile-time (AST?) and runtime type.
 export type SExpr = void | null | boolean | number | string | Sym | Pair
 
 export class Sym {
   constructor(public value: string) {}
 }
 
+// TODO: Consider reactivate Box and make difference between Box and Unit (e.g. stateful v.s. stateless).
 export interface Box {
   type: string
 }
@@ -54,6 +56,7 @@ export function isBytecodeCompiler(x: any): x is BytecodeCompiler {
   return typeof x?.compile === 'function'
 }
 
+// TODO: Consider return string only. `void` should be represented by actual value.
 export interface QBECompiler {
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env): string | null
 }
