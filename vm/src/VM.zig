@@ -14,10 +14,18 @@ pub const Var = union(VarType) {
     unit: void,
     bool: bool,
     i64: i64,
+    array: []const Var,
 
     pub fn format(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
         switch (self) {
             .unit => {},
+            .array => |xs| {
+                try writer.print("[{}]: [{f}", .{ xs.len, xs[0] });
+                for (xs[1..]) |x| {
+                    try writer.print(" {f}", .{x});
+                }
+                try writer.print("]", .{});
+            },
             inline else => |x| try writer.print("{}", .{x}),
         }
     }
@@ -28,6 +36,7 @@ pub const Var = union(VarType) {
             .unit => msgpack.Payload.nilToPayload(),
             .bool => |x| msgpack.Payload.boolToPayload(x),
             .i64 => |x| msgpack.Payload.intToPayload(x),
+            .array => unreachable,
         };
 
         var payload = try msgpack.Payload.arrPayload(2, allocator);
@@ -43,11 +52,12 @@ pub const Var = union(VarType) {
             .unit => .{ .unit = {} },
             .bool => .{ .bool = try (try serialized.getArrElement(1)).asBool() },
             .i64 => .{ .i64 = try (try serialized.getArrElement(1)).getInt() },
+            .array => unreachable,
         };
     }
 };
 
-const VarType = enum { unit, bool, i64 };
+const VarType = enum { unit, bool, i64, array };
 
 pub const Instruction = enum(u8) {
     add,
@@ -67,6 +77,11 @@ pub const Instruction = enum(u8) {
     beqz,
     is_i64,
     print,
+    array_new,
+    array_get,
+    array_set,
+    array_len,
+    debug_array,
 };
 
 const Error = error{MaxVariableNumberExceeded} || mem.Allocator.Error || Io.Writer.Error;
@@ -157,6 +172,30 @@ pub fn execute(self: *Self, bytecode: []const u8) Error!Var {
             .is_i64 => try self.pushToList(.{ .bool = self.pop() == .i64 }, &self.stack),
             .print => {
                 self.stdout.print("{f}", .{self.pop()}) catch |err| {
+                    self.err = fmt.bufPrint(&self.err_buf, "failed to print", .{}) catch unreachable;
+                    return err;
+                };
+                self.stdout.flush() catch |err| {
+                    self.err = fmt.bufPrint(&self.err_buf, "failed to flush", .{}) catch unreachable;
+                    return err;
+                };
+            },
+            .array_new => {
+                const len = read(u16, bytecode, &i);
+                const xs = self.allocator.alloc(Var, len) catch |err| {
+                    self.err = fmt.bufPrint(&self.err_buf, "failed to allocate memory for array", .{}) catch unreachable;
+                    return err;
+                };
+                for (0..len) |idx| {
+                    xs[idx] = self.pop();
+                }
+                try self.pushToList(.{ .array = xs }, &self.stack);
+            },
+            .array_get => debug.panic("TODO", .{}),
+            .array_set => debug.panic("TODO", .{}),
+            .array_len => debug.panic("TODO", .{}),
+            .debug_array => {
+                self.stdout.print("{f}\n", .{self.pop()}) catch |err| {
                     self.err = fmt.bufPrint(&self.err_buf, "failed to print", .{}) catch unreachable;
                     return err;
                 };

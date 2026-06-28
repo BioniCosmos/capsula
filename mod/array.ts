@@ -1,4 +1,5 @@
 import type { BytecodeBackend, QBEBackend, TreeWalkBackend } from '@/backend'
+import { Instruction } from '@/bytecode'
 import type { Bytecode, QBE, TreeWalk } from '@/env'
 import { iter, type List } from '@/list'
 import { car } from '@/pair'
@@ -28,7 +29,11 @@ class ArrayOf implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
-    throw Error('TODO')
+    const xs = iter(exprs).toArray().toReversed()
+    for (const x of xs) {
+      ctx.compileExpr(x as SExpr, env)
+    }
+    ctx.emit(Instruction.ArrayNew(xs.length))
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
@@ -68,7 +73,8 @@ class DebugArray implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
-    throw Error('TODO')
+    ctx.compileExpr(car(exprs) as SExpr, env)
+    ctx.emit(Instruction.DebugArray)
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
