@@ -1,5 +1,6 @@
 import type { BytecodeBackend, QBEBackend, TreeWalkBackend } from '@/backend'
-import { QBE, TreeWalk, type Bytecode } from '@/env'
+import { Instruction } from '@/bytecode'
+import { Bytecode, QBE, TreeWalk } from '@/env'
 import { build, collect, iter, next, type List } from '@/list'
 import {
   isNil,
@@ -14,6 +15,7 @@ import {
 } from '@/type'
 import type { Module } from '.'
 
+// TODO: rename to TreeWalkFn
 class Fn implements TreeWalkEvaluator {
   constructor(
     private env: TreeWalk.Env,
@@ -45,6 +47,27 @@ class Fn implements TreeWalkEvaluator {
       result = await ctx.evaluate(expr, scope)
     }
     return result
+  }
+}
+
+// TODO: support rest parameters
+export class BytecodeFn implements BytecodeCompiler {
+  constructor(
+    public idx: number,
+    public env: Bytecode.Env,
+    public required: Sym[],
+  ) {
+    for (const param of required) {
+      env.defineVar(param.value)
+    }
+  }
+
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
+    const it = iter(exprs)
+    for (const _ of this.required) {
+      ctx.compileExpr(next(it, 'fn') as SExpr, env)
+    }
+    ctx.emit(Instruction.Call(this.idx))
   }
 }
 
@@ -128,7 +151,37 @@ class Defn implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
-    throw Error('TODO')
+    const it = iter(exprs)
+
+    const id = next(it, 'defn')
+    if (!isSymbol(id)) {
+      throw Error(
+        `evaluating \`defn\`: expecting symbol, found \`${typeOf(id)}\``,
+      )
+    }
+
+    const [required, rest] = collect(iter(next(it, 'defn')))
+    // Ensure all required parameters are symbol.
+    Defn.#assertAllSymbols(required)
+    // Ensure the rest parameter is a symbol.
+    if (!isNil(rest) && !isSymbol(rest)) {
+      throw Error(
+        `evaluating \`defn\`: expecting \`symbol\`, found \`${typeOf(rest)}\``,
+      )
+    }
+
+    const fn = new BytecodeFn(ctx.startFn(), new Bytecode.Env(env), required)
+    env.defineVarUnit(id.value, fn)
+
+    for (const param of fn.required.toReversed()) {
+      ctx.emit(Instruction.Save(fn.env.lookup(param.value) as number))
+    }
+    for (const expr of it) {
+      ctx.compileExpr(expr as SExpr, fn.env)
+    }
+    ctx.emit(Instruction.Ret)
+
+    ctx.endFn(fn.env.localCount)
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {

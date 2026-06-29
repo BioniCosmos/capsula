@@ -1,11 +1,12 @@
 import { encode } from '@msgpack/msgpack'
 import { $ } from 'bun'
-import { CodeBuffer, Instruction } from './bytecode'
+import { Instruction } from './bytecode'
 import { Bytecode, QBE, TreeWalk, type Environment } from './env'
 import { isList } from './list'
 import { car, cdr } from './pair'
 import { isString } from './string'
 import {
+  BytecodeFnChunk,
   isBoolean,
   isBytecodeCompiler,
   isNil,
@@ -67,32 +68,29 @@ export class TreeWalkBackend implements Backend<TreeWalkEvaluator, SExpr[]> {
 
 export class BytecodeBackend implements Backend<BytecodeCompiler, void> {
   readonly env = new Bytecode.Env()
-  readonly code = new CodeBuffer()
-  readonly constants = Array.of<SExpr>()
+  readonly #functions: BytecodeFnChunk[] = []
+  readonly #fnStack: number[] = []
+
+  get #fn() {
+    return this.#functions[this.#fnStack.at(-1)!]
+  }
+
+  get code() {
+    return this.#fn.code
+  }
 
   async compile(source: SExpr[]) {
+    this.startFn()
+    const mainEnv = new Bytecode.Env(this.env)
     for (const expr of source) {
-      this.compileExpr(expr, this.env)
+      this.compileExpr(expr, mainEnv)
     }
+    this.endFn(mainEnv.localCount)
 
-    const file = Bun.file('bytecode.💊')
-    await file.write('')
-
-    const writer = file.writer()
-    await writer.write(
-      encode(
-        this.constants.map((x) => {
-          switch (typeOf(x)) {
-            case 'bool':
-              return [1, x]
-            case 'num':
-              return [2, x]
-          }
-        }),
-      ),
+    await Bun.write(
+      'bytecode.💊',
+      encode(this.#functions.map((fn) => fn.serialize())),
     )
-    await writer.write(this.code.u8Array)
-    await writer.end()
   }
 
   execute() {
@@ -101,11 +99,11 @@ export class BytecodeBackend implements Backend<BytecodeCompiler, void> {
 
   compileExpr(expr: SExpr, env: Bytecode.Env) {
     if (isNil(expr) || isBoolean(expr) || isNumber(expr) || isString(expr)) {
-      this.emit(Instruction.Push(this.constants.push(expr) - 1))
+      this.emit(Instruction.Push(this.#fn.constants.push(expr) - 1))
       return
     }
     if (isSymbol(expr)) {
-      const value = this.env.lookup(expr.value)
+      const value = env.lookup(expr.value)
       if (typeof value !== 'number') {
         throw Error('TODO: `BytecodeCompiler.toString()`')
       }
@@ -117,7 +115,7 @@ export class BytecodeBackend implements Backend<BytecodeCompiler, void> {
       if (!isSymbol(sym)) {
         throw Error(`compiling: expecting symbol, found \`${typeOf(sym)}\``)
       }
-      const compiler = this.env.lookup(sym.value)
+      const compiler = env.lookup(sym.value)
       if (!isBytecodeCompiler(compiler)) {
         throw Error('compiling: not callable')
       }
@@ -129,6 +127,17 @@ export class BytecodeBackend implements Backend<BytecodeCompiler, void> {
 
   emit(code: Instruction) {
     return this.code.push(code)
+  }
+
+  startFn() {
+    const idx = this.#functions.push(new BytecodeFnChunk()) - 1
+    this.#fnStack.push(idx)
+    return idx
+  }
+
+  endFn(localCount: number) {
+    this.#fn.localCount = localCount
+    this.#fnStack.pop()
   }
 }
 

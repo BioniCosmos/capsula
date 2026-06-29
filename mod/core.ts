@@ -41,6 +41,7 @@ class Eq implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
 }
 
 // TODO: support `else`
+// TODO: `(print (cond ...))` crashes under tree-walk. Fix it or consider returning other type when all are false.
 class Cond implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
     let result: Var = undefined

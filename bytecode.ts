@@ -13,6 +13,8 @@ export const Instruction = {
   Load: (addr: number) => ({ type: 'Load', addr }) as const,
   Save: (addr: number) => ({ type: 'Save', addr }) as const,
   Jump: (offset: number) => ({ type: 'Jump', offset }) as const,
+  Call: (addr: number) => ({ type: 'Call', addr }) as const,
+  Ret: { type: 'Ret' },
   BEqZ: (offset: number) => ({ type: 'BEqZ', offset }) as const,
   IsI64: { type: 'IsI64' },
   Print: { type: 'Print' },
@@ -58,6 +60,7 @@ export class CodeBuffer {
       case 'Push':
       case 'Load':
       case 'Save':
+      case 'Call':
       case 'ArrayGet':
       case 'ArraySet':
         this.#view.setUint16(this.len, code.addr, true)
@@ -81,17 +84,18 @@ export class CodeBuffer {
     return new Uint8Array(this.#buf, 0, this.len)
   }
 
-  toString() {
+  toString(prefix = '') {
     const display = Array.of<string>()
 
     let i = 0
     while (i < this.len) {
       const type = deserializeCmd.get(this.#view.getUint8(i))
-      let code = `${i}: ${type}`
+      let code = `${prefix}${i}: ${type}`
       switch (type) {
         case 'Push':
         case 'Load':
         case 'Save':
+        case 'Call':
         case 'ArrayGet':
         case 'ArraySet':
           code += `: addr=${this.#view.getUint16(i + 1, true)}`

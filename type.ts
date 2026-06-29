@@ -1,4 +1,5 @@
 import type { BytecodeBackend, QBEBackend, TreeWalkBackend } from './backend'
+import { CodeBuffer } from './bytecode'
 import type { Bytecode, QBE, TreeWalk } from './env'
 import type { List } from './list'
 import type { Pair } from './pair'
@@ -63,6 +64,34 @@ export interface QBECompiler {
 
 export function isQBECompiler(x: any): x is QBECompiler {
   return typeof x?.compileToQBE === 'function'
+}
+
+export class BytecodeFnChunk {
+  code = new CodeBuffer()
+  constants: SExpr[] = []
+  localCount = 0
+
+  serialize() {
+    return {
+      code: this.code.u8Array,
+      constants: this.constants.map((x) => {
+        switch (typeOf(x)) {
+          case 'bool':
+            return [1, x]
+          case 'num':
+            return [2, x]
+        }
+      }),
+      local_count: this.localCount,
+    }
+  }
+
+  toString() {
+    return `code =
+${this.code.toString('  ')}
+constants = [${this.constants.join(' ')}]
+localCount = ${this.localCount}`
+  }
 }
 
 export function typeOf(x: Var) {

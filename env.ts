@@ -70,7 +70,7 @@ export namespace Bytecode {
   export class Env implements Environment<BytecodeCompiler> {
     readonly #vars = new Map<
       string,
-      number | UnitConstructor<BytecodeCompiler>
+      number | UnitConstructor<BytecodeCompiler> | BytecodeCompiler
     >()
     #baseAddr = 0
 
@@ -80,8 +80,22 @@ export namespace Bytecode {
       return this.#vars as ReadonlyMap<string, number>
     }
 
+    get localCount() {
+      let count = 0
+      for (const [, v] of this.#vars) {
+        if (typeof v === 'number') {
+          count++
+        }
+      }
+      return count
+    }
+
     defineUnit(name: string, constructor: UnitConstructor<BytecodeCompiler>) {
       this.#vars.set(name, constructor)
+    }
+
+    defineVarUnit(name: string, unit: BytecodeCompiler) {
+      this.#vars.set(name, unit)
     }
 
     defineVar(name: string) {
