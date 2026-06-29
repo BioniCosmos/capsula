@@ -9,7 +9,6 @@ const VM = @import("VM.zig");
 
 pub fn main(init: process.Init) !void {
     const allocator = init.arena.allocator();
-    const temp_allocator = init.gpa;
     const io = init.io;
 
     const args = try init.minimal.args.toSlice(allocator);
@@ -26,18 +25,14 @@ pub fn main(init: process.Init) !void {
     var reader = file.reader(io, &buf);
 
     var packer = msgpack.packIO(&reader.interface, @constCast(&Io.Writer.failing));
-    const payload = try packer.read(temp_allocator);
+    const payload = try packer.read(allocator);
+
+    const functions = try allocator.alloc(VM.Fn, try payload.getArrLen());
+    for (functions, 0..) |*func, i| {
+        func.* = try VM.Fn.deserialize(allocator, try payload.getArrElement(i));
+    }
 
     const vm = try VM.init(allocator, io);
     defer vm.deinit();
-
-    for (0..try payload.getArrLen()) |i| {
-        _ = try vm.addVar(try VM.Var.deserialize(try payload.getArrElement(i)));
-    }
-
-    payload.free(temp_allocator);
-
-    const bytecode = try reader.interface.allocRemaining(temp_allocator, .unlimited);
-    _ = try vm.execute(bytecode);
-    temp_allocator.free(bytecode);
+    _ = try vm.execute(functions);
 }
