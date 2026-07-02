@@ -1,4 +1,3 @@
-import { QBEFn } from '@/mod/fn'
 import {
   isUnitConstructor,
   type BytecodeCompiler,
@@ -128,7 +127,7 @@ export namespace QBE {
   export class Env implements Environment<QBECompiler> {
     readonly #vars = new Map<
       string,
-      string | UnitConstructor<QBECompiler> | QBEFn
+      string | UnitConstructor<QBECompiler> | QBECompiler
     >()
     #counter = 0
 
@@ -156,8 +155,8 @@ export namespace QBE {
       return `@b_${this.#counter++}`
     }
 
-    defineFn(name: string, fn: QBEFn) {
-      this.#vars.set(name, fn)
+    defineVarUnit(name: string, unit: QBECompiler) {
+      this.#vars.set(name, unit)
     }
 
     lookup(name: string): string | QBECompiler {

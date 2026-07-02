@@ -211,7 +211,7 @@ class Defn implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
       required,
       rest,
     )
-    env.defineFn(id.value, fn)
+    env.defineVarUnit(id.value, fn)
     ctx.startFn(fn.id, fn.params)
 
     let result: string | null = null

@@ -15,7 +15,7 @@ import {
 import type { Module } from '.'
 
 class Struct implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
+  eval(_ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
     const it = iter(exprs)
 
     const id = next(it, 'struct')
@@ -36,7 +36,7 @@ class Struct implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
       })
       .toArray()
 
-    env.define(id.value, new TreeWalkStructConstructor(fields))
+    env.define(id.value, new StructConstructor(fields))
     for (const field of fields) {
       env.define(`${id.value}-${field}`, new TreeWalkStructGetter(field))
     }
@@ -44,10 +44,37 @@ class Struct implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
 
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {}
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {}
+  compileToQBE(_ctx: QBEBackend, exprs: List, env: QBE.Env) {
+    const it = iter(exprs)
+
+    const id = next(it, 'struct')
+    if (!isSymbol(id)) {
+      throw Error(
+        `evaluating \`struct\`: expecting \`symbol\`, found \`${typeOf(id)}\``,
+      )
+    }
+
+    const fields = it
+      .map((x) => {
+        if (!isSymbol(x)) {
+          throw Error(
+            `evaluating \`struct\`: expecting \`symbol\`, found \`${typeOf(x)}\``,
+          )
+        }
+        return x.value
+      })
+      .toArray()
+
+    env.defineVarUnit(id.value, new StructConstructor(fields))
+    for (const [i, field] of fields.entries()) {
+      env.defineVarUnit(`${id.value}-${field}`, new QBEStructGetter(i))
+    }
+
+    return null
+  }
 }
 
-class TreeWalkStructConstructor implements TreeWalkEvaluator {
+class StructConstructor implements TreeWalkEvaluator, QBECompiler {
   constructor(private fields: string[]) {}
 
   async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
@@ -57,6 +84,22 @@ class TreeWalkStructConstructor implements TreeWalkEvaluator {
       struct.val.set(
         field,
         await ctx.evaluate(next(it, 'struct-constructor') as SExpr, env),
+      )
+    }
+    return struct
+  }
+
+  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
+    const it = iter(exprs)
+    const struct = env.defineTemp()
+    ctx.emit(`${struct} =l alloc8 ${8 * this.fields.length}`)
+    // struct.type = 1
+    ctx.emit(`storel 1, ${struct}`)
+    const p = env.defineTemp()
+    for (const [i] of this.fields.entries()) {
+      ctx.emit(`${p} =l add ${struct}, ${8 + 8 * i}`)
+      ctx.emit(
+        `storel ${ctx.compileExpr(next(it, 'struct-constructor') as SExpr, env)}, ${p}`,
       )
     }
     return struct
@@ -79,6 +122,19 @@ class TreeWalkStructGetter implements TreeWalkEvaluator {
       )
     }
     return struct.val.get(this.field)
+  }
+}
+
+class QBEStructGetter implements QBECompiler {
+  constructor(private offset: number) {}
+
+  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
+    const struct = ctx.compileExpr(car(exprs) as SExpr, env)
+    // TODO: check type
+    const p = env.defineTemp()
+    ctx.emit(`${p} =l add ${struct}, ${8 + 8 * this.offset}`)
+    ctx.emit(`${p} =l loadl ${p}`)
+    return p
   }
 }
 
