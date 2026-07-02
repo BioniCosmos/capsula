@@ -20,6 +20,7 @@ export async function init(ctx: Backend<any, unknown>) {
     './bool',
     './int',
     './array',
+    './struct',
     './fn',
     './io',
   ]

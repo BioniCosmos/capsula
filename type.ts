@@ -95,6 +95,9 @@ localCount = ${this.localCount}`
 }
 
 export function typeOf(x: Var) {
+  if (x === undefined) {
+    return 'unit'
+  }
   if (x === null) {
     return 'nil'
   }
@@ -116,7 +119,7 @@ export function typeOf(x: Var) {
   if (typeof x === 'object' && 'type' in x) {
     return 'box'
   }
-  throw `invalid expression: ${x}`
+  throw Error(`invalid expression: ${x}`)
 }
 
 export function isNil(x: Var): x is null {
