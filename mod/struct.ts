@@ -1,4 +1,5 @@
 import type { BytecodeBackend, QBEBackend, TreeWalkBackend } from '@/backend'
+import { Instruction } from '@/bytecode'
 import type { Bytecode, QBE, TreeWalk } from '@/env'
 import { iter, next, type List } from '@/list'
 import { car } from '@/pair'
@@ -42,7 +43,32 @@ class Struct implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
     }
   }
 
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {}
+  compile(_ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
+    const it = iter(exprs)
+
+    const id = next(it, 'struct')
+    if (!isSymbol(id)) {
+      throw Error(
+        `evaluating \`struct\`: expecting \`symbol\`, found \`${typeOf(id)}\``,
+      )
+    }
+
+    const fields = it
+      .map((x) => {
+        if (!isSymbol(x)) {
+          throw Error(
+            `evaluating \`struct\`: expecting \`symbol\`, found \`${typeOf(x)}\``,
+          )
+        }
+        return x.value
+      })
+      .toArray()
+
+    env.defineVarUnit(id.value, new StructConstructor(fields))
+    for (const [i, field] of fields.entries()) {
+      env.defineVarUnit(`${id.value}-${field}`, new BytecodeStructGetter(i))
+    }
+  }
 
   compileToQBE(_ctx: QBEBackend, exprs: List, env: QBE.Env) {
     const it = iter(exprs)
@@ -74,7 +100,9 @@ class Struct implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
-class StructConstructor implements TreeWalkEvaluator, QBECompiler {
+class StructConstructor
+  implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler
+{
   constructor(private fields: string[]) {}
 
   async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
@@ -87,6 +115,14 @@ class StructConstructor implements TreeWalkEvaluator, QBECompiler {
       )
     }
     return struct
+  }
+
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
+    // TODO: check argument count
+    for (const expr of iter(exprs).toArray().toReversed()) {
+      ctx.compileExpr(expr as SExpr, env)
+    }
+    ctx.emit(Instruction.ArrayNew(this.fields.length))
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
@@ -122,6 +158,15 @@ class TreeWalkStructGetter implements TreeWalkEvaluator {
       )
     }
     return struct.val.get(this.field)
+  }
+}
+
+class BytecodeStructGetter implements BytecodeCompiler {
+  constructor(private offset: number) {}
+
+  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
+    ctx.compileExpr(car(exprs) as SExpr, env)
+    ctx.emit(Instruction.ArrayGet(this.offset))
   }
 }
 

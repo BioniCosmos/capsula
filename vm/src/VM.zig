@@ -234,7 +234,11 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
             .array_new => {
                 const len = self.read(u16, func.code);
                 const xs = self.allocator.alloc(Var, len) catch |err| {
-                    self.err = fmt.bufPrint(&self.err_buf, "failed to allocate memory for array", .{}) catch unreachable;
+                    self.err = fmt.bufPrint(
+                        &self.err_buf,
+                        "failed to allocate memory for array",
+                        .{},
+                    ) catch unreachable;
                     return err;
                 };
                 for (0..len) |idx| {
@@ -242,7 +246,7 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
                 }
                 try self.pushToList(.{ .array = xs }, &self.stack);
             },
-            .array_get => debug.panic("TODO", .{}),
+            .array_get => try self.pushToList(self.pop().array[self.read(u16, func.code)], &self.stack),
             .array_set => debug.panic("TODO", .{}),
             .array_len => debug.panic("TODO", .{}),
             .debug_array => {
