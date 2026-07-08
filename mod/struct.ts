@@ -126,19 +126,14 @@ class StructConstructor
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
-    const struct = env.defineTemp()
-    ctx.emit(`${struct} =l alloc8 ${8 * this.fields.length}`)
-    // struct.type = 1
-    ctx.emit(`storel 1, ${struct}`)
-    const p = env.defineTemp()
-    for (const [i] of this.fields.entries()) {
-      ctx.emit(`${p} =l add ${struct}, ${8 + 8 * i}`)
-      ctx.emit(
-        `storel ${ctx.compileExpr(next(it, 'struct-constructor') as SExpr, env)}, ${p}`,
-      )
-    }
-    return struct
+    const structHeader = (ctx.env.lookup('array') as QBECompiler).compileToQBE(
+      ctx,
+      exprs,
+      env,
+    )
+    // structHeader.type = 1
+    ctx.emit(`storel 1, ${structHeader}`)
+    return structHeader
   }
 }
 
@@ -174,10 +169,14 @@ class QBEStructGetter implements QBECompiler {
   constructor(private offset: number) {}
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const struct = ctx.compileExpr(car(exprs) as SExpr, env)
+    const header = ctx.compileExpr(car(exprs) as SExpr, env)
     // TODO: check type
     const p = env.defineTemp()
-    ctx.emit(`${p} =l add ${struct}, ${8 + 8 * this.offset}`)
+    // p = header.ptr.*
+    ctx.emit(`${p} =l add ${header}, 16`)
+    ctx.emit(`${p} =l loadl ${p}`)
+    // p = p[offset].*
+    ctx.emit(`${p} =l add ${p}, ${8 * this.offset}`)
     ctx.emit(`${p} =l loadl ${p}`)
     return p
   }
@@ -185,7 +184,7 @@ class QBEStructGetter implements QBECompiler {
 
 export default {
   name: 'struct',
-  dependencies: [],
+  dependencies: ['array'],
   units: { struct: Struct },
   prelude: '',
 } satisfies Module
