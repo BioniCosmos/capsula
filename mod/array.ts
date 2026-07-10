@@ -1,4 +1,8 @@
-import type { BytecodeBackend, QBEBackend, TreeWalkBackend } from '@/backend'
+import {
+  QBEBackend,
+  type BytecodeBackend,
+  type TreeWalkBackend,
+} from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { Bytecode, QBE, TreeWalk } from '@/env'
 import { iter, type List } from '@/list'
@@ -62,6 +66,7 @@ class ArrayOf implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
     ctx.emit(`${p} =l add ${header}, 16`)
     ctx.emit(`storel ${arr}, ${p}`)
 
+    ctx.emit(`${header} =l or ${header}, ${0b011}`)
     return header
   }
 }
@@ -78,7 +83,7 @@ class DebugArray implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const arr = ctx.compileExpr(car(exprs) as SExpr, env)
+    const arr = ctx.unwrapArray(ctx.compileExpr(car(exprs) as SExpr, env)!, env)
 
     const headFormat = ctx.env.defineVar('debug_array_head_format')
     ctx.emitGlobal(`data ${headFormat} = { b "[%lld]: [", b 0 }`)
@@ -147,3 +152,15 @@ export default {
   units: { array: ArrayOf, 'debug-array': DebugArray },
   prelude: '',
 } satisfies Module
+
+declare module '@/backend' {
+  interface QBEBackend {
+    unwrapArray(x: string, env: QBE.Env): string
+  }
+}
+
+QBEBackend.prototype.unwrapArray = function (x, env) {
+  const result = env.defineTemp()
+  this.emit(`${result} =l and ${x}, ${~0b111}`)
+  return result
+}

@@ -175,6 +175,7 @@ export class QBEBackend implements Backend<QBECompiler, void> {
    *   - true = 1001
    * - void = 10001
    * - i64 (small): 010
+   * - array: 011
    */
   compileExpr(expr: SExpr, env: QBE.Env) {
     if (expr === undefined) {
