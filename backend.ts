@@ -4,6 +4,7 @@ import { Instruction } from './bytecode'
 import { Bytecode, QBE, TreeWalk, type Environment } from './env'
 import { isList } from './list'
 import { car, cdr } from './pair'
+import { parse } from './parser'
 import { isString } from './string'
 import {
   BytecodeFnChunk,
@@ -220,5 +221,14 @@ export class QBEBackend implements Backend<QBECompiler, void> {
 
   emitGlobal(code: string) {
     this.#global.push(code)
+  }
+
+  capl(s: string, env: QBE.Env) {
+    const exprs = parse(s)
+    let result = qbeUnit
+    for (const expr of exprs) {
+      result = this.compileExpr(expr, env) ?? qbeUnit
+    }
+    return result
   }
 }
