@@ -14,6 +14,7 @@ import {
   isQBECompiler,
   isSymbol,
   isTreeWalkEvaluator,
+  qbeUnit,
   typeOf,
   type BytecodeCompiler,
   type QBECompiler,
@@ -176,7 +177,7 @@ export class QBEBackend implements Backend<QBECompiler, void> {
    */
   compileExpr(expr: SExpr, env: QBE.Env) {
     if (expr === undefined) {
-      return (0b10001).toString()
+      return qbeUnit
     }
     if (isBoolean(expr)) {
       return expr ? (0b1001).toString() : (0b0001).toString()

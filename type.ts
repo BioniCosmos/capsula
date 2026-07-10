@@ -18,6 +18,8 @@ export interface Box {
   type: string
 }
 
+export const qbeUnit = (0b10001).toString()
+
 export type Unit = TreeWalkEvaluator | BytecodeCompiler | QBECompiler
 
 const unitConstructorSymbol = Symbol('unit-constructor')
