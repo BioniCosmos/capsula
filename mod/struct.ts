@@ -132,7 +132,7 @@ class StructConstructor
       env,
     )
     // structHeader.type = 1
-    ctx.emit(`storel 1, ${structHeader}`)
+    ctx.emit(`storel 1, ${ctx.unwrapArray(structHeader!, env)}`)
     return structHeader
   }
 }
@@ -169,7 +169,10 @@ class QBEStructGetter implements QBECompiler {
   constructor(private offset: number) {}
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const header = ctx.compileExpr(car(exprs) as SExpr, env)
+    const header = ctx.unwrapArray(
+      ctx.compileExpr(car(exprs) as SExpr, env)!,
+      env,
+    )
     // TODO: check type
     const p = env.defineTemp()
     // p = header.ptr.*
