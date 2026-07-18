@@ -2,6 +2,7 @@ import type { BytecodeBackend, QBEBackend, TreeWalkBackend } from '@/backend'
 import { Instruction, Label } from '@/bytecode'
 import type { Bytecode, QBE, TreeWalk } from '@/env'
 import { build, isList, iter, next, type List } from '@/list'
+import { car } from '@/pair'
 import {
   isBoolean,
   isNil,
@@ -266,9 +267,35 @@ class Loop implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
+class SizeOf implements QBECompiler {
+  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
+    const x = ctx.compileExpr(car(exprs) as SExpr, env)!
+
+    const tag = env.defineVar('tag')
+    ctx.emit(`${tag} =l copy ${ctx.tag(x, env)}`)
+    const arrayTag = env.defineVar('array_tag')
+    ctx.emit(`${arrayTag} =l copy ${0b011}`)
+    // len := x.len
+    const len = env.defineVar('len')
+    ctx.emit(`${len} =l copy ${ctx.unwrapArray(x, env)}`)
+    ctx.emit(`${len} =l add ${len}, 8`)
+    ctx.emit(`${len} =l loadl ${len}`)
+    ctx.emit(`${len} =l copy ${ctx.wrapI64(len, env)}`)
+
+    return ctx.capl('(if (= tag array_tag) len 8)', env)
+  }
+}
+
 export default {
   name: 'core',
   dependencies: [],
-  units: { '=': Eq, cond: Cond, if: If, def: Def, loop: Loop },
+  units: {
+    '=': Eq,
+    cond: Cond,
+    if: If,
+    def: Def,
+    loop: Loop,
+    'size-of': SizeOf,
+  },
   prelude: '',
 } satisfies Module
