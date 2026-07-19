@@ -22,6 +22,7 @@ export async function init(ctx: Backend<any, unknown>) {
     './array',
     './struct',
     './fn',
+    './mem',
     './io',
   ]
   for (const source of sources) {
