@@ -229,9 +229,9 @@ class Def implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
         `evaluating \`def\`: expecting symbol, found \`${typeOf(sym)}\``,
       )
     }
-    ctx.emit(
-      `${env.defineVar(sym.value)} =l copy ${ctx.compileExpr(next(it, 'def') as SExpr, env)}`,
-    )
+    // Ensure that values are evaluated first, then assigned.
+    const x = ctx.compileExpr(next(it, 'def') as SExpr, env)
+    ctx.emit(`${env.defineVar(sym.value)} =l copy ${x}`)
     return null
   }
 }
