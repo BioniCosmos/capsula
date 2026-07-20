@@ -286,6 +286,28 @@ class SizeOf implements QBECompiler {
   }
 }
 
+class Call implements QBECompiler {
+  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
+    const it = iter(exprs)
+
+    const id = next(it, 'call') as SExpr
+    if (!isSymbol(id)) {
+      throw Error(
+        `evaluating \`call\`: expecting \`symbol\`, found \`${typeOf(id)}\``,
+      )
+    }
+
+    const args = it
+      .map((arg) => `l ${ctx.compileExpr(arg as SExpr, env)}`)
+      .toArray()
+      .join(', ')
+
+    const result = env.defineTemp()
+    ctx.emit(`${result} =l call $${id.value}(${args})`)
+    return result
+  }
+}
+
 export default {
   name: 'core',
   dependencies: [],
@@ -296,6 +318,7 @@ export default {
     def: Def,
     loop: Loop,
     'size-of': SizeOf,
+    call: Call,
   },
   prelude: '',
 } satisfies Module
