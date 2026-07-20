@@ -25,7 +25,7 @@ class Alloc implements QBECompiler {
     ctx.emit(`jmp ${end}`)
 
     ctx.emit(arrayBranch)
-    ctx.emit(`${result} =l call $malloc(l 24)`)
+    ctx.emit(`${result} =l alloc8 24`)
     ctx.emit(`blit ${ctx.unwrapArray(x, env)}, ${result}, 24`)
 
     const dataSize = env.defineTemp()
@@ -47,6 +47,7 @@ class Alloc implements QBECompiler {
     ctx.emit(`${oldData} =l loadl ${ptr}`)
     ctx.emit(`call $memcpy(l ${newData}, l ${oldData}, l ${dataSize})`)
     ctx.emit(`storel ${newData}, ${ptr}`)
+    ctx.emit(`${result} =l or ${result}, ${0b011}`)
     ctx.emit(`jmp ${end}`)
 
     ctx.emit(end)
@@ -57,12 +58,27 @@ class Alloc implements QBECompiler {
 class Free implements QBECompiler {
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
     const x = ctx.compileExpr(car(exprs) as SExpr, env)!
-    const header = ctx.unwrapArray(x, env)
+
+    const isArray = env.defineTemp()
+    ctx.emit(`${isArray} =l ceql ${ctx.tag(x, env)}, ${0b011}`)
+
+    const scalarBranch = env.defineBlock()
+    const arrayBranch = env.defineBlock()
+    const end = env.defineBlock()
+    ctx.emit(`jnz ${isArray}, ${arrayBranch}, ${scalarBranch}`)
+
+    ctx.emit(scalarBranch)
+    ctx.emit(`call $free(l ${x})`)
+    ctx.emit(`jmp ${end}`)
+
+    ctx.emit(arrayBranch)
     const ptr = env.defineTemp()
-    ctx.emit(`${ptr} =l add ${header}, 16`)
+    ctx.emit(`${ptr} =l add ${ctx.unwrapArray(x, env)}, 16`)
     ctx.emit(`${ptr} =l loadl ${ptr}`)
     ctx.emit(`call $free(l ${ptr})`)
-    ctx.emit(`call $free(l ${header})`)
+    ctx.emit(`jmp ${end}`)
+
+    ctx.emit(end)
     return null
   }
 }
