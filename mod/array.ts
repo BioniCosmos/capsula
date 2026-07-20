@@ -66,8 +66,7 @@ class ArrayOf implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
     ctx.emit(`${p} =l add ${header}, 16`)
     ctx.emit(`storel ${arr}, ${p}`)
 
-    ctx.emit(`${header} =l or ${header}, ${0b011}`)
-    return header
+    return ctx.wrapArray(header, env)
   }
 }
 
@@ -155,8 +154,15 @@ export default {
 
 declare module '@/backend' {
   interface QBEBackend {
+    wrapArray(x: string, env: QBE.Env): string
     unwrapArray(x: string, env: QBE.Env): string
   }
+}
+
+QBEBackend.prototype.wrapArray = function (x, env) {
+  const result = env.defineTemp()
+  this.emit(`${result} =l or ${x}, ${0b011}`)
+  return result
 }
 
 QBEBackend.prototype.unwrapArray = function (x, env) {
