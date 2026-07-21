@@ -151,6 +151,7 @@ export class QBEBackend implements Backend<QBECompiler, void> {
 
   async compile(source: SExpr[]) {
     this.startFn('$main', '', 'w', true)
+    this.emit(`call $map_init()`)
     const env = new QBE.Env(this.env)
     for (const expr of source) {
       this.compileExpr(expr, env)
@@ -161,7 +162,7 @@ export class QBEBackend implements Backend<QBECompiler, void> {
       this.#global.join('\n') +
       '\n' +
       this.#fnCode.map((code) => code.join('\n')).join('\n')
-    await $`qbe < ${new Response(code)} | clang -x assembler -`
+    await $`qbe < ${new Response(code)} | clang -std=c23 mem.c -x assembler -`
   }
 
   execute() {

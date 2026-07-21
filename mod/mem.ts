@@ -20,7 +20,7 @@ class Alloc implements QBECompiler {
     ctx.emit(`jnz ${isArray}, ${arrayBranch}, ${scalarBranch}`)
 
     ctx.emit(scalarBranch)
-    ctx.emit(`${result} =l call $malloc(l 8)`)
+    ctx.emit(`${result} =l call $gc_alloc(l 8)`)
     ctx.emit(`storel ${x}, ${result}`)
     ctx.emit(`jmp ${end}`)
 
@@ -40,7 +40,7 @@ class Alloc implements QBECompiler {
       )}, 8`,
     )
     const newData = env.defineTemp()
-    ctx.emit(`${newData} =l call $malloc(l ${dataSize})`)
+    ctx.emit(`${newData} =l call $gc_alloc(l ${dataSize})`)
     const ptr = env.defineTemp()
     ctx.emit(`${ptr} =l add ${result}, 16`)
     const oldData = env.defineTemp()
