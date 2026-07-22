@@ -189,7 +189,14 @@ export class QBEBackend implements Backend<QBECompiler, void> {
       return ((expr << 3) | 0b010).toString()
     }
     if (isSymbol(expr)) {
-      return env.lookup(expr.value) as string
+      const x = env.lookup(expr.value)
+      if (x instanceof QBE.Slot) {
+        const id = env.defineTemp()
+        this.emit(`${id} =l loadl ${x.ptr}`)
+        return id
+      }
+      // TODO: Check type `QBECompiler`. Consider whether to allow shadowing keywords/builtin.
+      return x as string
     }
     if (isList(expr) && !isNil(expr)) {
       const sym = car(expr)

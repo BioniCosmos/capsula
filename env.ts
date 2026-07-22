@@ -127,7 +127,7 @@ export namespace QBE {
   export class Env implements Environment<QBECompiler> {
     readonly #vars = new Map<
       string,
-      string | UnitConstructor<QBECompiler> | QBECompiler
+      string | Slot | UnitConstructor<QBECompiler> | QBECompiler
     >()
     #counter = 0
 
@@ -151,6 +151,15 @@ export namespace QBE {
       return id
     }
 
+    defineSlot(name: string) {
+      if (this.#isGlobal) {
+        throw Error('QBEEnv: cannot define slot in global environment')
+      }
+      const id = this.defineVar(name)
+      this.#vars.set(name, new Slot(id))
+      return id
+    }
+
     defineBlock() {
       return `@b_${this.#counter++}`
     }
@@ -159,10 +168,10 @@ export namespace QBE {
       this.#vars.set(name, unit)
     }
 
-    lookup(name: string): string | QBECompiler {
+    lookup(name: string): string | Slot | QBECompiler {
       if (this.#vars.has(name)) {
         const item = this.#vars.get(name)!
-        if (isUnitConstructor(item)) {
+        if (isUnitConstructor<QBECompiler>(item)) {
           return item()
         }
         return item
@@ -178,5 +187,9 @@ export namespace QBE {
     has(name: string): boolean {
       return this.#vars.has(name) || (this.parent?.has(name) ?? false)
     }
+  }
+
+  export class Slot {
+    constructor(public ptr: string) {}
   }
 }
