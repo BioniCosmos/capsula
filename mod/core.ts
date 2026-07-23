@@ -232,7 +232,7 @@ class Def implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
     // Ensure that values are evaluated first, then assigned.
     const x = ctx.compileExpr(next(it, 'def') as SExpr, env)
     const id = env.defineSlot(sym.value)
-    ctx.emit(`${id} =l alloc8 8`)
+    ctx.emitPrologue(`${id} =l alloc8 8`)
     ctx.emit(`storel ${x}, ${id}`)
     return null
   }

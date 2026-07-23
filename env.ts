@@ -127,7 +127,7 @@ export namespace QBE {
   export class Env implements Environment<QBECompiler> {
     readonly #vars = new Map<
       string,
-      string | Slot | UnitConstructor<QBECompiler> | QBECompiler
+      (string | Slot | UnitConstructor<QBECompiler> | QBECompiler)[]
     >()
     #counter = 0
 
@@ -137,8 +137,20 @@ export namespace QBE {
       return this.parent === null
     }
 
+    get slots() {
+      return this.#vars
+        .values()
+        .flatMap((xs) => xs.filter((x) => x instanceof Slot))
+        .map((slot) => slot.ptr)
+        .toArray()
+    }
+
+    genId() {
+      return `${this.#isGlobal ? '$' : '%'}v_${this.#counter++}`
+    }
+
     defineUnit(name: string, constructor: UnitConstructor<QBECompiler>) {
-      this.#vars.set(name, constructor)
+      this.#vars.set(name, [constructor])
     }
 
     defineTemp() {
@@ -146,8 +158,8 @@ export namespace QBE {
     }
 
     defineVar(name: string) {
-      const id = `${this.#isGlobal ? '$' : '%'}v_${this.#counter++}`
-      this.#vars.set(name, id)
+      const id = this.genId()
+      this.#vars.getOrInsert(name, []).push(id)
       return id
     }
 
@@ -155,8 +167,8 @@ export namespace QBE {
       if (this.#isGlobal) {
         throw Error('QBEEnv: cannot define slot in global environment')
       }
-      const id = this.defineVar(name)
-      this.#vars.set(name, new Slot(id))
+      const id = this.genId()
+      this.#vars.getOrInsert(name, []).push(new Slot(id))
       return id
     }
 
@@ -165,12 +177,12 @@ export namespace QBE {
     }
 
     defineVarUnit(name: string, unit: QBECompiler) {
-      this.#vars.set(name, unit)
+      this.#vars.set(name, [unit])
     }
 
     lookup(name: string): string | Slot | QBECompiler {
       if (this.#vars.has(name)) {
-        const item = this.#vars.get(name)!
+        const item = this.#vars.get(name)!.at(-1)!
         if (isUnitConstructor<QBECompiler>(item)) {
           return item()
         }

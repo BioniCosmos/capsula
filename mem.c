@@ -1,8 +1,11 @@
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include "type.h"
 
 typedef struct {
-    void* ptr;
+    const void* ptr;
 } GCEntry;
 
 typedef struct {
@@ -11,7 +14,13 @@ typedef struct {
     size_t cap;
 } GCMap;
 
+typedef struct Frame {
+    struct Frame* prev;
+    const void* slots[];
+} Frame;
+
 GCMap map;
+Frame* current_frame;
 
 // TODO: allocation error
 // TODO: capacity growth
@@ -72,6 +81,32 @@ void map_display() {
         }
     }
     puts("]");
+}
+
+void frame_push(Frame* const frame, const size_t len) {
+    frame->prev = current_frame;
+    memset(frame->slots, 0, len * sizeof(void*));
+    current_frame = frame;
+}
+
+void frame_slot_push(const size_t i, const void* const ptr) {
+    printf("frame_slot_push i = %zu, ptr = %p\n", i, ptr);
+    current_frame->slots[i] = ptr;
+}
+
+void frame_pop() {
+    current_frame = current_frame->prev;
+}
+
+void frame_display(const size_t len) {
+    printf("Frame { prev = %p, slots = [ ", (void*)current_frame->prev);
+    for (size_t i = 0; i < len; i++) {
+        auto slot = current_frame->slots[i];
+        printf("{ ptr = %p, value = ", slot);
+        print_var(*(uint64_t*)slot);
+        printf(" } ");
+    }
+    puts("] }");
 }
 
 void* gc_alloc(const size_t size) {

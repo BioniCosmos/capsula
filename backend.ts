@@ -15,6 +15,7 @@ import {
   isQBECompiler,
   isSymbol,
   isTreeWalkEvaluator,
+  QBEFnChunk,
   qbeUnit,
   typeOf,
   type BytecodeCompiler,
@@ -145,23 +146,32 @@ export class BytecodeBackend implements Backend<BytecodeCompiler, void> {
 
 export class QBEBackend implements Backend<QBECompiler, void> {
   readonly env = new QBE.Env()
-  readonly #fnCode: string[][] = []
+  readonly #chunks: QBEFnChunk[] = []
   readonly #currentFn: number[] = []
   readonly #global = Array.of<string>()
 
   async compile(source: SExpr[]) {
     this.startFn('$main', '', 'w', true)
-    this.emit(`call $map_init()`)
+    this.emitPrologue(`call $map_init()`)
     const env = new QBE.Env(this.env)
+
     for (const expr of source) {
       this.compileExpr(expr, env)
     }
+
+    const { slots } = env
+    this.emitPrologue(`%frame =l alloc8 ${8 + 8 * slots.length}`)
+    this.emitPrologue(`call $frame_push(l %frame, l ${slots.length})`)
+    for (const [i, slot] of slots.entries()) {
+      this.emitPrologue(`call $frame_slot_push(l ${i}, l ${slot})`)
+    }
+
     this.endFn('0')
 
     const code =
       this.#global.join('\n') +
-      '\n' +
-      this.#fnCode.map((code) => code.join('\n')).join('\n')
+      '\n\n' +
+      this.#chunks.map((chunk) => chunk.build()).join('\n\n')
     await $`qbe < ${new Response(code)} | clang -std=c23 mem.c -x assembler -`
   }
 
@@ -174,7 +184,7 @@ export class QBEBackend implements Backend<QBECompiler, void> {
    * - bool: 001
    *   - false = 0001
    *   - true = 1001
-   * - void = 10001
+   * - unit = 10001
    * - i64 (small): 010
    * - array: 011
    */
@@ -213,19 +223,21 @@ export class QBEBackend implements Backend<QBECompiler, void> {
   }
 
   startFn(id: string, params: string, type = 'l', isExport = false) {
-    this.#fnCode.push([
-      `${isExport ? 'export ' : ''}function ${type} ${id}(${params}) {\n@start`,
-    ])
-    this.#currentFn.push(this.#fnCode.length - 1)
+    this.#chunks.push(new QBEFnChunk(id, params, type, isExport))
+    this.#currentFn.push(this.#chunks.length - 1)
   }
 
   endFn(x: string) {
-    this.emit(`ret ${x}\n}`)
+    this.emit(`ret ${x}`)
     this.#currentFn.pop()
   }
 
   emit(code: string) {
-    this.#fnCode[this.#currentFn.at(-1)!].push(code)
+    this.#chunks[this.#currentFn.at(-1)!].emit(code)
+  }
+
+  emitPrologue(code: string) {
+    this.#chunks[this.#currentFn.at(-1)!].emitPrologue(code)
   }
 
   emitGlobal(code: string) {

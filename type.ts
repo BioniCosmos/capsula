@@ -96,6 +96,32 @@ localCount = ${this.localCount}`
   }
 }
 
+export class QBEFnChunk {
+  #declaration
+  #prologue: string[] = []
+  #body: string[] = []
+
+  constructor(id: string, params: string, type = 'l', isExport = false) {
+    this.#declaration = `${isExport ? 'export ' : ''}function ${type} ${id}(${params})`
+  }
+
+  emit(code: string) {
+    this.#body.push(code)
+  }
+
+  emitPrologue(code: string) {
+    this.#prologue.push(code)
+  }
+
+  build() {
+    return `${this.#declaration} {
+@start
+${this.#prologue.map((line) => `    ${line}`).join('\n')}
+${this.#body.map((line) => `    ${line}`).join('\n')}
+}`
+  }
+}
+
 export function typeOf(x: Var) {
   if (x === undefined) {
     return 'unit'
