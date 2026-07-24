@@ -15,7 +15,8 @@ typedef struct {
 } GCMap;
 
 typedef struct Frame {
-    struct Frame* prev;
+    const struct Frame* prev;
+    size_t len;
     const void* slots[];
 } Frame;
 
@@ -85,6 +86,7 @@ void map_display() {
 
 void frame_push(Frame* const frame, const size_t len) {
     frame->prev = current_frame;
+    frame->len = len;
     memset(frame->slots, 0, len * sizeof(void*));
     current_frame = frame;
 }
@@ -95,13 +97,13 @@ void frame_slot_push(const size_t i, const void* const ptr) {
 }
 
 void frame_pop() {
-    current_frame = current_frame->prev;
+    current_frame = (Frame*)current_frame->prev;
 }
 
-void frame_display(const size_t len) {
+void frame_display() {
     printf("Frame { prev = %p, slots = [ ", (void*)current_frame->prev);
-    for (size_t i = 0; i < len; i++) {
-        auto slot = current_frame->slots[i];
+    for (size_t i = 0; i < current_frame->len; i++) {
+        const auto slot = current_frame->slots[i];
         printf("{ ptr = %p, value = ", slot);
         print_var(*(uint64_t*)slot);
         printf(" } ");

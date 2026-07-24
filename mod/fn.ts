@@ -220,7 +220,7 @@ class Defn implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
     }
 
     const { slots } = fn.env
-    ctx.emitPrologue(`%frame =l alloc8 ${8 + 8 * slots.length}`)
+    ctx.emitPrologue(`%frame =l alloc8 ${8 + 8 + 8 * slots.length}`)
     ctx.emitPrologue(`call $frame_push(l %frame, l ${slots.length})`)
     for (const [i, ptr] of slots.entries()) {
       ctx.emitPrologue(`call $frame_slot_push(l ${i}, l ${ptr})`)

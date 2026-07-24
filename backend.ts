@@ -160,7 +160,7 @@ export class QBEBackend implements Backend<QBECompiler, void> {
     }
 
     const { slots } = env
-    this.emitPrologue(`%frame =l alloc8 ${8 + 8 * slots.length}`)
+    this.emitPrologue(`%frame =l alloc8 ${8 + 8 + 8 * slots.length}`)
     this.emitPrologue(`call $frame_push(l %frame, l ${slots.length})`)
     for (const [i, slot] of slots.entries()) {
       this.emitPrologue(`call $frame_slot_push(l ${i}, l ${slot})`)
