@@ -5,7 +5,8 @@
 #include "type.h"
 
 typedef struct {
-    const void* ptr;
+    void* ptr;
+    bool marked;
 } GCEntry;
 
 typedef struct {
@@ -27,6 +28,11 @@ Frame* current_frame;
 void map_init() {
     map.entries = calloc(256, sizeof(GCEntry));
     map.cap = 256;
+}
+
+void map_deinit() {
+    free(map.entries);
+    map = (GCMap){};
 }
 
 size_t map_hash(const void* const ptr) {
@@ -91,15 +97,17 @@ void map_display() {
     }
     size_t i = 0;
     for (; i < map.cap; i++) {
-        if (map.entries[i].ptr != nullptr && (size_t)map.entries[i].ptr != 1) {
-            printf("GCMap [{ slot = %zu, ptr = %p }", i, map.entries[i].ptr);
+        if (!map_is_empty_entry(map.entries + i)) {
+            printf("GCMap [{ slot = %zu, ptr = %p, marked = %s }", i, map.entries[i].ptr,
+                   map.entries[i].marked ? "true" : "false");
             break;
         }
     }
     i++;
     for (; i < map.cap; i++) {
-        if (map.entries[i].ptr != nullptr && (size_t)map.entries[i].ptr != 1) {
-            printf(" { slot = %zu, ptr = %p }", i, map.entries[i].ptr);
+        if (!map_is_empty_entry(map.entries + i)) {
+            printf(" { slot = %zu, ptr = %p, marked = %s }", i, map.entries[i].ptr,
+                   map.entries[i].marked ? "true" : "false");
         }
     }
     puts("]");
@@ -113,7 +121,6 @@ void frame_push(Frame* const frame, const size_t len) {
 }
 
 void frame_slot_push(const size_t i, const void* const ptr) {
-    printf("frame_slot_push i = %zu, ptr = %p\n", i, ptr);
     current_frame->slots[i] = ptr;
 }
 
@@ -132,8 +139,78 @@ void frame_display() {
     puts("] }");
 }
 
-void* gc_alloc(const size_t size) {
-    void* const ptr = calloc(size, 1);
+void gc_collect();
+
+const void* gc_alloc(const size_t size) {
+    if ((float)map.len / map.cap > 0.75) {
+        gc_collect();
+    }
+    const auto ptr = calloc(size, 1);
     map_insert((GCEntry){.ptr = ptr});
     return ptr;
+}
+
+void gc_check(const uint64_t x) {
+    switch (x & 0b111) {
+        case 0b000: {
+            const auto entry = map_get((void*)x);
+            if (entry != nullptr) {
+                entry->marked = true;
+            }
+            break;
+        }
+        case 0b011: {
+            const auto arr = (const ArrayHeader*)(x & ~0b111);
+            if (array_is_managed(arr)) {
+                const auto entry = map_get(arr->ptr);
+                if (entry != nullptr) {
+                    entry->marked = true;
+                }
+            }
+            for (size_t i = 0; i < arr->len; i++) {
+                gc_check(arr->ptr[i]);
+            }
+            break;
+        }
+    }
+}
+
+void gc_mark() {
+    auto frame = current_frame;
+    while (frame != nullptr) {
+        for (size_t i = 0; i < frame->len; i++) {
+            gc_check(*(uint64_t*)frame->slots[i]);
+        }
+        frame = (Frame*)frame->prev;
+    }
+}
+
+void gc_sweep() {
+    for (size_t i = 0; i < map.cap; i++) {
+        const auto entry = map.entries + i;
+        if (!map_is_empty_entry(entry)) {
+            if (entry->marked) {
+                entry->marked = false;
+            } else {
+                free(entry->ptr);
+                map_remove(entry->ptr);
+            }
+        }
+    }
+}
+
+void gc_collect() {
+    gc_mark();
+    gc_sweep();
+}
+
+void gc_clear() {
+    for (size_t i = 0; i < map.cap; i++) {
+        const auto entry = map.entries + i;
+        if (!map_is_empty_entry(entry)) {
+            free(entry->ptr);
+        }
+    }
+    memset(map.entries, 0, map.cap * sizeof(GCEntry));
+    map.len = 0;
 }

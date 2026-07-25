@@ -166,6 +166,9 @@ export class QBEBackend implements Backend<QBECompiler, void> {
       this.emitPrologue(`call $frame_slot_push(l ${i}, l ${slot})`)
     }
 
+    this.emit(`call $gc_clear()`)
+    this.emit(`call $map_deinit()`)
+
     this.endFn('0')
 
     const code =
