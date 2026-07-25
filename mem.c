@@ -77,8 +77,11 @@ void map_grow() {
 }
 
 void map_remove(const void* const ptr) {
-    map_get(ptr)->ptr = (void*)1;
-    map.len--;
+    const auto entry = map_get(ptr);
+    if (entry != nullptr) {
+        entry->ptr = (void*)1;
+        map.len--;
+    }
 }
 
 void map_display() {
