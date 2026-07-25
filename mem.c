@@ -24,8 +24,6 @@ GCMap map;
 Frame* current_frame;
 
 // TODO: allocation error
-// TODO: capacity growth
-// TODO: iteration termination
 void map_init() {
     map.entries = calloc(256, sizeof(GCEntry));
     map.cap = 256;
@@ -35,31 +33,51 @@ size_t map_hash(const void* const ptr) {
     return ((size_t)ptr >> 3) & (map.cap - 1);
 }
 
-GCEntry* map_get(const void* const ptr) {
-    auto idx = map_hash(ptr);
-    while (true) {
-        if (map.entries[idx].ptr == ptr) {
-            return &map.entries[idx];
-        }
-        idx = (idx + 1) & (map.cap - 1);
-    }
+bool map_is_empty_entry(const GCEntry* const entry) {
+    return entry->ptr == nullptr || (size_t)entry->ptr == 1;
 }
 
+GCEntry* map_get(const void* const ptr) {
+    auto i = map_hash(ptr);
+    while (map.entries[i].ptr != nullptr) {
+        if (map.entries[i].ptr == ptr) {
+            return &map.entries[i];
+        }
+        i = (i + 1) & (map.cap - 1);
+    }
+    return nullptr;
+}
+
+void map_grow();
+
 void map_insert(const GCEntry entry) {
-    auto idx = map_hash(entry.ptr);
+    if ((float)map.len / map.cap > 0.75) {
+        map_grow();
+    }
+    auto i = map_hash(entry.ptr);
     while (true) {
-        if (map.entries[idx].ptr == nullptr || (size_t)map.entries[idx].ptr == 1 || map.entries[idx].ptr == entry.ptr) {
-            map.entries[idx] = entry;
+        if (map_is_empty_entry(map.entries + i) || map.entries[i].ptr == entry.ptr) {
+            map.entries[i] = entry;
             map.len++;
             return;
         }
-        idx = (idx + 1) & (map.cap - 1);
+        i = (i + 1) & (map.cap - 1);
     }
 }
 
+void map_grow() {
+    const auto old = map;
+    map = (GCMap){.entries = calloc(old.cap * 2, sizeof(GCEntry)), .cap = old.cap * 2};
+    for (size_t i = 0; i < old.cap; i++) {
+        if (!map_is_empty_entry(old.entries + i)) {
+            map_insert(old.entries[i]);
+        }
+    }
+    free(old.entries);
+}
+
 void map_remove(const void* const ptr) {
-    const auto entry = map_get(ptr);
-    entry->ptr = (void*)(size_t)1;
+    map_get(ptr)->ptr = (void*)1;
     map.len--;
 }
 
