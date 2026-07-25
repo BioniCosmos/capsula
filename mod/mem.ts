@@ -28,6 +28,11 @@ class Alloc implements QBECompiler {
     ctx.emit(`${result} =l alloc8 24`)
     ctx.emit(`blit ${ctx.unwrapArray(x, env)}, ${result}, 24`)
 
+    const type = env.defineTemp()
+    ctx.emit(`${type} =l loadl ${result}`)
+    ctx.emit(`${type} =l or ${type}, ${1n << 63n}`)
+    ctx.emit(`storel ${type}, ${result}`)
+
     const dataSize = env.defineTemp()
     ctx.emit(
       `${dataSize} =l mul ${ctx.unwrapI64(

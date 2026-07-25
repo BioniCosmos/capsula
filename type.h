@@ -1,16 +1,22 @@
+#pragma once
+
 #include <stdint.h>
 #include <stdio.h>
 
 typedef struct {
     const uint64_t type;
     const uint64_t len;
-    const void* const ptr;
+    const uint64_t* const ptr;
 } ArrayHeader;
 
-void print_var(const uint64_t x) {
+static inline bool array_is_managed(const ArrayHeader* const arr) {
+    return arr->type >> 63 == 1;
+}
+
+static inline void print_var(const uint64_t x) {
     switch (x & 0b111) {
         case 0b000:
-            printf("box { ptr = %0llx, value =  ", x);
+            printf("box { ptr = %#llx, value = ", x);
             print_var(*(uint64_t*)x);
             printf(" }");
             break;
@@ -25,7 +31,11 @@ void print_var(const uint64_t x) {
             break;
         case 0b011: {
             const auto arr = (const ArrayHeader*)(x & ~0b111);
-            printf("array { type = %llu, len = %llu, ptr = %p }", arr->type, arr->len, arr->ptr);
+            printf("array { type = %s", (arr->type & INT64_MAX) == 0 ? "array" : "struct");
+            if (array_is_managed(arr)) {
+                printf(" (managed)");
+            }
+            printf(", len = %llu, ptr = %p }", arr->len, (void*)arr->ptr);
             break;
         }
         default:
