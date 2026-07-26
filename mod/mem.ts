@@ -8,6 +8,7 @@ import type { Module } from '.'
 class Alloc implements QBECompiler {
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
     const x = ctx.compileExpr(car(exprs) as SExpr, env)!
+    ctx.emit(`call $gc_retain(l ${x})`)
 
     const isArray = env.defineTemp()
     ctx.emit(`${isArray} =l ceql ${ctx.tag(x, env)}, ${0b011}`)
@@ -56,6 +57,7 @@ class Alloc implements QBECompiler {
     ctx.emit(`jmp ${end}`)
 
     ctx.emit(end)
+    ctx.emit(`call $gc_release(l ${x})`)
     return result
   }
 }

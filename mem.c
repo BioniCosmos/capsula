@@ -24,6 +24,9 @@ typedef struct Frame {
 GCMap map;
 Frame* current_frame;
 
+const void* anchors[1024];
+size_t anchors_top;
+
 // TODO: allocation error
 void map_init() {
     map.entries = calloc(256, sizeof(GCEntry));
@@ -213,4 +216,16 @@ void gc_clear() {
     }
     memset(map.entries, 0, map.cap * sizeof(GCEntry));
     map.len = 0;
+}
+
+void gc_retain(const void* const ptr) {
+    if (anchors_top >= 1024) {
+        fprintf(stderr, "gc_retain: top of stack reached");
+        abort();
+    }
+    anchors[anchors_top++] = ptr;
+}
+
+void gc_release() {
+    anchors_top--;
 }

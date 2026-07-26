@@ -2,7 +2,7 @@ import type { BytecodeBackend, QBEBackend, TreeWalkBackend } from '@/backend'
 import { Instruction, Label } from '@/bytecode'
 import type { Bytecode, QBE, TreeWalk } from '@/env'
 import { build, isList, iter, next, type List } from '@/list'
-import { car } from '@/pair'
+import { car, cdr } from '@/pair'
 import {
   isBoolean,
   isNil,
@@ -32,9 +32,7 @@ class Eq implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
-    const lhs = ctx.compileExpr(next(it, '=') as SExpr, env)
-    const rhs = ctx.compileExpr(next(it, '=') as SExpr, env)
+    const [lhs, rhs] = ctx.compileArgs(exprs, env, 2)
     const result = env.defineTemp()
     ctx.emit(`${result} =l ceql ${lhs}, ${rhs}`)
     return ctx.wrapBool(result, env)
@@ -299,13 +297,10 @@ class Call implements QBECompiler {
       )
     }
 
-    const args = it
-      .map((arg) => `l ${ctx.compileExpr(arg as SExpr, env)}`)
-      .toArray()
-      .join(', ')
-
     const result = env.defineTemp()
-    ctx.emit(`${result} =l call $${id.value}(${args})`)
+    ctx.emit(
+      `${result} =l call $${id.value}(${ctx.compileArgs(cdr(exprs!), env).join(', ')})`,
+    )
     return result
   }
 }

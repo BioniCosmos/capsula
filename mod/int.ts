@@ -33,10 +33,8 @@ class Add implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
+    const [lhs, rhs] = ctx.compileArgs(exprs, env, 2)
     const result = env.defineTemp()
-    const lhs = ctx.compileExpr(next(it, 'add') as SExpr, env)!
-    const rhs = ctx.compileExpr(next(it, 'add') as SExpr, env)!
     ctx.emit(
       `${result} =l add ${ctx.unwrapI64(lhs, env)}, ${ctx.unwrapI64(rhs, env)}`,
     )
@@ -63,10 +61,8 @@ class Sub implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
+    const [lhs, rhs] = ctx.compileArgs(exprs, env, 2)
     const result = env.defineTemp()
-    const lhs = ctx.compileExpr(next(it, 'sub') as SExpr, env)!
-    const rhs = ctx.compileExpr(next(it, 'sub') as SExpr, env)!
     ctx.emit(
       `${result} =l sub ${ctx.unwrapI64(lhs, env)}, ${ctx.unwrapI64(rhs, env)}`,
     )
@@ -93,10 +89,8 @@ class Mul implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
+    const [lhs, rhs] = ctx.compileArgs(exprs, env, 2)
     const result = env.defineTemp()
-    const lhs = ctx.compileExpr(next(it, 'mul') as SExpr, env)!
-    const rhs = ctx.compileExpr(next(it, 'mul') as SExpr, env)!
     ctx.emit(
       `${result} =l mul ${ctx.unwrapI64(lhs, env)}, ${ctx.unwrapI64(rhs, env)}`,
     )
@@ -123,10 +117,8 @@ class Div implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
+    const [lhs, rhs] = ctx.compileArgs(exprs, env, 2)
     const result = env.defineTemp()
-    const lhs = ctx.compileExpr(next(it, 'div') as SExpr, env)!
-    const rhs = ctx.compileExpr(next(it, 'div') as SExpr, env)!
     ctx.emit(
       `${result} =l div ${ctx.unwrapI64(lhs, env)}, ${ctx.unwrapI64(rhs, env)}`,
     )
@@ -153,10 +145,8 @@ class Rem implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
+    const [lhs, rhs] = ctx.compileArgs(exprs, env, 2)
     const result = env.defineTemp()
-    const lhs = ctx.compileExpr(next(it, 'rem') as SExpr, env)!
-    const rhs = ctx.compileExpr(next(it, 'rem') as SExpr, env)!
     ctx.emit(
       `${result} =l rem ${ctx.unwrapI64(lhs, env)}, ${ctx.unwrapI64(rhs, env)}`,
     )
@@ -183,10 +173,8 @@ class Lt implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
+    const [lhs, rhs] = ctx.compileArgs(exprs, env, 2)
     const result = env.defineTemp()
-    const lhs = ctx.compileExpr(next(it, '<') as SExpr, env)!
-    const rhs = ctx.compileExpr(next(it, '<') as SExpr, env)!
     ctx.emit(`${result} =l csltl ${lhs}, ${rhs}`)
     return ctx.wrapBool(result, env)
   }
@@ -211,10 +199,8 @@ class Gt implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
+    const [lhs, rhs] = ctx.compileArgs(exprs, env, 2)
     const result = env.defineTemp()
-    const lhs = ctx.compileExpr(next(it, '>') as SExpr, env)!
-    const rhs = ctx.compileExpr(next(it, '>') as SExpr, env)!
     ctx.emit(`${result} =l csgtl ${lhs}, ${rhs}`)
     return ctx.wrapBool(result, env)
   }
@@ -239,10 +225,8 @@ class Le implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
+    const [lhs, rhs] = ctx.compileArgs(exprs, env, 2)
     const result = env.defineTemp()
-    const lhs = ctx.compileExpr(next(it, '<=') as SExpr, env)!
-    const rhs = ctx.compileExpr(next(it, '<=') as SExpr, env)!
     ctx.emit(`${result} =l cslel ${lhs}, ${rhs}`)
     return ctx.wrapBool(result, env)
   }
@@ -267,10 +251,8 @@ class Ge implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
+    const [lhs, rhs] = ctx.compileArgs(exprs, env, 2)
     const result = env.defineTemp()
-    const lhs = ctx.compileExpr(next(it, '>=') as SExpr, env)!
-    const rhs = ctx.compileExpr(next(it, '>=') as SExpr, env)!
     ctx.emit(`${result} =l csgel ${lhs}, ${rhs}`)
     return ctx.wrapBool(result, env)
   }
@@ -303,7 +285,6 @@ class IsI64 implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
 
     const x = ctx.compileExpr(args[0] as SExpr, env)!
     const tag = ctx.tag(x, env)
-
     const result = env.defineTemp()
     ctx.emit(`${result} =l ceql ${tag}, ${0b010}`)
     return ctx.wrapBool(result, env)

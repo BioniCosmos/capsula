@@ -47,9 +47,7 @@ class ArrayOf implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
    * - struct (managed): 1 | (1 << 63) = 0x8000000000000001
    */
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const xs = iter(exprs)
-      .map((expr) => ctx.compileExpr(expr as SExpr, env))
-      .toArray()
+    const xs = ctx.compileArgs(exprs, env)
     const arr = env.defineTemp()
     ctx.emit(`${arr} =l alloc8 ${xs.length * 8}`)
 

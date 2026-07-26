@@ -2,7 +2,7 @@ import { encode } from '@msgpack/msgpack'
 import { $ } from 'bun'
 import { Instruction } from './bytecode'
 import { Bytecode, QBE, TreeWalk, type Environment } from './env'
-import { isList } from './list'
+import { isList, iter, type List } from './list'
 import { car, cdr } from './pair'
 import { parse } from './parser'
 import { isString } from './string'
@@ -223,6 +223,26 @@ export class QBEBackend implements Backend<QBECompiler, void> {
       return compiler.compileToQBE(this, cdr(expr), env)
     }
     throw Error(`compiling: unexpected \`${expr}\``)
+  }
+
+  compileArgs(exprs: List, env: QBE.Env, expect?: number) {
+    const args: string[] = []
+    let protectCount = 0
+    for (const expr of iter(exprs)) {
+      const arg = this.compileExpr(expr as SExpr, env) ?? qbeUnit
+      args.push(arg)
+      if (isList(expr) && !isNil(expr)) {
+        this.emit(`call $gc_retain(l ${arg})`)
+        protectCount++
+      }
+    }
+    if (expect !== undefined && args.length !== expect) {
+      throw Error(`compileArgs: unexpected arguments`)
+    }
+    for (let i = 0; i < protectCount; i++) {
+      this.emit(`call $gc_release()`)
+    }
+    return args
   }
 
   startFn(id: string, params: string, type = 'l', isExport = false) {

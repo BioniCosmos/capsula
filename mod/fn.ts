@@ -100,11 +100,9 @@ export class QBEFn implements QBECompiler {
   compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
     const it = iter(exprs)
 
-    const required: string[] = []
-    for (const _ of this.required) {
-      required.push(ctx.compileExpr(next(it, 'fn') as SExpr, env)!)
-    }
+    const required = ctx.compileArgs(exprs, env, this.required.length)
 
+    // TODO: redesign
     let rest: string | null = null
     if (this.rest) {
       rest = (ctx.env.lookup('array') as QBECompiler).compileToQBE(
