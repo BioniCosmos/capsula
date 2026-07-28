@@ -186,6 +186,9 @@ void gc_mark() {
         }
         frame = (Frame*)frame->prev;
     }
+    for (size_t i = 0; i < anchors_top; i++) {
+        gc_check(*(uint64_t*)anchors[i]);
+    }
 }
 
 void gc_sweep() {
