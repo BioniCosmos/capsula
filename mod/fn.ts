@@ -218,12 +218,22 @@ class Defn implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
     }
 
     const { slots } = fn.env
-    ctx.emitPrologue(`%frame =l alloc8 ${8 + 8 + 8 * slots.length}`)
+    ctx.emitPrologue(
+      `%frame =l alloc8 ${8 + 8 + 8 * (slots.length + required.length)}`,
+    )
     ctx.emitPrologue(`call $frame_push(l %frame, l ${slots.length})`)
     for (const [i, ptr] of slots.entries()) {
       ctx.emitPrologue(`call $frame_slot_push(l ${i}, l ${ptr})`)
     }
-    // TODO: params allocating and copying
+    for (const [i, param] of required.entries()) {
+      const id = fn.env.lookup(param.value)
+      const slot = fn.env.defineSlot(param.value)
+      ctx.emitPrologue(`${slot} =l alloc8 8`)
+      ctx.emitPrologue(`storel ${id}, ${slot}`)
+      ctx.emitPrologue(
+        `call $frame_slot_push(l ${slots.length + i}, l ${slot})`,
+      )
+    }
 
     ctx.endFn(result ?? ctx.compileExpr(undefined, env)!)
     return null
