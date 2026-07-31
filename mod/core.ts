@@ -7,6 +7,7 @@ import {
   isBoolean,
   isNil,
   isSymbol,
+  qbeUnit,
   typeOf,
   type BytecodeCompiler,
   type QBECompiler,
@@ -231,6 +232,7 @@ class Def implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
     const x = ctx.compileExpr(next(it, 'def') as SExpr, env)
     const id = env.defineSlot(sym.value)
     ctx.emitPrologue(`${id} =l alloc8 8`)
+    ctx.emitPrologue(`storel ${qbeUnit}, ${id}`)
     ctx.emit(`storel ${x}, ${id}`)
     return null
   }
