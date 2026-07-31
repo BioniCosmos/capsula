@@ -24,11 +24,12 @@ static inline void print_var(const uint64_t x) {
             print_var(*(uint64_t*)x);
             printf(" }");
             break;
-        case 0b10001:
-            printf("unit");
-            break;
         case 0b001:
-            printf("%s", (x >> 3) ? "true" : "false");
+            if (x == 0b10001) {
+                printf("unit");
+            } else {
+                printf("%s", (x >> 3) ? "true" : "false");
+            }
             break;
         case 0b010:
             printf("%lld", (int64_t)x >> 3);
