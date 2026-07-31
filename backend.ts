@@ -167,6 +167,7 @@ export class QBEBackend implements Backend<QBECompiler, void> {
     }
 
     this.emit(`call $gc_clear()`)
+    this.emit(`call $frame_pop()`)
     this.emit(`call $map_deinit()`)
 
     this.endFn('0')

@@ -234,6 +234,7 @@ class Defn implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
         `call $frame_slot_push(l ${slots.length + i}, l ${slot})`,
       )
     }
+    ctx.emit('call $frame_pop()')
 
     ctx.endFn(result ?? ctx.compileExpr(undefined, env)!)
     return null
