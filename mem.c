@@ -159,10 +159,10 @@ void gc_check(const uint64_t x) {
             const auto entry = map_get((void*)x);
             if (entry != nullptr) {
                 entry->marked = true;
-            }
-            const auto inner = *(int64_t*)x;
-            if (tag(inner) == 0b000) {
-                gc_check(inner);
+                const auto inner = *(int64_t*)x;
+                if (tag(inner) == 0b000) {
+                    gc_check(inner);
+                }
             }
             break;
         }
