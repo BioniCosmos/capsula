@@ -301,7 +301,10 @@ class Call implements QBECompiler {
 
     const result = env.defineTemp()
     ctx.emit(
-      `${result} =l call $${id.value}(${ctx.compileArgs(cdr(exprs!), env).join(', ')})`,
+      `${result} =l call $${id.value}(${ctx
+        .compileArgs(cdr(exprs!), env)
+        .map((x) => `l ${x}`)
+        .join(', ')})`,
     )
     return result
   }
