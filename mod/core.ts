@@ -1,30 +1,17 @@
-import type { BytecodeBackend, QBEBackend, TreeWalkBackend } from '@/backend'
+import type { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction, Label } from '@/bytecode'
-import type { Bytecode, QBE, TreeWalk } from '@/env'
+import type { Bytecode, QBE } from '@/env'
 import { build, isList, iter, next, type List } from '@/list'
 import { car, cdr } from '@/pair'
 import {
-  isBoolean,
-  isNil,
-  isSymbol,
   qbeUnit,
-  typeOf,
   type BytecodeCompiler,
   type QBECompiler,
   type SExpr,
-  type TreeWalkEvaluator,
-  type Var,
 } from '@/type'
 import type { Module } from '.'
 
-class Eq implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const it = iter(exprs)
-    const lhs = await ctx.evaluate(next(it, '=') as SExpr, env)
-    const rhs = await ctx.evaluate(next(it, '=') as SExpr, env)
-    return lhs === rhs
-  }
-
+class Eq implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const it = iter(exprs)
     ctx.compileExpr(next(it, '=') as SExpr, env)
@@ -41,37 +28,8 @@ class Eq implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
 }
 
 // TODO: support `else`
-// TODO: `(print (cond ...))` crashes under tree-walk. Fix it or consider returning other type when all are false.
-class Cond implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    let result: Var = undefined
-
-    for (const clause of iter(exprs)) {
-      if (!isList(clause) || isNil(clause)) {
-        throw Error(
-          `evaluating \`cond\`: expecting non-empty \`list\`, found \`${typeOf(clause)}\``,
-        )
-      }
-
-      const it = iter(clause)
-      const condition = await ctx.evaluate(next(it, 'cond') as SExpr, env)
-      if (!isBoolean(condition)) {
-        throw Error(
-          `evaluating \`cond\`: expecting \`bool\`, found \`${typeOf(condition)}\``,
-        )
-      }
-
-      if (condition) {
-        for (const x of it) {
-          result = await ctx.evaluate(x as SExpr, env)
-        }
-        break
-      }
-    }
-
-    return result
-  }
-
+// TODO: Consider returning other type when all clauses are false.
+class Cond implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const end = new Label()
 
@@ -155,20 +113,7 @@ class Cond implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
-class If implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const cond = env.lookup('cond') as TreeWalkEvaluator
-    const it = iter(exprs)
-    const condition = next(it, 'if')
-    const then = next(it, 'if')
-    const elseExpr = next(it, 'if')
-    return cond.eval(
-      ctx,
-      build(build(condition, then), build(true, elseExpr)),
-      env,
-    )
-  }
-
+class If implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const cond = env.lookup('cond') as BytecodeCompiler
     const it = iter(exprs)
@@ -196,18 +141,7 @@ class If implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
-class Def implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const it = iter(exprs)
-    const sym = next(it, 'def')
-    if (!isSymbol(sym)) {
-      throw Error(
-        `evaluating \`def\`: expecting symbol, found \`${typeOf(sym)}\``,
-      )
-    }
-    env.define(sym.value, await ctx.evaluate(next(it, 'def') as SExpr, env))
-  }
-
+class Def implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const it = iter(exprs)
     const sym = next(it, 'def')
@@ -238,17 +172,7 @@ class Def implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
-class Loop implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    while (true) {
-      try {
-        for (const expr of iter(exprs)) {
-          await ctx.evaluate(expr as SExpr, env)
-        }
-      } catch {}
-    }
-  }
-
+class Loop implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const start = ctx.code.len
     for (const expr of iter(exprs)) {

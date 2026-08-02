@@ -1,28 +1,11 @@
-import {
-  QBEBackend,
-  type BytecodeBackend,
-  type TreeWalkBackend,
-} from '@/backend'
+import { QBEBackend, type BytecodeBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
-import type { Bytecode, QBE, TreeWalk } from '@/env'
+import type { Bytecode, QBE } from '@/env'
 import { iter, next, type List } from '@/list'
-import {
-  type BytecodeCompiler,
-  type QBECompiler,
-  type SExpr,
-  type TreeWalkEvaluator,
-} from '@/type'
+import type { BytecodeCompiler, QBECompiler, SExpr } from '@/type'
 import type { Module } from '.'
 
-class Add implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const it = iter(exprs)
-    return (
-      ((await ctx.evaluate(next(it, 'add') as SExpr, env)) as number) +
-      ((await ctx.evaluate(next(it, 'add') as SExpr, env)) as number)
-    )
-  }
-
+class Add implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const it = iter(exprs)
     const lhs = next(it, 'add') as SExpr
@@ -42,15 +25,7 @@ class Add implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
-class Sub implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const it = iter(exprs)
-    return (
-      ((await ctx.evaluate(next(it, 'sub') as SExpr, env)) as number) -
-      ((await ctx.evaluate(next(it, 'sub') as SExpr, env)) as number)
-    )
-  }
-
+class Sub implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const it = iter(exprs)
     const lhs = next(it, 'sub') as SExpr
@@ -70,15 +45,7 @@ class Sub implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
-class Mul implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const it = iter(exprs)
-    return (
-      ((await ctx.evaluate(next(it, 'mul') as SExpr, env)) as number) *
-      ((await ctx.evaluate(next(it, 'mul') as SExpr, env)) as number)
-    )
-  }
-
+class Mul implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const it = iter(exprs)
     const lhs = next(it, 'mul') as SExpr
@@ -98,15 +65,7 @@ class Mul implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
-class Div implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const it = iter(exprs)
-    return Math.trunc(
-      ((await ctx.evaluate(next(it, 'div') as SExpr, env)) as number) /
-        ((await ctx.evaluate(next(it, 'div') as SExpr, env)) as number),
-    )
-  }
-
+class Div implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const it = iter(exprs)
     const lhs = next(it, 'div') as SExpr
@@ -126,15 +85,7 @@ class Div implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
-class Rem implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const it = iter(exprs)
-    return (
-      ((await ctx.evaluate(next(it, 'rem') as SExpr, env)) as number) %
-      ((await ctx.evaluate(next(it, 'rem') as SExpr, env)) as number)
-    )
-  }
-
+class Rem implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const it = iter(exprs)
     const lhs = next(it, 'rem') as SExpr
@@ -154,15 +105,7 @@ class Rem implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
-class Lt implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const it = iter(exprs)
-    return (
-      ((await ctx.evaluate(next(it, '<') as SExpr, env)) as number) <
-      ((await ctx.evaluate(next(it, '<') as SExpr, env)) as number)
-    )
-  }
-
+class Lt implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const it = iter(exprs)
     const lhs = next(it, '<') as SExpr
@@ -180,15 +123,7 @@ class Lt implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
-class Gt implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const it = iter(exprs)
-    return (
-      ((await ctx.evaluate(next(it, '>') as SExpr, env)) as number) >
-      ((await ctx.evaluate(next(it, '>') as SExpr, env)) as number)
-    )
-  }
-
+class Gt implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const it = iter(exprs)
     const lhs = next(it, '>') as SExpr
@@ -206,15 +141,7 @@ class Gt implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
-class Le implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const it = iter(exprs)
-    return (
-      ((await ctx.evaluate(next(it, '<=') as SExpr, env)) as number) <=
-      ((await ctx.evaluate(next(it, '<=') as SExpr, env)) as number)
-    )
-  }
-
+class Le implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const it = iter(exprs)
     const lhs = next(it, '<=') as SExpr
@@ -232,15 +159,7 @@ class Le implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
-class Ge implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const it = iter(exprs)
-    return (
-      ((await ctx.evaluate(next(it, '>=') as SExpr, env)) as number) >=
-      ((await ctx.evaluate(next(it, '>=') as SExpr, env)) as number)
-    )
-  }
-
+class Ge implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const it = iter(exprs)
     const lhs = next(it, '>=') as SExpr
@@ -258,16 +177,7 @@ class Ge implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
-class IsI64 implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const args = iter(exprs).toArray()
-    if (args.length !== 1) {
-      throw Error(`\`i64?\`: expecting 1 argument, found ${args.length}`)
-    }
-    const x = await ctx.evaluate(args[0] as SExpr, env)
-    return typeof x === 'number'
-  }
-
+class IsI64 implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const args = iter(exprs).toArray()
     if (args.length !== 1) {

@@ -1,20 +1,11 @@
-import { BytecodeBackend, QBEBackend, TreeWalkBackend } from '@/backend'
-import type { Bytecode, QBE, TreeWalk } from '@/env'
+import { BytecodeBackend, QBEBackend } from '@/backend'
+import type { Bytecode, QBE } from '@/env'
 import { build, iter, next, type List } from '@/list'
 import { car } from '@/pair'
-import type { BytecodeCompiler, QBECompiler, TreeWalkEvaluator } from '@/type'
+import type { BytecodeCompiler, QBECompiler } from '@/type'
 import type { Module } from '.'
 
-class And implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const it = iter(exprs)
-    return (ctx.env.lookup('if') as TreeWalkEvaluator).eval(
-      ctx,
-      build(next(it, 'and'), next(it, 'and'), false),
-      env,
-    )
-  }
-
+class And implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const it = iter(exprs)
     ;(ctx.env.lookup('if') as BytecodeCompiler).compile(
@@ -34,16 +25,7 @@ class And implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
-class Or implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const it = iter(exprs)
-    return (ctx.env.lookup('if') as TreeWalkEvaluator).eval(
-      ctx,
-      build(next(it, 'or'), true, next(it, 'or')),
-      env,
-    )
-  }
-
+class Or implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const it = iter(exprs)
     ;(ctx.env.lookup('if') as BytecodeCompiler).compile(
@@ -63,15 +45,7 @@ class Or implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
-class Not implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    return (ctx.env.lookup('=') as TreeWalkEvaluator).eval(
-      ctx,
-      build(car(exprs), false),
-      env,
-    )
-  }
-
+class Not implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     ;(ctx.env.lookup('=') as BytecodeCompiler).compile(
       ctx,

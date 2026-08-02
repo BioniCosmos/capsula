@@ -1,72 +1,26 @@
 import { encode } from '@msgpack/msgpack'
 import { $ } from 'bun'
 import { Instruction } from './bytecode'
-import { Bytecode, QBE, TreeWalk, type Environment } from './env'
+import { Bytecode, QBE, type Environment } from './env'
 import { isList, iter, type List } from './list'
 import { car, cdr } from './pair'
 import { parse } from './parser'
 import { isString } from './string'
 import {
   BytecodeFnChunk,
-  isBoolean,
   isBytecodeCompiler,
-  isNil,
-  isNumber,
   isQBECompiler,
-  isSymbol,
-  isTreeWalkEvaluator,
   QBEFnChunk,
   qbeUnit,
-  typeOf,
   type BytecodeCompiler,
   type QBECompiler,
   type SExpr,
-  type TreeWalkEvaluator,
   type Unit,
-  type Var,
 } from './type'
 
 export interface Backend<U extends Unit, Artifact> {
   readonly env: Environment<U>
   compile(source: SExpr[]): Artifact
-  execute(artifact: Artifact): void
-}
-
-export class TreeWalkBackend implements Backend<TreeWalkEvaluator, SExpr[]> {
-  readonly env = new TreeWalk.Env()
-
-  compile(source: SExpr[]) {
-    return source
-  }
-
-  async execute(artifact: SExpr[]) {
-    for (const expr of artifact) {
-      const result = await this.evaluate(expr, this.env)
-      if (result !== undefined) {
-        console.log(result)
-      }
-    }
-  }
-
-  async evaluate(
-    expr: SExpr,
-    env: TreeWalk.Env,
-  ): Promise<Var | TreeWalkEvaluator> {
-    if (isNil(expr) || isBoolean(expr) || isNumber(expr) || isString(expr)) {
-      return expr
-    }
-    if (isSymbol(expr)) {
-      return env.lookup(expr.value)
-    }
-    if (!isList(expr)) {
-      throw Error('evaluating: expecting list, found pair')
-    }
-    const box = await this.evaluate(car(expr) as SExpr, env)
-    if (isTreeWalkEvaluator(box)) {
-      return box.eval(this, cdr(expr), env)
-    }
-    throw Error('unreachable')
-  }
 }
 
 export class BytecodeBackend implements Backend<BytecodeCompiler, void> {
@@ -94,10 +48,6 @@ export class BytecodeBackend implements Backend<BytecodeCompiler, void> {
       'bytecode.💊',
       encode(this.#functions.map((fn) => fn.serialize())),
     )
-  }
-
-  execute() {
-    throw Error('unimplemented')
   }
 
   compileExpr(expr: SExpr, env: Bytecode.Env) {
@@ -177,10 +127,6 @@ export class QBEBackend implements Backend<QBECompiler, void> {
       '\n\n' +
       this.#chunks.map((chunk) => chunk.build()).join('\n\n')
     await $`qbe < ${new Response(code)} | clang -std=c23 mem.c -x assembler -`
-  }
-
-  execute() {
-    throw new Error('Method not implemented.')
   }
 
   /**

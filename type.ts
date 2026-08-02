@@ -1,6 +1,6 @@
-import type { BytecodeBackend, QBEBackend, TreeWalkBackend } from './backend'
+import type { BytecodeBackend, QBEBackend } from './backend'
 import { CodeBuffer } from './bytecode'
-import type { Bytecode, QBE, TreeWalk } from './env'
+import type { Bytecode, QBE } from './env'
 import type { List } from './list'
 
 export type SExprBool = { type: 'bool'; value: boolean }
@@ -12,20 +12,9 @@ export type SExpr = SExprBool | SExprNum | SExprStr | SExprSym | SExprCell
 export type ASTMeta = { fileName: string; line: number; column: number }
 export type ASTNode = { expr: SExpr; meta: ASTMeta }
 
-export type Var = SExpr | Box | Unit
-
-export class Sym {
-  constructor(public value: string) {}
-}
-
-// TODO: Consider reactivate Box and make difference between Box and Unit (e.g. stateful v.s. stateless).
-export interface Box {
-  type: string
-}
-
 export const qbeUnit = (0b10001).toString()
 
-export type Unit = TreeWalkEvaluator | BytecodeCompiler | QBECompiler
+export type Unit = BytecodeCompiler | QBECompiler
 
 const unitConstructorSymbol = Symbol('unit-constructor')
 
@@ -46,14 +35,6 @@ export function isUnitConstructor<T extends Unit>(
   target: any,
 ): target is UnitConstructor<T> {
   return typeof target === 'function' && target[unitConstructorSymbol] === true
-}
-
-export interface TreeWalkEvaluator {
-  eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env): Var | Promise<Var>
-}
-
-export function isTreeWalkEvaluator(x: any): x is TreeWalkEvaluator {
-  return typeof x?.eval === 'function'
 }
 
 export interface BytecodeCompiler {
@@ -125,52 +106,4 @@ ${this.#prologue.map((line) => `    ${line}`).join('\n')}
 ${this.#body.map((line) => `    ${line}`).join('\n')}
 }`
   }
-}
-
-export function typeOf(x: Var) {
-  if (x === undefined) {
-    return 'unit'
-  }
-  if (x === null) {
-    return 'nil'
-  }
-  if (typeof x === 'boolean') {
-    return 'bool'
-  }
-  if (typeof x === 'number') {
-    return 'num'
-  }
-  if (typeof x === 'string') {
-    return 'str'
-  }
-  if (x instanceof Sym) {
-    return 'sym'
-  }
-  if (Array.isArray(x)) {
-    return 'pair'
-  }
-  if (typeof x === 'object' && 'type' in x) {
-    return 'box'
-  }
-  throw Error(`invalid expression: ${x}`)
-}
-
-export function isNil(x: Var): x is null {
-  return typeOf(x) === 'nil'
-}
-
-export function isBoolean(x: Var): x is boolean {
-  return typeOf(x) === 'bool'
-}
-
-export function isNumber(x: Var): x is number {
-  return typeOf(x) === 'num'
-}
-
-export function isSymbol(x: Var): x is Sym {
-  return typeOf(x) === 'sym'
-}
-
-export function isBox(x: Var): x is Box {
-  return typeOf(x) === 'box'
 }

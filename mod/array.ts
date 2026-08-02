@@ -1,37 +1,12 @@
-import {
-  QBEBackend,
-  type BytecodeBackend,
-  type TreeWalkBackend,
-} from '@/backend'
+import { QBEBackend, type BytecodeBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
-import type { Bytecode, QBE, TreeWalk } from '@/env'
+import type { Bytecode, QBE } from '@/env'
 import { iter, type List } from '@/list'
 import { car } from '@/pair'
-import type {
-  Box,
-  BytecodeCompiler,
-  QBECompiler,
-  SExpr,
-  TreeWalkEvaluator,
-  Var,
-} from '@/type'
+import type { BytecodeCompiler, QBECompiler, SExpr } from '@/type'
 import type { Module } from '.'
 
-class VarArray implements Box {
-  type = 'array'
-
-  constructor(public value: Var[]) {}
-}
-
-class ArrayOf implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const xs = Array.of<Var>()
-    for (const expr of iter(exprs)) {
-      xs.push(await ctx.evaluate(expr as SExpr, env))
-    }
-    return new VarArray(xs)
-  }
-
+class ArrayOf implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     const xs = iter(exprs).toArray().toReversed()
     for (const x of xs) {
@@ -74,12 +49,7 @@ class ArrayOf implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
   }
 }
 
-class DebugArray implements TreeWalkEvaluator, BytecodeCompiler, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const arr = (await ctx.evaluate(car(exprs) as SExpr, env)) as VarArray
-    console.log(`[${arr.value.length}]: [${arr.value.join(' ')}]`)
-  }
-
+class DebugArray implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
     ctx.compileExpr(car(exprs) as SExpr, env)
     ctx.emit(Instruction.DebugArray)

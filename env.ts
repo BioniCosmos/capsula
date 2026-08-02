@@ -2,10 +2,8 @@ import {
   isUnitConstructor,
   type BytecodeCompiler,
   type QBECompiler,
-  type TreeWalkEvaluator,
   type Unit,
   type UnitConstructor,
-  type Var,
 } from './type'
 
 // TODO: improve `isUnitConstructor` check in `lookup` to more specific type check
@@ -15,56 +13,6 @@ export interface Environment<T extends Unit> {
 
 // TODO: Remove namespaces.
 // TODO: Tidy up functions. (defineVar + defineUnit + lookup ?)
-export namespace TreeWalk {
-  export class Env implements Environment<TreeWalkEvaluator> {
-    readonly #vars = new Map<string, Var | UnitConstructor<TreeWalkEvaluator>>()
-
-    constructor(private readonly parent: Env | null = null) {}
-
-    get locals() {
-      return this.#vars as ReadonlyMap<string, Var>
-    }
-
-    defineUnit(name: string, constructor: UnitConstructor<TreeWalkEvaluator>) {
-      this.#vars.set(name, constructor)
-    }
-
-    define(name: string, value: Var) {
-      this.#vars.set(name, value)
-    }
-
-    lookup(name: string): Var | TreeWalkEvaluator {
-      if (this.#vars.has(name)) {
-        const item = this.#vars.get(name)!
-        if (isUnitConstructor(item)) {
-          return item()
-        }
-        return item
-      }
-
-      if (this.parent) {
-        return this.parent.lookup(name)
-      }
-
-      throw Error(`undefined variable: ${name}`)
-    }
-
-    set(name: string, value: Var) {
-      if (this.#vars.has(name)) {
-        this.#vars.set(name, value)
-        return
-      }
-
-      if (this.parent) {
-        this.parent.set(name, value)
-        return
-      }
-
-      throw Error(`undefined variable: ${name}`)
-    }
-  }
-}
-
 export namespace Bytecode {
   export class Env implements Environment<BytecodeCompiler> {
     readonly #vars = new Map<
