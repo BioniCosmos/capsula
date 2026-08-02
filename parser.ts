@@ -1,26 +1,63 @@
-import { cons } from './pair'
-import { Sym, type SExpr } from './type'
+import { exit } from 'node:process'
+import type { ASTMeta, ASTNode, SExpr, SExprCell } from './type'
 
 const digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
 
-export function parse(input: string) {
-  const exprs = Array.of<SExpr[]>([])
-  const stops = Array.of<number>(0)
+export function parse(input: string, fileName = '-'): ASTNode[] {
+  let i = 0
+  let line = 1
+  let lineStart = 0
 
-  function push(expr: SExpr) {
-    exprs.at(-1)!.push(expr)
+  function defaultNode(): ASTNode {
+    return {
+      expr: { type: 'cell', car: [], cdr: null },
+      meta: { fileName, line, column: i - lineStart + 1 },
+    }
+  }
+  const defaultCellState = 'car'
+  const nodes: ASTNode[] = [defaultNode()]
+  const cellStates: ('car' | 'dot' | 'cdr')[] = [defaultCellState]
+
+  function defaultMeta(): ASTMeta {
+    return { fileName, line, column: i - lineStart + 1 }
   }
 
-  let i = 0
+  function parseError(message: string, meta?: Partial<ASTMeta>): never {
+    const { fileName, line, column } = { ...defaultMeta(), ...meta }
+    console.error(`${fileName}:${line}:${column} parsing: ${message}`)
+    exit(1)
+  }
+
+  function push(expr: SExpr, meta?: Partial<ASTMeta>) {
+    const cell = nodes.at(-1)!.expr as SExprCell
+    const node = { expr, meta: { ...defaultMeta(), ...meta } }
+    switch (cellStates.at(-1)) {
+      case 'car':
+        cell.car.push(node)
+        break
+      case 'dot':
+        cell.cdr = node
+        cellStates[cellStates.length - 1] = 'cdr'
+        break
+      case 'cdr':
+        parseError(
+          'Too many expressions after `.`. Only one expression is allowed on `cdr`.',
+        )
+    }
+  }
+
   while (i < input.length) {
     switch (input[i]) {
-      // Using tab is prohibited in source code.
       case '\t':
-        throw Error('parser: expecting valid source code, found tab `\t`')
+        parseError('Tab `\\t` is prohibited.')
       // skip delimiters
       case ' ':
+        i++
+        break
       case '\n':
         i++
+        line++
+        lineStart = i
         break
       // comment
       case ';':
@@ -28,6 +65,8 @@ export function parse(input: string) {
           i++
         }
         i++
+        line++
+        lineStart = i
         break
       // string
       // TODO: support string interpolation?
@@ -38,67 +77,63 @@ export function parse(input: string) {
           if (input[j] === '"' && !escaped) {
             break
           }
-          if (input[j] === ')' || input[j] === '\n') {
-            throw Error(`parsing string: unexpected delimiter \`${input[j]}\``)
+          if (input[j] === '\n') {
+            parseError('Multi-line string is unsupported.')
           }
           escaped = input[j] === '\\' && !escaped
           j++
         }
         if (input[j] !== '"') {
-          throw Error('parsing string: expected `"`, found EOF')
+          parseError('unterminated string', { column: j - lineStart + 1 })
         }
-        push(input.slice(i + 1, j))
+        push({ type: 'str', value: input.slice(i + 1, j) })
         i = j + 1
         break
       }
       // S-expression
       case '(': {
-        exprs.push([])
-        stops.push(0)
+        nodes.push(defaultNode())
+        cellStates.push(defaultCellState)
         i++
         break
       }
       case ')': {
-        if (exprs.length === 1) {
-          throw Error('parsing: unexpected `)`')
+        if (nodes.length === 1) {
+          parseError('unexpected `)`')
         }
-        const currentLevel = exprs.pop()!
-        const lastIndex = stops.pop()!
-        if (lastIndex !== 0) {
-          if (currentLevel.length - 1 !== lastIndex) {
-            throw Error('parsing: unexpected expressions after `.`')
-          }
-          push(currentLevel.reduceRight((acc, x) => cons(x, acc)))
-        } else {
-          push(currentLevel.reduceRight((acc, x) => cons(x, acc), null))
+        if (cellStates.pop() === 'dot') {
+          parseError('missing `cdr` in cell')
         }
+
+        const { expr, meta } = nodes.pop()!
+        const cell = expr as SExprCell
+        const cdr = cell.cdr?.expr
+        if (cdr?.type === 'cell') {
+          cell.car = [...cell.car, ...cdr.car]
+          cell.cdr = cdr.cdr
+        }
+        push(cell, meta)
+
         i++
         break
       }
       // cons cell
-      // @ts-ignore
       case '.': {
-        // `(a . b)`, `(a ."b")`, `(a .(b))`, `(a .\nb)` and `(a .; comments\nb)` are supported.
-        // `.` on top or `(. b)` or `(a . b . c)` are wrong.
-        const legal = [' ', '\n', '(', '"', ';']
-        if (legal.includes(input[i + 1])) {
-          if (exprs.length === 1 || exprs.at(-1)!.length === 0) {
-            throw Error('parsing: unexpected `.`')
-          }
-          const lastIndex = stops.length - 1
-          if (stops[lastIndex] !== 0) {
-            throw Error('parsing: unexpected `.`')
-          }
-          // record the last element index in `exprs`
-          stops[lastIndex] = exprs.at(-1)!.length
-          i++
-          break
+        if (nodes.length === 1) {
+          parseError('Unexpected `.` found. `.` should be used in cell.')
         }
-        const illegal = [...digits, '\t', ')', '[', ']', '{', '}', `'`]
-        if (illegal.includes(input[i + 1])) {
-          throw Error(`parsing: unexpected \`${input[i + 1]}\``)
+        if ((nodes.at(-1)!.expr as SExprCell).car.length === 0) {
+          parseError('missing `car` in cell')
         }
-        // fallthrough to symbol parsing
+
+        const lastIndex = cellStates.length - 1
+        if (cellStates[lastIndex] !== 'car') {
+          parseError('unexpected `.`')
+        }
+        cellStates[lastIndex] = 'dot'
+
+        i++
+        break
       }
       // reserved keywords
       case '[':
@@ -106,16 +141,16 @@ export function parse(input: string) {
       case '{':
       case '{':
       case `'`:
-        throw Error(`parsing: unexpected \`${input[i]}\``)
+        parseError(`\`${input[i]}\` is reserved keyword.`)
       default: {
         // boolean
         if (input.slice(i, i + 4) === 'true') {
-          push(true)
+          push({ type: 'bool', value: true })
           i += 4
           break
         }
         if (input.slice(i, i + 5) === 'false') {
-          push(false)
+          push({ type: 'bool', value: false })
           i += 5
           break
         }
@@ -137,18 +172,13 @@ export function parse(input: string) {
             input[j] !== ')' &&
             input[j] !== '\n'
           ) {
-            if (prev === '.' || prev === '-') {
-              if (!digits.includes(input[j])) {
-                throw Error(
-                  `parsing number: expecting digit, found \`${input[j]}\``,
-                )
-              }
-            } else {
-              if (!digits.includes(input[j]) && input[j] !== '.') {
-                throw Error(
-                  `parsing number: expecting digit or \`.\`, found \`${input[j]}\``,
-                )
-              }
+            if (
+              !digits.includes(input[j]) &&
+              (input[j] !== '.' || prev === '.' || prev === '-')
+            ) {
+              parseError('invalid character found while parsing number', {
+                column: j - lineStart + 1,
+              })
             }
             prev = input[j]
             j++
@@ -156,11 +186,12 @@ export function parse(input: string) {
           // `-` is a negative sign in the context.
           if (prev !== '-') {
             if (!digits.includes(prev)) {
-              throw Error(
-                `parsing number: The last character of a number should always be a digit. Found \`${prev}\`.`,
+              parseError(
+                'The last character of a number should always be a digit.',
+                { column: j - lineStart + 1 },
               )
             }
-            push(Number(input.slice(i, j)))
+            push({ type: 'num', value: Number(input.slice(i, j)) })
             i = j
             break
           }
@@ -184,15 +215,15 @@ export function parse(input: string) {
         while (j < input.length && !delimiters.includes(input[j])) {
           j++
         }
-        push(new Sym(input.slice(i, j)))
+        push({ type: 'sym', value: input.slice(i, j) })
         i = j
       }
     }
   }
 
-  if (exprs.length !== 1) {
-    throw Error('parsing: expected `)`, found EOF')
+  if (nodes.length !== 1) {
+    parseError('expecting `)`, found `EOF`')
   }
 
-  return exprs[0]
+  return (nodes[0].expr as SExprCell).car
 }

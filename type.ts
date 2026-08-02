@@ -2,12 +2,17 @@ import type { BytecodeBackend, QBEBackend, TreeWalkBackend } from './backend'
 import { CodeBuffer } from './bytecode'
 import type { Bytecode, QBE, TreeWalk } from './env'
 import type { List } from './list'
-import type { Pair } from './pair'
+
+export type SExprBool = { type: 'bool'; value: boolean }
+export type SExprNum = { type: 'num'; value: number }
+export type SExprStr = { type: 'str'; value: string }
+export type SExprSym = { type: 'sym'; value: string }
+export type SExprCell = { type: 'cell'; car: ASTNode[]; cdr: ASTNode | null }
+export type SExpr = SExprBool | SExprNum | SExprStr | SExprSym | SExprCell
+export type ASTMeta = { fileName: string; line: number; column: number }
+export type ASTNode = { expr: SExpr; meta: ASTMeta }
 
 export type Var = SExpr | Box | Unit
-
-// TODO: Redesign/Tidy up. Remove null. Distinguish compile-time (AST?) and runtime type.
-export type SExpr = void | null | boolean | number | string | Sym | Pair
 
 export class Sym {
   constructor(public value: string) {}
