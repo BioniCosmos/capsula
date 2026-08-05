@@ -1,26 +1,24 @@
 import type { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction, Label } from '@/bytecode'
 import type { Bytecode, QBE } from '@/env'
-import { build, isList, iter, next, type List } from '@/list'
-import { car, cdr } from '@/pair'
 import {
   qbeUnit,
+  type ASTNode,
   type BytecodeCompiler,
   type QBECompiler,
-  type SExpr,
+  type SExprCell,
 } from '@/type'
 import type { Module } from '.'
 
 class Eq implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
-    const it = iter(exprs)
-    ctx.compileExpr(next(it, '=') as SExpr, env)
-    ctx.compileExpr(next(it, '=') as SExpr, env)
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+    ctx.compileExpr(cell.expr.car[1], env)
+    ctx.compileExpr(cell.expr.car[2], env)
     ctx.emit(Instruction.Eq)
   }
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const [lhs, rhs] = ctx.compileArgs(exprs, env, 2)
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+    const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
     const result = env.defineTemp()
     ctx.emit(`${result} =l ceql ${lhs}, ${rhs}`)
     return ctx.wrapBool(result, env)
@@ -30,22 +28,21 @@ class Eq implements BytecodeCompiler, QBECompiler {
 // TODO: support `else`
 // TODO: Consider returning other type when all clauses are false.
 class Cond implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
     const end = new Label()
 
     let nextClause = new Label()
-    for (const clause of iter(exprs)) {
-      if (!isList(clause) || isNil(clause)) {
+    for (const clause of cell.expr.car.slice(1)) {
+      if (clause.expr.type !== 'cell' || clause.expr.car.length === 0) {
         throw Error(
-          `evaluating \`cond\`: expecting non-empty \`list\`, found \`${typeOf(clause)}\``,
+          `compiling \`cond\`: expecting non-empty \`list\`, found \`${clause.expr.type}\``,
         )
       }
 
       nextClause.fillOffset(ctx.code.len)
       nextClause = new Label()
 
-      const it = iter(clause)
-      ctx.compileExpr(next(it, 'cond') as SExpr, env)
+      ctx.compileExpr(clause.expr.car[0], env)
       // TODO: check type
 
       const jumpToNextFrom = ctx.code.len
@@ -54,7 +51,9 @@ class Cond implements BytecodeCompiler, QBECompiler {
         from: jumpToNextFrom,
         fill: (offset) => jumpToNext.setInt16(1, offset, true),
       })
-      it.forEach((x) => ctx.compileExpr(x as SExpr, env))
+      for (const x of clause.expr.car.slice(1)) {
+        ctx.compileExpr(x, env)
+      }
 
       const jumpToEndFrom = ctx.code.len
       const jumpToEnd = ctx.emit(Instruction.Jump(0))
@@ -68,17 +67,17 @@ class Cond implements BytecodeCompiler, QBECompiler {
     end.fillOffset(ctx.code.len)
   }
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
     const result = env.defineTemp()
-    ctx.emit(`${result} =l copy ${ctx.compileExpr(undefined, env)}`)
+    ctx.emit(`${result} =l copy ${qbeUnit}`)
 
     const end = env.defineBlock()
 
     let nextClause = env.defineBlock()
-    for (const clause of iter(exprs)) {
-      if (!isList(clause) || isNil(clause)) {
+    for (const clause of cell.expr.car.slice(1)) {
+      if (clause.expr.type !== 'cell' || clause.expr.car.length === 0) {
         throw Error(
-          `evaluating \`cond\`: expecting non-empty \`list\`, found \`${typeOf(clause)}\``,
+          `compiling \`cond\`: expecting non-empty \`list\`, found \`${clause.expr.type}\``,
         )
       }
 
@@ -86,10 +85,9 @@ class Cond implements BytecodeCompiler, QBECompiler {
       nextClause = env.defineBlock()
       ctx.emit(current)
 
-      const it = iter(clause)
       const condition = env.defineTemp()
       ctx.emit(
-        `${condition} =l copy ${ctx.compileExpr(next(it, 'cond') as SExpr, env)}`,
+        `${condition} =l copy ${ctx.compileExpr(clause.expr.car[0], env)!}`,
       )
       // TODO: check type
       ctx.emit(`${condition} =l shr ${condition}, 3`)
@@ -98,10 +96,9 @@ class Cond implements BytecodeCompiler, QBECompiler {
       ctx.emit(`jnz ${condition}, ${body}, ${nextClause}`)
       ctx.emit(body)
       ctx.emit(
-        `${result} =l copy ${it.reduce(
-          (_, x) => ctx.compileExpr(x as SExpr, env),
-          ctx.compileExpr(undefined, env),
-        )}`,
+        `${result} =l copy ${clause.expr.car
+          .slice(1)
+          .reduce((_, x) => ctx.compileExpr(x, env) ?? qbeUnit, qbeUnit)}`,
       )
       ctx.emit(`jmp ${end}`)
     }
@@ -114,78 +111,83 @@ class Cond implements BytecodeCompiler, QBECompiler {
 }
 
 class If implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
-    const cond = env.lookup('cond') as BytecodeCompiler
-    const it = iter(exprs)
-    const condition = next(it, 'if')
-    const then = next(it, 'if')
-    const elseExpr = next(it, 'if')
-    return cond.compile(
-      ctx,
-      build(build(condition, then), build(true, elseExpr)),
-      env,
-    )
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+    ctx.compileExpr(If.#cond(cell), env)
   }
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const cond = env.lookup('cond') as QBECompiler
-    const it = iter(exprs)
-    const condition = next(it, 'if')
-    const then = next(it, 'if')
-    const elseExpr = next(it, 'if')
-    return cond.compileToQBE(
-      ctx,
-      build(build(condition, then), build(true, elseExpr)),
-      env,
-    )
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+    return ctx.compileExpr(If.#cond(cell), env)
+  }
+
+  static #cond({ expr, meta }: ASTNode<SExprCell>): ASTNode<SExprCell> {
+    return {
+      expr: {
+        type: 'cell',
+        car: [
+          { expr: { type: 'sym', value: 'cond' }, meta: expr.car[0].meta },
+          {
+            expr: { type: 'cell', car: [expr.car[1], expr.car[2]], cdr: null },
+            meta,
+          },
+          {
+            expr: {
+              type: 'cell',
+              car: [{ expr: { type: 'bool', value: true }, meta }, expr.car[3]],
+              cdr: null,
+            },
+            meta,
+          },
+        ],
+        cdr: null,
+      },
+      meta,
+    }
   }
 }
 
 class Def implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
-    const it = iter(exprs)
-    const sym = next(it, 'def')
-    if (!isSymbol(sym)) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+    const id = cell.expr.car[1]
+    if (id.expr.type !== 'sym') {
       throw Error(
-        `evaluating \`def\`: expecting symbol, found \`${typeOf(sym)}\``,
+        `compiling \`def\`: expecting symbol, found \`${id.expr.type}\``,
       )
     }
-    ctx.compileExpr(next(it, 'def') as SExpr, env)
-    ctx.emit(Instruction.Save(env.defineVar(sym.value)))
+    ctx.compileExpr(cell.expr.car[2], env)
+    ctx.emit(Instruction.Save(env.defineVar(id.expr.value)))
   }
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
-    const sym = next(it, 'def')
-    if (!isSymbol(sym)) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+    const id = cell.expr.car[1]
+    if (id.expr.type !== 'sym') {
       throw Error(
-        `evaluating \`def\`: expecting symbol, found \`${typeOf(sym)}\``,
+        `compiling \`def\`: expecting symbol, found \`${id.expr.type}\``,
       )
     }
     // Ensure that values are evaluated first, then assigned.
-    const x = ctx.compileExpr(next(it, 'def') as SExpr, env)
-    const id = env.defineSlot(sym.value)
-    ctx.emitPrologue(`${id} =l alloc8 8`)
-    ctx.emitPrologue(`storel ${qbeUnit}, ${id}`)
-    ctx.emit(`storel ${x}, ${id}`)
+    const x = ctx.compileExpr(cell.expr.car[2], env)!
+    const slot = env.defineSlot(id.expr.value)
+    ctx.emitPrologue(`${slot} =l alloc8 8`)
+    ctx.emitPrologue(`storel ${qbeUnit}, ${slot}`)
+    ctx.emit(`storel ${x}, ${slot}`)
     return null
   }
 }
 
 class Loop implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
     const start = ctx.code.len
-    for (const expr of iter(exprs)) {
-      ctx.compileExpr(expr as SExpr, env)
+    for (const expr of cell.expr.car.slice(1)) {
+      ctx.compileExpr(expr, env)
     }
     ctx.emit(Instruction.Jump(start - ctx.code.len))
   }
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
     const loop = env.defineBlock()
     ctx.emit(loop)
-    for (const expr of iter(exprs)) {
-      ctx.compileExpr(expr as SExpr, env)
+    for (const expr of cell.expr.car.slice(1)) {
+      ctx.compileExpr(expr, env)
     }
     ctx.emit(`jmp ${loop}`)
     ctx.emit(env.defineBlock())
@@ -194,8 +196,8 @@ class Loop implements BytecodeCompiler, QBECompiler {
 }
 
 class SizeOf implements QBECompiler {
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const x = ctx.compileExpr(car(exprs) as SExpr, env)!
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+    const x = ctx.compileExpr(cell.expr.car[1], env)!
 
     const tag = env.defineVar('tag')
     ctx.emit(`${tag} =l copy ${ctx.tag(x, env)}`)
@@ -213,21 +215,19 @@ class SizeOf implements QBECompiler {
 }
 
 class Call implements QBECompiler {
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
-
-    const id = next(it, 'call') as SExpr
-    if (!isSymbol(id)) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+    const id = cell.expr.car[1]
+    if (id.expr.type !== 'sym') {
       throw Error(
-        `evaluating \`call\`: expecting \`symbol\`, found \`${typeOf(id)}\``,
+        `compiling \`call\`: expecting symbol, found \`${id.expr.type}\``,
       )
     }
 
     const result = env.defineTemp()
     ctx.emit(
-      `${result} =l call $${id.value}(${ctx
-        .compileArgs(cdr(exprs!), env)
-        .map((x) => `l ${x}`)
+      `${result} =l call $${id}(${cell.expr.car
+        .slice(2)
+        .map((arg) => `l ${ctx.compileExpr(arg, env)}`)
         .join(', ')})`,
     )
     return result

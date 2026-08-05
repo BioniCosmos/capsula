@@ -1,63 +1,56 @@
 import type { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { Bytecode, QBE } from '@/env'
-import { iter, next, type List } from '@/list'
-import { car } from '@/pair'
-import type { BytecodeCompiler, QBECompiler, SExpr } from '@/type'
+import type { ASTNode, BytecodeCompiler, QBECompiler, SExprCell } from '@/type'
 import type { Module } from '.'
 
 class Struct implements BytecodeCompiler, QBECompiler {
-  compile(_ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
-    const it = iter(exprs)
-
-    const id = next(it, 'struct')
-    if (!isSymbol(id)) {
+  compile(_ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+    const id = cell.expr.car[1]
+    if (id.expr.type !== 'sym') {
       throw Error(
-        `evaluating \`struct\`: expecting \`symbol\`, found \`${typeOf(id)}\``,
+        `compiling \`struct\`: expecting \`symbol\`, found \`${id.expr.type}\``,
       )
     }
 
-    const fields = it
-      .map((x) => {
-        if (!isSymbol(x)) {
-          throw Error(
-            `evaluating \`struct\`: expecting \`symbol\`, found \`${typeOf(x)}\``,
-          )
-        }
-        return x.value
-      })
-      .toArray()
+    const fields = cell.expr.car.slice(2).map((x) => {
+      if (x.expr.type !== 'sym') {
+        throw Error(
+          `compiling \`struct\`: expecting \`symbol\`, found \`${x.expr.type}\``,
+        )
+      }
+      return x.expr.value
+    })
 
-    env.defineVarUnit(id.value, new StructConstructor(fields))
+    env.defineVarUnit(id.expr.value, new StructConstructor(fields))
     for (const [i, field] of fields.entries()) {
-      env.defineVarUnit(`${id.value}-${field}`, new BytecodeStructGetter(i))
+      env.defineVarUnit(
+        `${id.expr.value}-${field}`,
+        new BytecodeStructGetter(i),
+      )
     }
   }
 
-  compileToQBE(_ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
-
-    const id = next(it, 'struct')
-    if (!isSymbol(id)) {
+  compileToQBE(_ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+    const id = cell.expr.car[1]
+    if (id.expr.type !== 'sym') {
       throw Error(
-        `evaluating \`struct\`: expecting \`symbol\`, found \`${typeOf(id)}\``,
+        `compiling \`struct\`: expecting \`symbol\`, found \`${id.expr.type}\``,
       )
     }
 
-    const fields = it
-      .map((x) => {
-        if (!isSymbol(x)) {
-          throw Error(
-            `evaluating \`struct\`: expecting \`symbol\`, found \`${typeOf(x)}\``,
-          )
-        }
-        return x.value
-      })
-      .toArray()
+    const fields = cell.expr.car.slice(2).map((x) => {
+      if (x.expr.type !== 'sym') {
+        throw Error(
+          `compiling \`struct\`: expecting \`symbol\`, found \`${x.expr.type}\``,
+        )
+      }
+      return x.expr.value
+    })
 
-    env.defineVarUnit(id.value, new StructConstructor(fields))
+    env.defineVarUnit(id.expr.value, new StructConstructor(fields))
     for (const [i, field] of fields.entries()) {
-      env.defineVarUnit(`${id.value}-${field}`, new QBEStructGetter(i))
+      env.defineVarUnit(`${id.expr.value}-${field}`, new QBEStructGetter(i))
     }
 
     return null
@@ -67,18 +60,18 @@ class Struct implements BytecodeCompiler, QBECompiler {
 class StructConstructor implements BytecodeCompiler, QBECompiler {
   constructor(private fields: string[]) {}
 
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
     // TODO: check argument count
-    for (const expr of iter(exprs).toArray().toReversed()) {
-      ctx.compileExpr(expr as SExpr, env)
+    for (const expr of cell.expr.car.slice(1).toReversed()) {
+      ctx.compileExpr(expr, env)
     }
     ctx.emit(Instruction.ArrayNew(this.fields.length))
   }
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
     const structHeader = (ctx.env.lookup('array') as QBECompiler).compileToQBE(
       ctx,
-      exprs,
+      cell,
       env,
     )
     // structHeader.type = 1
@@ -90,8 +83,8 @@ class StructConstructor implements BytecodeCompiler, QBECompiler {
 class BytecodeStructGetter implements BytecodeCompiler {
   constructor(private offset: number) {}
 
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
-    ctx.compileExpr(car(exprs) as SExpr, env)
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+    ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.ArrayGet(this.offset))
   }
 }
@@ -99,11 +92,8 @@ class BytecodeStructGetter implements BytecodeCompiler {
 class QBEStructGetter implements QBECompiler {
   constructor(private offset: number) {}
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const header = ctx.unwrapArray(
-      ctx.compileExpr(car(exprs) as SExpr, env)!,
-      env,
-    )
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+    const header = ctx.unwrapArray(ctx.compileExpr(cell.expr.car[1], env)!, env)
     // TODO: check type
     const p = env.defineTemp()
     // p = header.ptr.*

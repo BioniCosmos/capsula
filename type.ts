@@ -1,7 +1,6 @@
 import type { BytecodeBackend, QBEBackend } from './backend'
 import { CodeBuffer } from './bytecode'
 import type { Bytecode, QBE } from './env'
-import type { List } from './list'
 
 export type SExprBool = { type: 'bool'; value: boolean }
 export type SExprNum = { type: 'num'; value: number }
@@ -10,16 +9,15 @@ export type SExprSym = { type: 'sym'; value: string }
 export type SExprCell = { type: 'cell'; car: ASTNode[]; cdr: ASTNode | null }
 export type SExpr = SExprBool | SExprNum | SExprStr | SExprSym | SExprCell
 export type ASTMeta = { fileName: string; line: number; column: number }
-export type ASTNode = { expr: SExpr; meta: ASTMeta }
+export type ASTNode<T extends SExpr = SExpr> = { expr: T; meta: ASTMeta }
 
 export const qbeUnit = (0b10001).toString()
+export const qbeTrue = (0b1001).toString()
+export const qbeFalse = (0b0001).toString()
 
 export type Unit = BytecodeCompiler | QBECompiler
-
 const unitConstructorSymbol = Symbol('unit-constructor')
-
 export type UnitClass<T extends Unit = Unit> = new () => T
-
 export type UnitConstructor<T extends Unit> = {
   (): T
   readonly [unitConstructorSymbol]: true
@@ -38,7 +36,11 @@ export function isUnitConstructor<T extends Unit>(
 }
 
 export interface BytecodeCompiler {
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env): void
+  compile(
+    ctx: BytecodeBackend,
+    cell: ASTNode<SExprCell>,
+    env: Bytecode.Env,
+  ): void
 }
 
 export function isBytecodeCompiler(x: any): x is BytecodeCompiler {
@@ -47,7 +49,11 @@ export function isBytecodeCompiler(x: any): x is BytecodeCompiler {
 
 // TODO: Consider return string only. `void` should be represented by actual value.
 export interface QBECompiler {
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env): string | null
+  compileToQBE(
+    ctx: QBEBackend,
+    cell: ASTNode<SExprCell>,
+    env: QBE.Env,
+  ): string | null
 }
 
 export function isQBECompiler(x: any): x is QBECompiler {
@@ -63,7 +69,7 @@ export class BytecodeFnChunk {
     return {
       code: this.code.u8Array,
       constants: this.constants.map((x) => {
-        switch (typeOf(x)) {
+        switch (x.type) {
           case 'bool':
             return [1, x]
           case 'num':

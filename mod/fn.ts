@@ -1,8 +1,14 @@
 import type { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import { Bytecode, QBE } from '@/env'
-import { build, collect, iter, next, type List } from '@/list'
-import type { BytecodeCompiler, QBECompiler, SExpr } from '@/type'
+import {
+  qbeUnit,
+  type ASTNode,
+  type BytecodeCompiler,
+  type QBECompiler,
+  type SExprCell,
+  type SExprSym,
+} from '@/type'
 import type { Module } from '.'
 
 // TODO: support rest parameters
@@ -10,17 +16,16 @@ export class BytecodeFn implements BytecodeCompiler {
   constructor(
     public idx: number,
     public env: Bytecode.Env,
-    public required: Sym[],
+    public required: ASTNode<SExprSym>[],
   ) {
     for (const param of required) {
-      env.defineVar(param.value)
+      env.defineVar(param.expr.value)
     }
   }
 
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
-    const it = iter(exprs)
-    for (const _ of this.required) {
-      ctx.compileExpr(next(it, 'fn') as SExpr, env)
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+    for (let i = 0; i < this.required.length; i++) {
+      ctx.compileExpr(cell.expr.car[i + 1], env)
     }
     ctx.emit(Instruction.Call(this.idx))
   }
@@ -34,35 +39,42 @@ export class QBEFn implements QBECompiler {
   constructor(
     public id: string,
     public env: QBE.Env,
-    private required: Sym[],
-    private rest: Sym | null,
+    private required: ASTNode<SExprSym>[],
+    private rest: ASTNode<SExprSym> | null,
   ) {
     for (const param of required) {
-      env.defineVar(param.value)
+      env.defineVar(param.expr.value)
     }
     if (rest) {
-      env.defineVar(rest.value)
+      env.defineVar(rest.expr.value)
     }
   }
 
   get params() {
     return this.required
       .concat(this.rest ? [this.rest] : [])
-      .map((x) => `l ${this.env.lookup(x.value)}`)
+      .map((x) => `l ${this.env.lookup(x.expr.value)}`)
       .join(', ')
   }
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
-
-    const required = ctx.compileArgs(exprs, env, this.required.length)
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+    const required = ctx.compileArgs(cell, env, this.required.length)
 
     // TODO: redesign
     let rest: string | null = null
     if (this.rest) {
-      rest = (ctx.env.lookup('array') as QBECompiler).compileToQBE(
-        ctx,
-        build(...it),
+      rest = ctx.compileExpr(
+        {
+          expr: {
+            type: 'cell',
+            car: [
+              { expr: { type: 'sym', value: 'array' }, meta: cell.meta },
+              ...cell.expr.car.slice(1 + required.length),
+            ],
+            cdr: null,
+          },
+          meta: cell.meta,
+        },
         env,
       )
     }
@@ -80,86 +92,94 @@ export class QBEFn implements QBECompiler {
 
 // TODO: support optional/default and named parameters
 class Defn implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
-    const it = iter(exprs)
-
-    const id = next(it, 'defn')
-    if (!isSymbol(id)) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+    const id = cell.expr.car[1]
+    if (id.expr.type !== 'sym') {
       throw Error(
-        `evaluating \`defn\`: expecting symbol, found \`${typeOf(id)}\``,
+        `compiling \`defn\`: expecting symbol, found \`${id.expr.type}\``,
       )
     }
 
-    const [required, rest] = collect(iter(next(it, 'defn')))
+    const params = cell.expr.car[2]
+    if (params.expr.type !== 'cell') {
+      throw Error(
+        `compiling \`defn\`: expecting \`cell\`, found \`${params.expr.type}\``,
+      )
+    }
+    const { car, cdr } = params.expr
     // Ensure all required parameters are symbol.
-    Defn.#assertAllSymbols(required)
+    Defn.#assertAllSymbols(car)
     // Ensure the rest parameter is a symbol.
-    if (!isNil(rest) && !isSymbol(rest)) {
+    if (cdr !== null && cdr.expr.type !== 'sym') {
       throw Error(
-        `evaluating \`defn\`: expecting \`symbol\`, found \`${typeOf(rest)}\``,
+        `compiling \`defn\`: expecting \`symbol\`, found \`${cdr.expr.type}\``,
       )
     }
 
-    const fn = new BytecodeFn(ctx.startFn(), new Bytecode.Env(env), required)
-    env.defineVarUnit(id.value, fn)
+    const fn = new BytecodeFn(ctx.startFn(), new Bytecode.Env(env), car)
+    env.defineVarUnit(id.expr.value, fn)
 
     for (const param of fn.required.toReversed()) {
-      ctx.emit(Instruction.Save(fn.env.lookup(param.value) as number))
+      ctx.emit(Instruction.Save(fn.env.lookup(param.expr.value) as number))
     }
-    for (const expr of it) {
-      ctx.compileExpr(expr as SExpr, fn.env)
+    for (const expr of cell.expr.car.slice(3)) {
+      ctx.compileExpr(expr, fn.env)
     }
     ctx.emit(Instruction.Ret)
 
     ctx.endFn(fn.env.localCount)
   }
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
-
-    const id = next(it, 'defn')
-    if (!isSymbol(id)) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+    const id = cell.expr.car[1]
+    if (id.expr.type !== 'sym') {
       throw Error(
-        `evaluating \`defn\`: expecting symbol, found \`${typeOf(id)}\``,
+        `compiling \`defn\`: expecting symbol, found \`${id.expr.type}\``,
       )
     }
 
-    const [required, rest] = collect(iter(next(it, 'defn')))
-    // Ensure all required parameters are symbol.
-    Defn.#assertAllSymbols(required)
-    // Ensure the rest parameter is a symbol.
-    if (!isNil(rest) && !isSymbol(rest)) {
+    const params = cell.expr.car[2]
+    if (params.expr.type !== 'cell') {
       throw Error(
-        `evaluating \`defn\`: expecting \`symbol\`, found \`${typeOf(rest)}\``,
+        `compiling \`defn\`: expecting \`cell\`, found \`${params.expr.type}\``,
+      )
+    }
+    const { car, cdr } = params.expr
+    // Ensure all required parameters are symbol.
+    Defn.#assertAllSymbols(car)
+    // Ensure the rest parameter is a symbol.
+    if (cdr !== null && cdr.expr.type !== 'sym') {
+      throw Error(
+        `compiling \`defn\`: expecting \`symbol\`, found \`${cdr.expr.type}\``,
       )
     }
 
     // TODO: Generate id without defining new Var.
     const fn = new QBEFn(
-      ctx.env.defineVar(id.value),
+      ctx.env.defineVar(id.expr.value),
       new QBE.Env(env),
-      required,
-      rest,
+      car,
+      cdr as ASTNode<SExprSym> | null,
     )
-    env.defineVarUnit(id.value, fn)
+    env.defineVarUnit(id.expr.value, fn)
     ctx.startFn(fn.id, fn.params)
 
     let result: string | null = null
-    for (const expr of it) {
-      result = ctx.compileExpr(expr as SExpr, fn.env)
+    for (const expr of cell.expr.car.slice(3)) {
+      result = ctx.compileExpr(expr, fn.env) ?? result
     }
 
     const { slots } = fn.env
     ctx.emitPrologue(
-      `%frame =l alloc8 ${8 + 8 + 8 * (slots.length + required.length)}`,
+      `%frame =l alloc8 ${8 + 8 + 8 * (slots.length + car.length)}`,
     )
     ctx.emitPrologue(`call $frame_push(l %frame, l ${slots.length})`)
     for (const [i, ptr] of slots.entries()) {
       ctx.emitPrologue(`call $frame_slot_push(l ${i}, l ${ptr})`)
     }
-    for (const [i, param] of required.entries()) {
-      const id = fn.env.lookup(param.value)
-      const slot = fn.env.defineSlot(param.value)
+    for (const [i, param] of car.entries()) {
+      const id = fn.env.lookup(param.expr.value)
+      const slot = fn.env.defineSlot(param.expr.value)
       ctx.emitPrologue(`${slot} =l alloc8 8`)
       ctx.emitPrologue(`storel ${id}, ${slot}`)
       ctx.emitPrologue(
@@ -168,16 +188,15 @@ class Defn implements BytecodeCompiler, QBECompiler {
     }
     ctx.emit('call $frame_pop()')
 
-    ctx.endFn(result ?? ctx.compileExpr(undefined, env)!)
+    ctx.endFn(result ?? qbeUnit)
     return null
   }
 
-  static #assertAllSymbols(xs: Var[]): asserts xs is Sym[] {
-    if (xs.length > 0) {
-      const illegal = xs.find((x) => !isSymbol(x))
-      if (illegal !== undefined) {
+  static #assertAllSymbols(xs: ASTNode[]): asserts xs is ASTNode<SExprSym>[] {
+    for (const x of xs) {
+      if (x.expr.type !== 'sym') {
         throw Error(
-          `evaluating \`defn\`: expecting \`symbol\`, found \`${typeOf(illegal)}\``,
+          `compiling \`defn\`: expecting \`symbol\`, found \`${x.expr.type}\``,
         )
       }
     }

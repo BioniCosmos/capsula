@@ -2,28 +2,31 @@ import { encode } from '@msgpack/msgpack'
 import { $ } from 'bun'
 import { Instruction } from './bytecode'
 import { Bytecode, QBE, type Environment } from './env'
-import { isList, iter, type List } from './list'
-import { car, cdr } from './pair'
 import { parse } from './parser'
-import { isString } from './string'
 import {
   BytecodeFnChunk,
   isBytecodeCompiler,
   isQBECompiler,
+  qbeFalse,
   QBEFnChunk,
+  qbeTrue,
   qbeUnit,
+  type ASTNode,
   type BytecodeCompiler,
   type QBECompiler,
-  type SExpr,
+  type SExprCell,
   type Unit,
 } from './type'
 
 export interface Backend<U extends Unit, Artifact> {
   readonly env: Environment<U>
-  compile(source: SExpr[]): Artifact
+  compile(source: ASTNode[]): Artifact
 }
 
-export class BytecodeBackend implements Backend<BytecodeCompiler, void> {
+export class BytecodeBackend implements Backend<
+  BytecodeCompiler,
+  Promise<void>
+> {
   readonly env = new Bytecode.Env()
   readonly #functions: BytecodeFnChunk[] = []
   readonly #fnStack: number[] = []
@@ -36,11 +39,11 @@ export class BytecodeBackend implements Backend<BytecodeCompiler, void> {
     return this.#fn.code
   }
 
-  async compile(source: SExpr[]) {
+  async compile(source: ASTNode[]) {
     this.startFn()
     const mainEnv = new Bytecode.Env(this.env)
-    for (const expr of source) {
-      this.compileExpr(expr, mainEnv)
+    for (const node of source) {
+      this.compileExpr(node, mainEnv)
     }
     this.endFn(mainEnv.localCount)
 
@@ -50,32 +53,35 @@ export class BytecodeBackend implements Backend<BytecodeCompiler, void> {
     )
   }
 
-  compileExpr(expr: SExpr, env: Bytecode.Env) {
-    if (isNil(expr) || isBoolean(expr) || isNumber(expr) || isString(expr)) {
-      this.emit(Instruction.Push(this.#fn.constants.push(expr) - 1))
-      return
-    }
-    if (isSymbol(expr)) {
-      const value = env.lookup(expr.value)
-      if (typeof value !== 'number') {
-        throw Error('TODO: `BytecodeCompiler.toString()`')
+  compileExpr(node: ASTNode, env: Bytecode.Env) {
+    const { expr } = node
+    switch (expr.type) {
+      case 'bool':
+      case 'num':
+      case 'str':
+        this.emit(Instruction.Push(this.#fn.constants.push(expr) - 1))
+        return
+      case 'sym': {
+        const value = env.lookup(expr.value)
+        if (typeof value !== 'number') {
+          throw Error('TODO: `BytecodeCompiler.toString()`')
+        }
+        this.emit(Instruction.Load(value))
+        return
       }
-      this.emit(Instruction.Load(value))
-      return
-    }
-    if (isList(expr)) {
-      const sym = car(expr)
-      if (!isSymbol(sym)) {
-        throw Error(`compiling: expecting symbol, found \`${typeOf(sym)}\``)
+      case 'cell': {
+        const sym = expr.car[0]
+        if (sym.expr.type !== 'sym') {
+          throw Error(`compiling: expecting symbol, found \`${sym.expr.type}\``)
+        }
+        const compiler = env.lookup(sym.expr.value)
+        if (!isBytecodeCompiler(compiler)) {
+          throw Error('compiling: not callable')
+        }
+        compiler.compile(this, node as ASTNode<SExprCell>, env)
+        return
       }
-      const compiler = env.lookup(sym.value)
-      if (!isBytecodeCompiler(compiler)) {
-        throw Error('compiling: not callable')
-      }
-      compiler.compile(this, cdr(expr), env)
-      return
     }
-    throw Error(`compiling: unexpected \`${expr}\``)
   }
 
   emit(code: Instruction) {
@@ -94,19 +100,19 @@ export class BytecodeBackend implements Backend<BytecodeCompiler, void> {
   }
 }
 
-export class QBEBackend implements Backend<QBECompiler, void> {
+export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
   readonly env = new QBE.Env()
   readonly #chunks: QBEFnChunk[] = []
   readonly #currentFn: number[] = []
   readonly #global = Array.of<string>()
 
-  async compile(source: SExpr[]) {
+  async compile(source: ASTNode[]) {
     this.startFn('$main', '', 'w', true)
     this.emitPrologue(`call $map_init()`)
     const env = new QBE.Env(this.env)
 
-    for (const expr of source) {
-      this.compileExpr(expr, env)
+    for (const node of source) {
+      this.compileExpr(node, env)
     }
 
     const { slots } = env
@@ -122,6 +128,7 @@ export class QBEBackend implements Backend<QBECompiler, void> {
 
     this.endFn('0')
 
+    // TODO: check if global is empty
     const code =
       this.#global.join('\n') +
       '\n\n' +
@@ -138,47 +145,49 @@ export class QBEBackend implements Backend<QBECompiler, void> {
    * - i64 (small): 010
    * - array: 011
    */
-  compileExpr(expr: SExpr, env: QBE.Env) {
-    if (expr === undefined) {
-      return qbeUnit
-    }
-    if (isBoolean(expr)) {
-      return expr ? (0b1001).toString() : (0b0001).toString()
-    }
-    if (isNumber(expr)) {
-      return ((expr << 3) | 0b010).toString()
-    }
-    if (isSymbol(expr)) {
-      const x = env.lookup(expr.value)
-      if (x instanceof QBE.Slot) {
-        const id = env.defineTemp()
-        this.emit(`${id} =l loadl ${x.ptr}`)
-        return id
+  compileExpr(node: ASTNode, env: QBE.Env) {
+    const { expr } = node
+    switch (expr.type) {
+      case 'bool':
+        return expr.value ? qbeTrue : qbeFalse
+      case 'num':
+        return ((expr.value << 3) | 0b010).toString()
+      case 'sym': {
+        const x = env.lookup(expr.value)
+        if (x instanceof QBE.Slot) {
+          const id = env.defineTemp()
+          this.emit(`${id} =l loadl ${x.ptr}`)
+          return id
+        }
+        // TODO: Check type `QBECompiler`. Consider whether to allow shadowing keywords/builtin.
+        return x as string
       }
-      // TODO: Check type `QBECompiler`. Consider whether to allow shadowing keywords/builtin.
-      return x as string
-    }
-    if (isList(expr) && !isNil(expr)) {
-      const sym = car(expr)
-      if (!isSymbol(sym)) {
-        throw Error(`compiling: expecting symbol, found \`${typeOf(sym)}\``)
+      case 'cell': {
+        const sym = expr.car[0]
+        if (sym.expr.type !== 'sym') {
+          throw Error(`compiling: expecting symbol, found \`${sym.expr.type}\``)
+        }
+        const compiler = env.lookup(sym.expr.value)
+        if (!isQBECompiler(compiler)) {
+          throw Error('compiling: not callable')
+        }
+        return compiler.compileToQBE(this, node as ASTNode<SExprCell>, env)
       }
-      const compiler = env.lookup(sym.value)
-      if (!isQBECompiler(compiler)) {
-        throw Error('compiling: not callable')
-      }
-      return compiler.compileToQBE(this, cdr(expr), env)
     }
-    throw Error(`compiling: unexpected \`${expr}\``)
+    throw Error('unreachable')
   }
 
-  compileArgs(exprs: List, env: QBE.Env, expect?: number) {
+  compileArgs(cell: ASTNode, env: QBE.Env, expect?: number) {
+    if (cell.expr.type != 'cell') {
+      throw Error('compileArgs: invalid AST node type')
+    }
+
     const args: string[] = []
     let protectCount = 0
-    for (const expr of iter(exprs)) {
-      const arg = this.compileExpr(expr as SExpr, env) ?? qbeUnit
+    for (const node of cell.expr.car.slice(1)) {
+      const arg = this.compileExpr(node, env) ?? qbeUnit
       args.push(arg)
-      if (isList(expr) && !isNil(expr)) {
+      if (node.expr.type === 'cell' && node.expr.car.length !== 0) {
         this.emit(`call $gc_retain(l ${arg})`)
         protectCount++
       }

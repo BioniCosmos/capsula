@@ -1,65 +1,82 @@
-import { BytecodeBackend, QBEBackend } from '@/backend'
+import { QBEBackend, type BytecodeBackend } from '@/backend'
 import type { Bytecode, QBE } from '@/env'
-import { build, iter, next, type List } from '@/list'
-import { car } from '@/pair'
-import type { BytecodeCompiler, QBECompiler } from '@/type'
+import type { ASTNode, BytecodeCompiler, QBECompiler, SExprCell } from '@/type'
 import type { Module } from '.'
 
 class And implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
-    const it = iter(exprs)
-    ;(ctx.env.lookup('if') as BytecodeCompiler).compile(
-      ctx,
-      build(next(it, 'and'), next(it, 'and'), false),
-      env,
-    )
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+    ctx.compileExpr(And.#if(cell), env)
   }
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
-    return (ctx.env.lookup('if') as QBECompiler).compileToQBE(
-      ctx,
-      build(next(it, 'and'), next(it, 'and'), false),
-      env,
-    )
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+    return ctx.compileExpr(And.#if(cell), env)
+  }
+
+  static #if({ expr, meta }: ASTNode<SExprCell>): ASTNode<SExprCell> {
+    return {
+      expr: {
+        type: 'cell',
+        car: [
+          { expr: { type: 'sym', value: 'if' }, meta: expr.car[0].meta },
+          expr.car[1],
+          expr.car[2],
+          { expr: { type: 'bool', value: false }, meta },
+        ],
+        cdr: null,
+      },
+      meta,
+    }
   }
 }
 
 class Or implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
-    const it = iter(exprs)
-    ;(ctx.env.lookup('if') as BytecodeCompiler).compile(
-      ctx,
-      build(next(it, 'or'), true, next(it, 'or')),
-      env,
-    )
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+    ctx.compileExpr(Or.#if(cell), env)
   }
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const it = iter(exprs)
-    return (ctx.env.lookup('if') as QBECompiler).compileToQBE(
-      ctx,
-      build(next(it, 'or'), true, next(it, 'or')),
-      env,
-    )
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+    return ctx.compileExpr(Or.#if(cell), env)
+  }
+
+  static #if({ expr, meta }: ASTNode<SExprCell>): ASTNode<SExprCell> {
+    return {
+      expr: {
+        type: 'cell',
+        car: [
+          { expr: { type: 'sym', value: 'if' }, meta: expr.car[0].meta },
+          expr.car[1],
+          { expr: { type: 'bool', value: true }, meta },
+          expr.car[2],
+        ],
+        cdr: null,
+      },
+      meta,
+    }
   }
 }
 
 class Not implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
-    ;(ctx.env.lookup('=') as BytecodeCompiler).compile(
-      ctx,
-      build(car(exprs), false),
-      env,
-    )
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+    ctx.compileExpr(Not.#eq(cell), env)
   }
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    return (ctx.env.lookup('=') as QBECompiler).compileToQBE(
-      ctx,
-      build(car(exprs), false),
-      env,
-    )
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+    return ctx.compileExpr(Not.#eq(cell), env)
+  }
+
+  static #eq({ expr, meta }: ASTNode<SExprCell>): ASTNode<SExprCell> {
+    return {
+      expr: {
+        type: 'cell',
+        car: [
+          { expr: { type: 'sym', value: '=' }, meta: expr.car[0].meta },
+          expr.car[1],
+          { expr: { type: 'bool', value: false }, meta },
+        ],
+        cdr: null,
+      },
+      meta,
+    }
   }
 }
 

@@ -1,16 +1,14 @@
 import { QBEBackend, type BytecodeBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { Bytecode, QBE } from '@/env'
-import { iter, type List } from '@/list'
-import { car } from '@/pair'
-import type { BytecodeCompiler, QBECompiler, SExpr } from '@/type'
+import type { ASTNode, BytecodeCompiler, QBECompiler, SExprCell } from '@/type'
 import type { Module } from '.'
 
 class ArrayOf implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
-    const xs = iter(exprs).toArray().toReversed()
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+    const xs = cell.expr.car.slice(1).toReversed()
     for (const x of xs) {
-      ctx.compileExpr(x as SExpr, env)
+      ctx.compileExpr(x, env)
     }
     ctx.emit(Instruction.ArrayNew(xs.length))
   }
@@ -21,8 +19,8 @@ class ArrayOf implements BytecodeCompiler, QBECompiler {
    * - array (managed): 0 | (1 << 63) = 0x8000000000000000
    * - struct (managed): 1 | (1 << 63) = 0x8000000000000001
    */
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const xs = ctx.compileArgs(exprs, env)
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+    const xs = ctx.compileArgs(cell, env)
     const arr = env.defineTemp()
     ctx.emit(`${arr} =l alloc8 ${xs.length * 8}`)
 
@@ -50,13 +48,13 @@ class ArrayOf implements BytecodeCompiler, QBECompiler {
 }
 
 class DebugArray implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, exprs: List, env: Bytecode.Env) {
-    ctx.compileExpr(car(exprs) as SExpr, env)
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+    ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.DebugArray)
   }
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const arr = ctx.unwrapArray(ctx.compileExpr(car(exprs) as SExpr, env)!, env)
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+    const arr = ctx.unwrapArray(ctx.compileExpr(cell.expr.car[1], env)!, env)
 
     const headFormat = ctx.env.defineVar('debug_array_head_format')
     ctx.emitGlobal(`data ${headFormat} = { b "[%lld]: [", b 0 }`)
