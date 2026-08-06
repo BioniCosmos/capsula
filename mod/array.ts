@@ -1,7 +1,13 @@
 import { QBEBackend, type BytecodeBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { Bytecode, QBE } from '@/env'
-import type { ASTNode, BytecodeCompiler, QBECompiler, SExprCell } from '@/type'
+import {
+  qbeUnit,
+  type ASTNode,
+  type BytecodeCompiler,
+  type QBECompiler,
+  type SExprCell,
+} from '@/type'
 import type { Module } from '.'
 
 class ArrayOf implements BytecodeCompiler, QBECompiler {
@@ -54,7 +60,7 @@ class DebugArray implements BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
-    const arr = ctx.unwrapArray(ctx.compileExpr(cell.expr.car[1], env)!, env)
+    const arr = ctx.unwrapArray(ctx.compileExpr(cell.expr.car[1], env), env)
 
     const headFormat = ctx.env.defineVar('debug_array_head_format')
     ctx.emitGlobal(`data ${headFormat} = { b "[%lld]: [", b 0 }`)
@@ -113,7 +119,7 @@ class DebugArray implements BytecodeCompiler, QBECompiler {
     ctx.emit(loopEnd)
     // puts(tail)
     ctx.emit(`call $puts(l ${tail})`)
-    return null
+    return qbeUnit
   }
 }
 

@@ -1,7 +1,13 @@
 import type { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { Bytecode, QBE } from '@/env'
-import type { ASTNode, BytecodeCompiler, QBECompiler, SExprCell } from '@/type'
+import {
+  qbeUnit,
+  type ASTNode,
+  type BytecodeCompiler,
+  type QBECompiler,
+  type SExprCell,
+} from '@/type'
 import type { Module } from '.'
 
 class Struct implements BytecodeCompiler, QBECompiler {
@@ -53,7 +59,7 @@ class Struct implements BytecodeCompiler, QBECompiler {
       env.defineVarUnit(`${id.expr.value}-${field}`, new QBEStructGetter(i))
     }
 
-    return null
+    return qbeUnit
   }
 }
 
@@ -75,7 +81,7 @@ class StructConstructor implements BytecodeCompiler, QBECompiler {
       env,
     )
     // structHeader.type = 1
-    ctx.emit(`storel 1, ${ctx.unwrapArray(structHeader!, env)}`)
+    ctx.emit(`storel 1, ${ctx.unwrapArray(structHeader, env)}`)
     return structHeader
   }
 }
@@ -93,7 +99,7 @@ class QBEStructGetter implements QBECompiler {
   constructor(private offset: number) {}
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
-    const header = ctx.unwrapArray(ctx.compileExpr(cell.expr.car[1], env)!, env)
+    const header = ctx.unwrapArray(ctx.compileExpr(cell.expr.car[1], env), env)
     // TODO: check type
     const p = env.defineTemp()
     // p = header.ptr.*

@@ -164,9 +164,9 @@ class Defn implements BytecodeCompiler, QBECompiler {
     env.defineVarUnit(id.expr.value, fn)
     ctx.startFn(fn.id, fn.params)
 
-    let result: string | null = null
+    let result = qbeUnit
     for (const expr of cell.expr.car.slice(3)) {
-      result = ctx.compileExpr(expr, fn.env) ?? result
+      result = ctx.compileExpr(expr, fn.env)
     }
 
     const { slots } = fn.env
@@ -188,8 +188,8 @@ class Defn implements BytecodeCompiler, QBECompiler {
     }
     ctx.emit('call $frame_pop()')
 
-    ctx.endFn(result ?? qbeUnit)
-    return null
+    ctx.endFn(result)
+    return qbeUnit
   }
 
   static #assertAllSymbols(xs: ASTNode[]): asserts xs is ASTNode<SExprSym>[] {

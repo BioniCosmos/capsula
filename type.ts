@@ -47,13 +47,8 @@ export function isBytecodeCompiler(x: any): x is BytecodeCompiler {
   return typeof x?.compile === 'function'
 }
 
-// TODO: Consider return string only. `void` should be represented by actual value.
 export interface QBECompiler {
-  compileToQBE(
-    ctx: QBEBackend,
-    cell: ASTNode<SExprCell>,
-    env: QBE.Env,
-  ): string | null
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env): string
 }
 
 export function isQBECompiler(x: any): x is QBECompiler {

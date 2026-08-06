@@ -165,7 +165,7 @@ class IsI64 implements BytecodeCompiler, QBECompiler {
       throw Error(`\`i64?\`: expecting 1 argument, found ${args.length}`)
     }
 
-    const x = ctx.compileExpr(args[0], env)!
+    const x = ctx.compileExpr(args[0], env)
     const tag = ctx.tag(x, env)
     const result = env.defineTemp()
     ctx.emit(`${result} =l ceql ${tag}, ${0b010}`)

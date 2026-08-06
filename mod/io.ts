@@ -1,7 +1,13 @@
 import type { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { Bytecode, QBE } from '@/env'
-import type { ASTNode, BytecodeCompiler, QBECompiler, SExprCell } from '@/type'
+import {
+  qbeUnit,
+  type ASTNode,
+  type BytecodeCompiler,
+  type QBECompiler,
+  type SExprCell,
+} from '@/type'
 import type { Module } from '.'
 
 class Print implements BytecodeCompiler, QBECompiler {
@@ -13,7 +19,7 @@ class Print implements BytecodeCompiler, QBECompiler {
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
     const value = ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(`call $print_var(l ${value})`)
-    return null
+    return qbeUnit
   }
 }
 

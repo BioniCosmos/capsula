@@ -87,7 +87,7 @@ class Cond implements BytecodeCompiler, QBECompiler {
 
       const condition = env.defineTemp()
       ctx.emit(
-        `${condition} =l copy ${ctx.compileExpr(clause.expr.car[0], env)!}`,
+        `${condition} =l copy ${ctx.compileExpr(clause.expr.car[0], env)}`,
       )
       // TODO: check type
       ctx.emit(`${condition} =l shr ${condition}, 3`)
@@ -98,7 +98,7 @@ class Cond implements BytecodeCompiler, QBECompiler {
       ctx.emit(
         `${result} =l copy ${clause.expr.car
           .slice(1)
-          .reduce((_, x) => ctx.compileExpr(x, env) ?? qbeUnit, qbeUnit)}`,
+          .reduce((_, x) => ctx.compileExpr(x, env), qbeUnit)}`,
       )
       ctx.emit(`jmp ${end}`)
     }
@@ -165,12 +165,12 @@ class Def implements BytecodeCompiler, QBECompiler {
       )
     }
     // Ensure that values are evaluated first, then assigned.
-    const x = ctx.compileExpr(cell.expr.car[2], env)!
+    const x = ctx.compileExpr(cell.expr.car[2], env)
     const slot = env.defineSlot(id.expr.value)
     ctx.emitPrologue(`${slot} =l alloc8 8`)
     ctx.emitPrologue(`storel ${qbeUnit}, ${slot}`)
     ctx.emit(`storel ${x}, ${slot}`)
-    return null
+    return qbeUnit
   }
 }
 
@@ -191,13 +191,13 @@ class Loop implements BytecodeCompiler, QBECompiler {
     }
     ctx.emit(`jmp ${loop}`)
     ctx.emit(env.defineBlock())
-    return null
+    return qbeUnit
   }
 }
 
 class SizeOf implements QBECompiler {
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
-    const x = ctx.compileExpr(cell.expr.car[1], env)!
+    const x = ctx.compileExpr(cell.expr.car[1], env)
 
     const tag = env.defineVar('tag')
     ctx.emit(`${tag} =l copy ${ctx.tag(x, env)}`)

@@ -185,7 +185,7 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
     const args: string[] = []
     let protectCount = 0
     for (const node of cell.expr.car.slice(1)) {
-      const arg = this.compileExpr(node, env) ?? qbeUnit
+      const arg = this.compileExpr(node, env)
       args.push(arg)
       if (node.expr.type === 'cell' && node.expr.car.length !== 0) {
         this.emit(`call $gc_retain(l ${arg})`)
@@ -227,7 +227,7 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
     const exprs = parse(s)
     let result = qbeUnit
     for (const expr of exprs) {
-      result = this.compileExpr(expr, env) ?? qbeUnit
+      result = this.compileExpr(expr, env)
     }
     return result
   }

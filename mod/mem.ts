@@ -39,7 +39,7 @@ class Alloc implements QBECompiler {
           ctx,
           cell,
           env,
-        )!,
+        ),
         env,
       )}, 8`,
     )
@@ -62,7 +62,7 @@ class Alloc implements QBECompiler {
 
 class Free implements QBECompiler {
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
-    const x = ctx.compileExpr(cell.expr.car[1], env)!
+    const x = ctx.compileExpr(cell.expr.car[1], env)
 
     const isArray = env.defineTemp()
     ctx.emit(`${isArray} =l ceql ${ctx.tag(x, env)}, ${0b011}`)
@@ -84,7 +84,7 @@ class Free implements QBECompiler {
     ctx.emit(`jmp ${end}`)
 
     ctx.emit(end)
-    return null
+    return qbeUnit
   }
 }
 
