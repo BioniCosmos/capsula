@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define CAPSULA_IMPLEMENTATION
 #include "type.h"
 
 typedef struct {

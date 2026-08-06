@@ -1,26 +1,18 @@
-import type { QBEBackend, TreeWalkBackend } from '@/backend'
-import type { QBE, TreeWalk } from '@/env'
-import type { List } from '@/list'
-import { car } from '@/pair'
-import type { QBECompiler, SExpr, TreeWalkEvaluator } from '@/type'
+import type { BytecodeBackend, QBEBackend } from '@/backend'
+import { Instruction } from '@/bytecode'
+import type { Bytecode, QBE } from '@/env'
+import type { ASTNode, BytecodeCompiler, QBECompiler, SExprCell } from '@/type'
 import type { Module } from '.'
 
-class Print implements TreeWalkEvaluator, QBECompiler {
-  async eval(ctx: TreeWalkBackend, exprs: List, env: TreeWalk.Env) {
-    const value = (await ctx.evaluate(car(exprs) as SExpr, env)) as number
-    await Bun.write(Bun.stdout, value.toString())
+class Print implements BytecodeCompiler, QBECompiler {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+    ctx.compileExpr(cell.expr.car[1], env)
+    ctx.emit(Instruction.Print)
   }
 
-  compileToQBE(ctx: QBEBackend, exprs: List, env: QBE.Env) {
-    const value = ctx.compileExpr(car(exprs) as SExpr, env)
-    let i64Format: string
-    if (ctx.env.has('i64_format')) {
-      i64Format = ctx.env.lookup('i64_format') as string
-    } else {
-      i64Format = ctx.env.defineVar('i64_format')
-      ctx.emitGlobal(`data ${i64Format} = { b "%lld", b 0 }`)
-    }
-    ctx.emit(`call $printf(l ${i64Format}, ..., l ${value})`)
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+    const value = ctx.compileExpr(cell.expr.car[1], env)
+    ctx.emit(`call $print_var(l ${value})`)
     return null
   }
 }

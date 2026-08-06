@@ -9,6 +9,8 @@ typedef struct {
     const uint64_t* const ptr;
 } ArrayHeader;
 
+void print_var(const uint64_t x);
+
 static inline int64_t tag(const uint64_t x) {
     return x & 0b111;
 }
@@ -17,7 +19,9 @@ static inline bool array_is_managed(const ArrayHeader* const arr) {
     return arr->type >> 63 == 1;
 }
 
-static inline void print_var(const uint64_t x) {
+#ifdef CAPSULA_IMPLEMENTATION
+
+void print_var(const uint64_t x) {
     switch (tag(x)) {
         case 0b000:
             printf("box { ptr = %#llx, value = ", x);
@@ -47,3 +51,5 @@ static inline void print_var(const uint64_t x) {
             printf("%llu", x);
     }
 }
+
+#endif
