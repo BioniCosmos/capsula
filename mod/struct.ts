@@ -1,6 +1,6 @@
 import type { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
-import type { Bytecode, QBE } from '@/env'
+import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
   qbeUnit,
   type ASTNode,
@@ -11,7 +11,7 @@ import {
 import type { Module } from '.'
 
 class Struct implements BytecodeCompiler, QBECompiler {
-  compile(_ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(_ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const id = cell.expr.car[1]
     if (id.expr.type !== 'sym') {
       throw Error(
@@ -37,7 +37,7 @@ class Struct implements BytecodeCompiler, QBECompiler {
     }
   }
 
-  compileToQBE(_ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(_ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const id = cell.expr.car[1]
     if (id.expr.type !== 'sym') {
       throw Error(
@@ -66,7 +66,7 @@ class Struct implements BytecodeCompiler, QBECompiler {
 class StructConstructor implements BytecodeCompiler, QBECompiler {
   constructor(private fields: string[]) {}
 
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     // TODO: check argument count
     for (const expr of cell.expr.car.slice(1).toReversed()) {
       ctx.compileExpr(expr, env)
@@ -74,7 +74,7 @@ class StructConstructor implements BytecodeCompiler, QBECompiler {
     ctx.emit(Instruction.ArrayNew(this.fields.length))
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const structHeader = (ctx.env.lookup('array') as QBECompiler).compileToQBE(
       ctx,
       cell,
@@ -89,7 +89,7 @@ class StructConstructor implements BytecodeCompiler, QBECompiler {
 class BytecodeStructGetter implements BytecodeCompiler {
   constructor(private offset: number) {}
 
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.ArrayGet(this.offset))
   }
@@ -98,7 +98,7 @@ class BytecodeStructGetter implements BytecodeCompiler {
 class QBEStructGetter implements QBECompiler {
   constructor(private offset: number) {}
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const header = ctx.unwrapArray(ctx.compileExpr(cell.expr.car[1], env), env)
     // TODO: check type
     const p = env.defineTemp()

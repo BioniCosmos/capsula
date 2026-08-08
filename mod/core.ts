@@ -1,6 +1,6 @@
 import type { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction, Label } from '@/bytecode'
-import type { Bytecode, QBE } from '@/env'
+import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
   qbeUnit,
   type ASTNode,
@@ -11,13 +11,13 @@ import {
 import type { Module } from '.'
 
 class Eq implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.emit(Instruction.Eq)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
     const result = env.defineTemp()
     ctx.emit(`${result} =l ceql ${lhs}, ${rhs}`)
@@ -28,7 +28,7 @@ class Eq implements BytecodeCompiler, QBECompiler {
 // TODO: support `else`
 // TODO: Consider returning other type when all clauses are false.
 class Cond implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const end = new Label()
 
     let nextClause = new Label()
@@ -67,7 +67,7 @@ class Cond implements BytecodeCompiler, QBECompiler {
     end.fillOffset(ctx.code.len)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const result = env.defineTemp()
     ctx.emit(`${result} =l copy ${qbeUnit}`)
 
@@ -111,11 +111,11 @@ class Cond implements BytecodeCompiler, QBECompiler {
 }
 
 class If implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(If.#cond(cell), env)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     return ctx.compileExpr(If.#cond(cell), env)
   }
 
@@ -146,7 +146,7 @@ class If implements BytecodeCompiler, QBECompiler {
 }
 
 class Def implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const id = cell.expr.car[1]
     if (id.expr.type !== 'sym') {
       throw Error(
@@ -157,7 +157,7 @@ class Def implements BytecodeCompiler, QBECompiler {
     ctx.emit(Instruction.Save(env.defineVar(id.expr.value)))
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const id = cell.expr.car[1]
     if (id.expr.type !== 'sym') {
       throw Error(
@@ -175,7 +175,7 @@ class Def implements BytecodeCompiler, QBECompiler {
 }
 
 class Loop implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const start = ctx.code.len
     for (const expr of cell.expr.car.slice(1)) {
       ctx.compileExpr(expr, env)
@@ -183,7 +183,7 @@ class Loop implements BytecodeCompiler, QBECompiler {
     ctx.emit(Instruction.Jump(start - ctx.code.len))
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const loop = env.defineBlock()
     ctx.emit(loop)
     for (const expr of cell.expr.car.slice(1)) {
@@ -196,7 +196,7 @@ class Loop implements BytecodeCompiler, QBECompiler {
 }
 
 class SizeOf implements QBECompiler {
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const x = ctx.compileExpr(cell.expr.car[1], env)
 
     const tag = env.defineVar('tag')
@@ -215,7 +215,7 @@ class SizeOf implements QBECompiler {
 }
 
 class Call implements QBECompiler {
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const id = cell.expr.car[1]
     if (id.expr.type !== 'sym') {
       throw Error(

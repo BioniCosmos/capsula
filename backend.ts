@@ -1,7 +1,7 @@
 import { encode } from '@msgpack/msgpack'
 import { $ } from 'bun'
 import { Instruction } from './bytecode'
-import { Bytecode, QBE, type Environment } from './env'
+import { BytecodeEnv, QBEEnv, Slot, type Environment } from './env'
 import { parse } from './parser'
 import {
   BytecodeFnChunk,
@@ -27,7 +27,7 @@ export class BytecodeBackend implements Backend<
   BytecodeCompiler,
   Promise<void>
 > {
-  readonly env = new Bytecode.Env()
+  readonly env = new BytecodeEnv()
   readonly #functions: BytecodeFnChunk[] = []
   readonly #fnStack: number[] = []
 
@@ -41,7 +41,7 @@ export class BytecodeBackend implements Backend<
 
   async compile(source: ASTNode[]) {
     this.startFn()
-    const mainEnv = new Bytecode.Env(this.env)
+    const mainEnv = new BytecodeEnv(this.env)
     for (const node of source) {
       this.compileExpr(node, mainEnv)
     }
@@ -53,7 +53,7 @@ export class BytecodeBackend implements Backend<
     )
   }
 
-  compileExpr(node: ASTNode, env: Bytecode.Env) {
+  compileExpr(node: ASTNode, env: BytecodeEnv) {
     const { expr } = node
     switch (expr.type) {
       case 'bool':
@@ -101,7 +101,7 @@ export class BytecodeBackend implements Backend<
 }
 
 export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
-  readonly env = new QBE.Env()
+  readonly env = new QBEEnv()
   readonly #chunks: QBEFnChunk[] = []
   readonly #currentFn: number[] = []
   readonly #global = Array.of<string>()
@@ -109,7 +109,7 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
   async compile(source: ASTNode[]) {
     this.startFn('$main', '', 'w', true)
     this.emitPrologue(`call $map_init()`)
-    const env = new QBE.Env(this.env)
+    const env = new QBEEnv(this.env)
 
     for (const node of source) {
       this.compileExpr(node, env)
@@ -145,7 +145,7 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
    * - i64 (small): 010
    * - array: 011
    */
-  compileExpr(node: ASTNode, env: QBE.Env) {
+  compileExpr(node: ASTNode, env: QBEEnv) {
     const { expr } = node
     switch (expr.type) {
       case 'bool':
@@ -154,7 +154,7 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
         return ((expr.value << 3) | 0b010).toString()
       case 'sym': {
         const x = env.lookup(expr.value)
-        if (x instanceof QBE.Slot) {
+        if (x instanceof Slot) {
           const id = env.defineTemp()
           this.emit(`${id} =l loadl ${x.ptr}`)
           return id
@@ -177,7 +177,7 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
     throw Error('unreachable')
   }
 
-  compileArgs(cell: ASTNode, env: QBE.Env, expect?: number) {
+  compileArgs(cell: ASTNode, env: QBEEnv, expect?: number) {
     if (cell.expr.type != 'cell') {
       throw Error('compileArgs: invalid AST node type')
     }
@@ -223,7 +223,7 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
     this.#global.push(code)
   }
 
-  capl(s: string, env: QBE.Env) {
+  capl(s: string, env: QBEEnv) {
     const exprs = parse(s)
     let result = qbeUnit
     for (const expr of exprs) {

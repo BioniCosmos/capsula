@@ -1,6 +1,6 @@
 import { QBEBackend, type BytecodeBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
-import type { Bytecode, QBE } from '@/env'
+import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
   qbeUnit,
   type ASTNode,
@@ -11,7 +11,7 @@ import {
 import type { Module } from '.'
 
 class ArrayOf implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const xs = cell.expr.car.slice(1).toReversed()
     for (const x of xs) {
       ctx.compileExpr(x, env)
@@ -25,7 +25,7 @@ class ArrayOf implements BytecodeCompiler, QBECompiler {
    * - array (managed): 0 | (1 << 63) = 0x8000000000000000
    * - struct (managed): 1 | (1 << 63) = 0x8000000000000001
    */
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const xs = ctx.compileArgs(cell, env)
     const arr = env.defineTemp()
     ctx.emit(`${arr} =l alloc8 ${xs.length * 8}`)
@@ -54,12 +54,12 @@ class ArrayOf implements BytecodeCompiler, QBECompiler {
 }
 
 class DebugArray implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.DebugArray)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const arr = ctx.unwrapArray(ctx.compileExpr(cell.expr.car[1], env), env)
 
     const headFormat = ctx.env.defineVar('debug_array_head_format')
@@ -132,8 +132,8 @@ export default {
 
 declare module '@/backend' {
   interface QBEBackend {
-    wrapArray(x: string, env: QBE.Env): string
-    unwrapArray(x: string, env: QBE.Env): string
+    wrapArray(x: string, env: QBEEnv): string
+    unwrapArray(x: string, env: QBEEnv): string
   }
 }
 

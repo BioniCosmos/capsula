@@ -1,10 +1,10 @@
 import type { QBEBackend } from '@/backend'
-import type { QBE } from '@/env'
+import type { QBEEnv } from '@/env'
 import { qbeUnit, type ASTNode, type QBECompiler, type SExprCell } from '@/type'
 import type { Module } from '.'
 
 class Alloc implements QBECompiler {
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const x = ctx.compileExpr(cell.expr.car[1], env)!
     ctx.emit(`call $gc_retain(l ${x})`)
 
@@ -35,11 +35,7 @@ class Alloc implements QBECompiler {
     const dataSize = env.defineTemp()
     ctx.emit(
       `${dataSize} =l mul ${ctx.unwrapI64(
-        (ctx.env.lookup('size-of') as QBECompiler).compileToQBE(
-          ctx,
-          cell,
-          env,
-        ),
+        (ctx.env.lookup('size-of') as QBECompiler).compileToQBE(ctx, cell, env),
         env,
       )}, 8`,
     )
@@ -61,7 +57,7 @@ class Alloc implements QBECompiler {
 }
 
 class Free implements QBECompiler {
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const x = ctx.compileExpr(cell.expr.car[1], env)
 
     const isArray = env.defineTemp()

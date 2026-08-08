@@ -1,6 +1,6 @@
 import type { BytecodeBackend, QBEBackend } from './backend'
 import { CodeBuffer } from './bytecode'
-import type { Bytecode, QBE } from './env'
+import type { BytecodeEnv, QBEEnv } from './env'
 
 export type SExprBool = { type: 'bool'; value: boolean }
 export type SExprNum = { type: 'num'; value: number }
@@ -39,7 +39,7 @@ export interface BytecodeCompiler {
   compile(
     ctx: BytecodeBackend,
     cell: ASTNode<SExprCell>,
-    env: Bytecode.Env,
+    env: BytecodeEnv,
   ): void
 }
 
@@ -48,7 +48,7 @@ export function isBytecodeCompiler(x: any): x is BytecodeCompiler {
 }
 
 export interface QBECompiler {
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env): string
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv): string
 }
 
 export function isQBECompiler(x: any): x is QBECompiler {

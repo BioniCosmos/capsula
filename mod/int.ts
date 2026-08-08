@@ -1,17 +1,17 @@
 import { QBEBackend, type BytecodeBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
-import type { Bytecode, QBE } from '@/env'
+import type { BytecodeEnv, QBEEnv } from '@/env'
 import type { ASTNode, BytecodeCompiler, QBECompiler, SExprCell } from '@/type'
 import type { Module } from '.'
 
 class Add implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.Add)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
     const result = env.defineTemp()
     ctx.emit(
@@ -22,13 +22,13 @@ class Add implements BytecodeCompiler, QBECompiler {
 }
 
 class Sub implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.Sub)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
     const result = env.defineTemp()
     ctx.emit(
@@ -39,13 +39,13 @@ class Sub implements BytecodeCompiler, QBECompiler {
 }
 
 class Mul implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.Mul)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
     const result = env.defineTemp()
     ctx.emit(
@@ -56,13 +56,13 @@ class Mul implements BytecodeCompiler, QBECompiler {
 }
 
 class Div implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.Div)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
     const result = env.defineTemp()
     ctx.emit(
@@ -73,13 +73,13 @@ class Div implements BytecodeCompiler, QBECompiler {
 }
 
 class Rem implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.Rem)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
     const result = env.defineTemp()
     ctx.emit(
@@ -90,13 +90,13 @@ class Rem implements BytecodeCompiler, QBECompiler {
 }
 
 class Lt implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.Lt)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
     const result = env.defineTemp()
     ctx.emit(`${result} =l csltl ${lhs}, ${rhs}`)
@@ -105,13 +105,13 @@ class Lt implements BytecodeCompiler, QBECompiler {
 }
 
 class Gt implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.Gt)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
     const result = env.defineTemp()
     ctx.emit(`${result} =l csgtl ${lhs}, ${rhs}`)
@@ -120,13 +120,13 @@ class Gt implements BytecodeCompiler, QBECompiler {
 }
 
 class Le implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.Le)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
     const result = env.defineTemp()
     ctx.emit(`${result} =l cslel ${lhs}, ${rhs}`)
@@ -135,13 +135,13 @@ class Le implements BytecodeCompiler, QBECompiler {
 }
 
 class Ge implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.Ge)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
     const result = env.defineTemp()
     ctx.emit(`${result} =l csgel ${lhs}, ${rhs}`)
@@ -150,7 +150,7 @@ class Ge implements BytecodeCompiler, QBECompiler {
 }
 
 class IsI64 implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const args = cell.expr.car.slice(1)
     if (args.length !== 1) {
       throw Error(`\`i64?\`: expecting 1 argument, found ${args.length}`)
@@ -159,7 +159,7 @@ class IsI64 implements BytecodeCompiler, QBECompiler {
     ctx.emit(Instruction.IsI64)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const args = cell.expr.car.slice(1)
     if (args.length !== 1) {
       throw Error(`\`i64?\`: expecting 1 argument, found ${args.length}`)
@@ -193,8 +193,8 @@ export default {
 
 declare module '@/backend' {
   interface QBEBackend {
-    wrapI64(x: string, env: QBE.Env): string
-    unwrapI64(x: string, env: QBE.Env): string
+    wrapI64(x: string, env: QBEEnv): string
+    unwrapI64(x: string, env: QBEEnv): string
   }
 }
 

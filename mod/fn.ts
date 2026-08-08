@@ -1,6 +1,6 @@
 import type { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
-import { Bytecode, QBE } from '@/env'
+import { BytecodeEnv, QBEEnv } from '@/env'
 import {
   qbeUnit,
   type ASTNode,
@@ -15,7 +15,7 @@ import type { Module } from '.'
 export class BytecodeFn implements BytecodeCompiler {
   constructor(
     public idx: number,
-    public env: Bytecode.Env,
+    public env: BytecodeEnv,
     public required: ASTNode<SExprSym>[],
   ) {
     for (const param of required) {
@@ -23,7 +23,7 @@ export class BytecodeFn implements BytecodeCompiler {
     }
   }
 
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     for (let i = 0; i < this.required.length; i++) {
       ctx.compileExpr(cell.expr.car[i + 1], env)
     }
@@ -38,7 +38,7 @@ export class BytecodeFn implements BytecodeCompiler {
 export class QBEFn implements QBECompiler {
   constructor(
     public id: string,
-    public env: QBE.Env,
+    public env: QBEEnv,
     private required: ASTNode<SExprSym>[],
     private rest: ASTNode<SExprSym> | null,
   ) {
@@ -57,7 +57,7 @@ export class QBEFn implements QBECompiler {
       .join(', ')
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const required = ctx.compileArgs(cell, env, this.required.length)
 
     // TODO: redesign
@@ -92,7 +92,7 @@ export class QBEFn implements QBECompiler {
 
 // TODO: support optional/default and named parameters
 class Defn implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const id = cell.expr.car[1]
     if (id.expr.type !== 'sym') {
       throw Error(
@@ -116,7 +116,7 @@ class Defn implements BytecodeCompiler, QBECompiler {
       )
     }
 
-    const fn = new BytecodeFn(ctx.startFn(), new Bytecode.Env(env), car)
+    const fn = new BytecodeFn(ctx.startFn(), new BytecodeEnv(env), car)
     env.defineVarUnit(id.expr.value, fn)
 
     for (const param of fn.required.toReversed()) {
@@ -130,7 +130,7 @@ class Defn implements BytecodeCompiler, QBECompiler {
     ctx.endFn(fn.env.localCount)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const id = cell.expr.car[1]
     if (id.expr.type !== 'sym') {
       throw Error(
@@ -157,7 +157,7 @@ class Defn implements BytecodeCompiler, QBECompiler {
     // TODO: Generate id without defining new Var.
     const fn = new QBEFn(
       ctx.env.defineVar(id.expr.value),
-      new QBE.Env(env),
+      new QBEEnv(env),
       car,
       cdr as ASTNode<SExprSym> | null,
     )

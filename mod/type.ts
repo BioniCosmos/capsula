@@ -1,5 +1,5 @@
 import { QBEBackend } from '@/backend'
-import type { QBE } from '@/env'
+import type { QBEEnv } from '@/env'
 import type { Module } from '.'
 
 export default {
@@ -11,7 +11,7 @@ export default {
 
 declare module '@/backend' {
   interface QBEBackend {
-    tag(x: string, env: QBE.Env): string
+    tag(x: string, env: QBEEnv): string
   }
 }
 

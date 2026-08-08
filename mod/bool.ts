@@ -1,14 +1,14 @@
 import { QBEBackend, type BytecodeBackend } from '@/backend'
-import type { Bytecode, QBE } from '@/env'
+import type { BytecodeEnv, QBEEnv } from '@/env'
 import type { ASTNode, BytecodeCompiler, QBECompiler, SExprCell } from '@/type'
 import type { Module } from '.'
 
 class And implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(And.#if(cell), env)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     return ctx.compileExpr(And.#if(cell), env)
   }
 
@@ -30,11 +30,11 @@ class And implements BytecodeCompiler, QBECompiler {
 }
 
 class Or implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(Or.#if(cell), env)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     return ctx.compileExpr(Or.#if(cell), env)
   }
 
@@ -56,11 +56,11 @@ class Or implements BytecodeCompiler, QBECompiler {
 }
 
 class Not implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: Bytecode.Env) {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(Not.#eq(cell), env)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBE.Env) {
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     return ctx.compileExpr(Not.#eq(cell), env)
   }
 
@@ -89,7 +89,7 @@ export default {
 
 declare module '@/backend' {
   interface QBEBackend {
-    wrapBool(x: string, env: QBE.Env): string
+    wrapBool(x: string, env: QBEEnv): string
   }
 }
 
