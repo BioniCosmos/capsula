@@ -231,4 +231,10 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
     }
     return result
   }
+
+  defineTemp(expr: string, env: QBEEnv) {
+    const x = env.defineTemp()
+    this.emit(`${x} =l ${expr}`)
+    return x
+  }
 }
