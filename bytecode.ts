@@ -22,7 +22,6 @@ export const Instruction = {
   ArrayGet: (addr: number) => ({ type: 'ArrayGet', addr }) as const,
   ArraySet: (addr: number) => ({ type: 'ArraySet', addr }) as const,
   ArrayLen: { type: 'ArrayLen' },
-  DebugArray: { type: 'DebugArray' },
 } as const
 
 type GetValueOrReturnValue<T> = T extends (...args: any[]) => infer R ? R : T

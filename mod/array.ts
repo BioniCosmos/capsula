@@ -1,13 +1,7 @@
 import { QBEBackend, type BytecodeBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { BytecodeEnv, QBEEnv } from '@/env'
-import {
-  qbeUnit,
-  type ASTNode,
-  type BytecodeCompiler,
-  type QBECompiler,
-  type SExprCell,
-} from '@/type'
+import type { ASTNode, BytecodeCompiler, QBECompiler, SExprCell } from '@/type'
 import type { Module } from '.'
 
 class ArrayOf implements BytecodeCompiler, QBECompiler {
@@ -53,80 +47,10 @@ class ArrayOf implements BytecodeCompiler, QBECompiler {
   }
 }
 
-class DebugArray implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    ctx.compileExpr(cell.expr.car[1], env)
-    ctx.emit(Instruction.DebugArray)
-  }
-
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const arr = ctx.unwrapArray(ctx.compileExpr(cell.expr.car[1], env), env)
-
-    const headFormat = ctx.env.defineVar('debug_array_head_format')
-    ctx.emitGlobal(`data ${headFormat} = { b "[%lld]: [", b 0 }`)
-    const firstFormat = ctx.env.defineVar('debug_array_first_format')
-    ctx.emitGlobal(`data ${firstFormat} = { b "%lld", b 0 }`)
-    const elementFormat = ctx.env.defineVar('debug_array_element_format')
-    ctx.emitGlobal(`data ${elementFormat} = { b " %lld", b 0 }`)
-    const tail = ctx.env.defineVar('debug_array_tail')
-    ctx.emitGlobal(`data ${tail} = { b "]", b 0 }`)
-
-    // let len = arr.len
-    const p = env.defineTemp()
-    ctx.emit(`${p} =l add ${arr}, 8`)
-    const len = env.defineTemp()
-    ctx.emit(`${len} =l loadl ${p}`)
-
-    // printf(head_format, len)
-    ctx.emit(`call $printf(l ${headFormat}, ..., l ${len})`)
-
-    // let ptr = arr.ptr
-    ctx.emit(`${p} =l add ${arr}, 16`)
-    const ptr = env.defineTemp()
-    ctx.emit(`${ptr} =l loadl ${p}`)
-
-    // printf(first_format, ptr[0])
-    const x = env.defineTemp()
-    ctx.emit(`${x} =l loadl ${ptr}`)
-    ctx.emit(`call $printf(l ${firstFormat}, ..., l ${ctx.unwrapI64(x, env)})`)
-
-    // for
-    const loopTest = env.defineBlock()
-    const loopBody = env.defineBlock()
-    const loopEnd = env.defineBlock()
-    // let i = 1
-    const i = env.defineTemp()
-    ctx.emit(`${i} =l copy 1`)
-    // i < len
-    ctx.emit(loopTest)
-    const hasNext = env.defineTemp()
-    ctx.emit(`${hasNext} =l csltl ${i}, ${len}`)
-    ctx.emit(`jnz ${hasNext}, ${loopBody}, ${loopEnd}`)
-
-    ctx.emit(loopBody)
-    // printf(element_format, ptr[i])
-    ctx.emit(`${p} =l mul ${i}, 8`)
-    ctx.emit(`${p} =l add ${ptr}, ${p}`)
-    ctx.emit(`${x} =l loadl ${p}`)
-    ctx.emit(
-      `call $printf(l ${elementFormat}, ..., l ${ctx.unwrapI64(x, env)})`,
-    )
-
-    // i++
-    ctx.emit(`${i} =l add ${i}, 1`)
-    ctx.emit(`jmp ${loopTest}`)
-
-    ctx.emit(loopEnd)
-    // puts(tail)
-    ctx.emit(`call $puts(l ${tail})`)
-    return qbeUnit
-  }
-}
-
 export default {
   name: 'array',
   dependencies: [],
-  units: { array: ArrayOf, 'debug-array': DebugArray },
+  units: { array: ArrayOf },
   prelude: '',
 } satisfies Module
 

@@ -108,7 +108,6 @@ pub const Instruction = enum(u8) {
     array_get,
     array_set,
     array_len,
-    debug_array,
 };
 
 const Error = error{MaxVariableNumberExceeded} || mem.Allocator.Error || Io.Writer.Error;
@@ -249,16 +248,6 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
             .array_get => try self.pushToList(self.pop().array[self.read(u16, func.code)], &self.stack),
             .array_set => debug.panic("TODO", .{}),
             .array_len => debug.panic("TODO", .{}),
-            .debug_array => {
-                self.stdout.print("{f}\n", .{self.pop()}) catch |err| {
-                    self.err = fmt.bufPrint(&self.err_buf, "failed to print", .{}) catch unreachable;
-                    return err;
-                };
-                self.stdout.flush() catch |err| {
-                    self.err = fmt.bufPrint(&self.err_buf, "failed to flush", .{}) catch unreachable;
-                    return err;
-                };
-            },
         }
     }
 
