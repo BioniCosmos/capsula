@@ -44,7 +44,12 @@ void print_var(const uint64_t x) {
             if (array_is_managed(arr)) {
                 printf(" (managed)");
             }
-            printf(", len = %llu, ptr = %p }", arr->len, (void*)arr->ptr);
+            printf(", len = %llu, value = [ ", arr->len);
+            for (size_t i = 0; i < arr->len; i++) {
+                print_var(arr->ptr[i]);
+                printf(" ");
+            }
+            printf("] }");
             break;
         }
         default:
