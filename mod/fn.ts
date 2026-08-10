@@ -2,7 +2,7 @@ import type { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import { BytecodeEnv, QBEEnv } from '@/env'
 import {
-  qbeUnit,
+  qbeConst,
   type ASTNode,
   type BytecodeCompiler,
   type QBECompiler,
@@ -164,7 +164,7 @@ class Defn implements BytecodeCompiler, QBECompiler {
     env.defineVarUnit(id.expr.value, fn)
     ctx.startFn(fn.id, fn.params)
 
-    let result = qbeUnit
+    let result = qbeConst.Unit
     for (const expr of cell.expr.car.slice(3)) {
       result = ctx.compileExpr(expr, fn.env)
     }
@@ -189,7 +189,7 @@ class Defn implements BytecodeCompiler, QBECompiler {
     ctx.emit('call $frame_pop()')
 
     ctx.endFn(result)
-    return qbeUnit
+    return qbeConst.Unit
   }
 
   static #assertAllSymbols(xs: ASTNode[]): asserts xs is ASTNode<SExprSym>[] {

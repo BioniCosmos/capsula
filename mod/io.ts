@@ -2,7 +2,7 @@ import type { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
-  qbeUnit,
+  qbeConst,
   type ASTNode,
   type BytecodeCompiler,
   type QBECompiler,
@@ -19,7 +19,7 @@ class Print implements BytecodeCompiler, QBECompiler {
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const value = ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(`call $print_var(l ${value})`)
-    return qbeUnit
+    return qbeConst.Unit
   }
 }
 

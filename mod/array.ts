@@ -1,7 +1,13 @@
 import { QBEBackend, type BytecodeBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { BytecodeEnv, QBEEnv } from '@/env'
-import type { ASTNode, BytecodeCompiler, QBECompiler, SExprCell } from '@/type'
+import {
+  qbeConst,
+  type ASTNode,
+  type BytecodeCompiler,
+  type QBECompiler,
+  type SExprCell,
+} from '@/type'
 import type { Module } from '.'
 
 class ArrayOf implements BytecodeCompiler, QBECompiler {
@@ -63,7 +69,7 @@ declare module '@/backend' {
 
 QBEBackend.prototype.wrapArray = function (x, env) {
   const result = env.defineTemp()
-  this.emit(`${result} =l or ${x}, ${0b011}`)
+  this.emit(`${result} =l or ${x}, ${qbeConst.array}`)
   return result
 }
 

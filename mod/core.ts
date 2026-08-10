@@ -2,7 +2,7 @@ import type { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction, Label } from '@/bytecode'
 import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
-  qbeUnit,
+  qbeConst,
   type ASTNode,
   type BytecodeCompiler,
   type QBECompiler,
@@ -69,7 +69,7 @@ class Cond implements BytecodeCompiler, QBECompiler {
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const result = env.defineTemp()
-    ctx.emit(`${result} =l copy ${qbeUnit}`)
+    ctx.emit(`${result} =l copy ${qbeConst.unit}`)
 
     const end = env.defineBlock()
 
@@ -98,7 +98,7 @@ class Cond implements BytecodeCompiler, QBECompiler {
       ctx.emit(
         `${result} =l copy ${clause.expr.car
           .slice(1)
-          .reduce((_, x) => ctx.compileExpr(x, env), qbeUnit)}`,
+          .reduce((_, x) => ctx.compileExpr(x, env), qbeConst.Unit)}`,
       )
       ctx.emit(`jmp ${end}`)
     }
@@ -168,9 +168,9 @@ class Def implements BytecodeCompiler, QBECompiler {
     const x = ctx.compileExpr(cell.expr.car[2], env)
     const slot = env.defineSlot(id.expr.value)
     ctx.emitPrologue(`${slot} =l alloc8 8`)
-    ctx.emitPrologue(`storel ${qbeUnit}, ${slot}`)
+    ctx.emitPrologue(`storel ${qbeConst.unit}, ${slot}`)
     ctx.emit(`storel ${x}, ${slot}`)
-    return qbeUnit
+    return qbeConst.Unit
   }
 }
 
@@ -191,7 +191,7 @@ class Loop implements BytecodeCompiler, QBECompiler {
     }
     ctx.emit(`jmp ${loop}`)
     ctx.emit(env.defineBlock())
-    return qbeUnit
+    return qbeConst.Unit
   }
 }
 

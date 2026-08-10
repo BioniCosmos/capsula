@@ -11,9 +11,23 @@ export type SExpr = SExprBool | SExprNum | SExprStr | SExprSym | SExprCell
 export type ASTMeta = { fileName: string; line: number; column: number }
 export type ASTNode<T extends SExpr = SExpr> = { expr: T; meta: ASTMeta }
 
-export const qbeUnit = (0b10001).toString()
-export const qbeTrue = (0b1001).toString()
-export const qbeFalse = (0b0001).toString()
+export const qbeConst = {
+  box: 0,
+  bool: 0b001,
+  false: 0b0001,
+  true: 0b1001,
+  unit: 0b10001,
+  i64: 0b010,
+  array: 0b011,
+
+  Box: `${0}`,
+  Bool: `${0b001}`,
+  False: `${0b0001}`,
+  True: `${0b1001}`,
+  Unit: `${0b10001}`,
+  I64: `${0b010}`,
+  Array: `${0b011}`,
+}
 
 export type Unit = BytecodeCompiler | QBECompiler
 const unitConstructorSymbol = Symbol('unit-constructor')

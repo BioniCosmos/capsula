@@ -2,7 +2,7 @@ import type { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
-  qbeUnit,
+  qbeConst,
   type ASTNode,
   type BytecodeCompiler,
   type QBECompiler,
@@ -59,7 +59,7 @@ class Struct implements BytecodeCompiler, QBECompiler {
       env.defineVarUnit(`${id.expr.value}-${field}`, new QBEStructGetter(i))
     }
 
-    return qbeUnit
+    return qbeConst.Unit
   }
 }
 

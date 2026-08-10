@@ -7,10 +7,8 @@ import {
   BytecodeFnChunk,
   isBytecodeCompiler,
   isQBECompiler,
-  qbeFalse,
+  qbeConst,
   QBEFnChunk,
-  qbeTrue,
-  qbeUnit,
   type ASTNode,
   type BytecodeCompiler,
   type QBECompiler,
@@ -149,9 +147,9 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
     const { expr } = node
     switch (expr.type) {
       case 'bool':
-        return expr.value ? qbeTrue : qbeFalse
+        return expr.value ? qbeConst.True : qbeConst.False
       case 'num':
-        return ((expr.value << 3) | 0b010).toString()
+        return ((expr.value << 3) | qbeConst.i64).toString()
       case 'sym': {
         const x = env.lookup(expr.value)
         if (x instanceof Slot) {
@@ -225,7 +223,7 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
 
   capl(s: string, env: QBEEnv) {
     const exprs = parse(s)
-    let result = qbeUnit
+    let result = qbeConst.Unit
     for (const expr of exprs) {
       result = this.compileExpr(expr, env)
     }

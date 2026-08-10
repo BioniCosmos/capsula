@@ -1,6 +1,11 @@
 import type { QBEBackend } from '@/backend'
 import type { QBEEnv } from '@/env'
-import { qbeUnit, type ASTNode, type QBECompiler, type SExprCell } from '@/type'
+import {
+  qbeConst,
+  type ASTNode,
+  type QBECompiler,
+  type SExprCell,
+} from '@/type'
 import type { Module } from '.'
 
 class Alloc implements QBECompiler {
@@ -9,7 +14,7 @@ class Alloc implements QBECompiler {
     ctx.emit(`call $gc_retain(l ${x})`)
 
     const isArray = env.defineTemp()
-    ctx.emit(`${isArray} =l ceql ${ctx.tag(x, env)}, ${0b011}`)
+    ctx.emit(`${isArray} =l ceql ${ctx.tag(x, env)}, ${qbeConst.array}`)
     const result = env.defineTemp()
     ctx.emit(`${result} =l copy ${qbeUnit}`)
 
@@ -47,7 +52,7 @@ class Alloc implements QBECompiler {
     ctx.emit(`${oldData} =l loadl ${ptr}`)
     ctx.emit(`call $memcpy(l ${newData}, l ${oldData}, l ${dataSize})`)
     ctx.emit(`storel ${newData}, ${ptr}`)
-    ctx.emit(`${result} =l or ${result}, ${0b011}`)
+    ctx.emit(`${result} =l or ${result}, ${qbeConst.array}`)
     ctx.emit(`jmp ${end}`)
 
     ctx.emit(end)
@@ -61,7 +66,7 @@ class Free implements QBECompiler {
     const x = ctx.compileExpr(cell.expr.car[1], env)
 
     const isArray = env.defineTemp()
-    ctx.emit(`${isArray} =l ceql ${ctx.tag(x, env)}, ${0b011}`)
+    ctx.emit(`${isArray} =l ceql ${ctx.tag(x, env)}, ${qbeConst.array}`)
 
     const scalarBranch = env.defineBlock()
     const arrayBranch = env.defineBlock()
@@ -80,7 +85,7 @@ class Free implements QBECompiler {
     ctx.emit(`jmp ${end}`)
 
     ctx.emit(end)
-    return qbeUnit
+    return qbeConst.Unit
   }
 }
 

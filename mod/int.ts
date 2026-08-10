@@ -1,7 +1,13 @@
 import { QBEBackend, type BytecodeBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { BytecodeEnv, QBEEnv } from '@/env'
-import type { ASTNode, BytecodeCompiler, QBECompiler, SExprCell } from '@/type'
+import {
+  qbeConst,
+  type ASTNode,
+  type BytecodeCompiler,
+  type QBECompiler,
+  type SExprCell,
+} from '@/type'
 import type { Module } from '.'
 
 class Add implements BytecodeCompiler, QBECompiler {
@@ -168,7 +174,7 @@ class IsI64 implements BytecodeCompiler, QBECompiler {
     const x = ctx.compileExpr(args[0], env)
     const tag = ctx.tag(x, env)
     const result = env.defineTemp()
-    ctx.emit(`${result} =l ceql ${tag}, ${0b010}`)
+    ctx.emit(`${result} =l ceql ${tag}, ${qbeConst.i64}`)
     return ctx.wrapBool(result, env)
   }
 }
@@ -201,7 +207,7 @@ declare module '@/backend' {
 QBEBackend.prototype.wrapI64 = function (x, env) {
   const result = env.defineTemp()
   this.emit(`${result} =l shl ${x}, 3`)
-  this.emit(`${result} =l or ${result}, ${0b010}`)
+  this.emit(`${result} =l or ${result}, ${qbeConst.i64}`)
   return result
 }
 
