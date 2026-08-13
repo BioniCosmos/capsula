@@ -199,18 +199,21 @@ class SizeOf implements QBECompiler {
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const x = ctx.compileExpr(cell.expr.car[1], env)
 
-    const tag = env.defineVar('tag')
-    ctx.emit(`${tag} =l copy ${ctx.tag(x, env)}`)
-    const arrayTag = env.defineVar('array_tag')
-    ctx.emit(`${arrayTag} =l copy ${0b011}`)
-    // len := x.len
-    const len = env.defineVar('len')
-    ctx.emit(`${len} =l copy ${ctx.unwrapArray(x, env)}`)
-    ctx.emit(`${len} =l add ${len}, 8`)
-    ctx.emit(`${len} =l loadl ${len}`)
-    ctx.emit(`${len} =l copy ${ctx.wrapI64(len, env)}`)
+    const trueBranch = env.defineBlock()
+    const falseBranch = env.defineBlock()
+    const end = env.defineBlock()
+    const result = env.defineTemp()
+    ctx.emit(`jnz ${ctx.isArray(x, env)}, ${trueBranch}, ${falseBranch}`)
 
-    return ctx.capl('(if (= tag array_tag) len 8)', env)
+    ctx.emit(trueBranch)
+    ctx.emit(`${result} =l mul ${ctx.arrayLen(x, env)}, 8`)
+    ctx.emit(`jmp ${end}`)
+
+    ctx.emit(falseBranch)
+    ctx.emit(`${result} =l copy 8`)
+
+    ctx.emit(end)
+    return ctx.wrapI64(result, env)
   }
 }
 

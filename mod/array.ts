@@ -64,6 +64,8 @@ declare module '@/backend' {
   interface QBEBackend {
     wrapArray(x: string, env: QBEEnv): string
     unwrapArray(x: string, env: QBEEnv): string
+    arrayLen(x: string, env: QBEEnv): string
+    isArray(x: string, env: QBEEnv): string
   }
 }
 
@@ -76,5 +78,18 @@ QBEBackend.prototype.wrapArray = function (x, env) {
 QBEBackend.prototype.unwrapArray = function (x, env) {
   const result = env.defineTemp()
   this.emit(`${result} =l and ${x}, ${~0b111}`)
+  return result
+}
+
+QBEBackend.prototype.arrayLen = function (x, env) {
+  const result = env.defineTemp()
+  this.emit(`${result} =l add ${this.unwrapArray(x, env)}, 8`)
+  this.emit(`${result} =l loadl ${result}`)
+  return result
+}
+
+QBEBackend.prototype.isArray = function (x, env) {
+  const result = env.defineTemp()
+  this.emit(`${result} =l ceql ${this.tag(x, env)}, ${qbeConst.array}`)
   return result
 }

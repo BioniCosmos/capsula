@@ -13,15 +13,12 @@ class Alloc implements QBECompiler {
     const x = ctx.compileExpr(cell.expr.car[1], env)!
     ctx.emit(`call $gc_retain(l ${x})`)
 
-    const isArray = env.defineTemp()
-    ctx.emit(`${isArray} =l ceql ${ctx.tag(x, env)}, ${qbeConst.array}`)
     const result = env.defineTemp()
-    ctx.emit(`${result} =l copy ${qbeUnit}`)
 
     const scalarBranch = env.defineBlock()
     const arrayBranch = env.defineBlock()
     const end = env.defineBlock()
-    ctx.emit(`jnz ${isArray}, ${arrayBranch}, ${scalarBranch}`)
+    ctx.emit(`jnz ${ctx.isArray(x, env)}, ${arrayBranch}, ${scalarBranch}`)
 
     ctx.emit(scalarBranch)
     ctx.emit(`${result} =l call $gc_alloc(l 8)`)
@@ -37,16 +34,12 @@ class Alloc implements QBECompiler {
     ctx.emit(`${type} =l or ${type}, ${1n << 63n}`)
     ctx.emit(`storel ${type}, ${result}`)
 
-    const dataSize = env.defineTemp()
-    ctx.emit(
-      `${dataSize} =l mul ${ctx.unwrapI64(
-        (ctx.env.lookup('size-of') as QBECompiler).compileToQBE(ctx, cell, env),
-        env,
-      )}, 8`,
-    )
+    const ptr = ctx.defineTemp(`add ${result}, 8`, env)
+    const dataSize = ctx.defineTemp(`loadl ${ptr}`, env)
+    ctx.emit(`${dataSize} =l mul ${dataSize}, 8`)
+
     const newData = env.defineTemp()
     ctx.emit(`${newData} =l call $gc_alloc(l ${dataSize})`)
-    const ptr = env.defineTemp()
     ctx.emit(`${ptr} =l add ${result}, 16`)
     const oldData = env.defineTemp()
     ctx.emit(`${oldData} =l loadl ${ptr}`)
@@ -65,13 +58,10 @@ class Free implements QBECompiler {
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const x = ctx.compileExpr(cell.expr.car[1], env)
 
-    const isArray = env.defineTemp()
-    ctx.emit(`${isArray} =l ceql ${ctx.tag(x, env)}, ${qbeConst.array}`)
-
     const scalarBranch = env.defineBlock()
     const arrayBranch = env.defineBlock()
     const end = env.defineBlock()
-    ctx.emit(`jnz ${isArray}, ${arrayBranch}, ${scalarBranch}`)
+    ctx.emit(`jnz ${ctx.isArray(x, env)}, ${arrayBranch}, ${scalarBranch}`)
 
     ctx.emit(scalarBranch)
     ctx.emit(`call $free(l ${x})`)
@@ -91,7 +81,7 @@ class Free implements QBECompiler {
 
 export default {
   name: 'mem',
-  dependencies: ['core'],
+  dependencies: [],
   units: { alloc: Alloc, free: Free },
   prelude: '',
 } satisfies Module
