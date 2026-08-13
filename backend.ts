@@ -126,10 +126,8 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
 
     this.endFn('0')
 
-    // TODO: check if global is empty
     const code =
-      this.#global.join('\n') +
-      '\n\n' +
+      (this.#global.length !== 0 ? this.#global.join('\n') + '\n\n' : '') +
       this.#chunks.map((chunk) => chunk.build()).join('\n\n')
     await $`qbe < ${new Response(code)} | clang -std=c23 mem.c -x assembler -`
   }

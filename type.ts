@@ -117,8 +117,8 @@ export class QBEFnChunk {
   build() {
     return `${this.#declaration} {
 @start
-${this.#prologue.map((line) => `    ${line}`).join('\n')}
-${this.#body.map((line) => `    ${line}`).join('\n')}
+${this.#prologue.map((line) => (line.startsWith('@') ? line : `    ${line}`)).join('\n')}
+${this.#body.map((line) => (line.startsWith('@') ? line : `    ${line}`)).join('\n')}
 }`
   }
 }
