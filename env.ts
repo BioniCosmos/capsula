@@ -7,11 +7,11 @@ import {
 } from './type'
 
 // TODO: improve `isUnitConstructor` check in `lookup` to more specific type check
+// TODO: BytecodeEnv().#baseAddr and QBEEnv().#counter may be static to implement block variable scope.
 export interface Environment<T extends Unit> {
   defineUnit(name: string, constructor: UnitConstructor<T>): void
 }
 
-// TODO: Tidy up functions. (defineVar + defineUnit + lookup ?)
 export class BytecodeEnv implements Environment<BytecodeCompiler> {
   readonly #vars = new Map<
     string,
@@ -20,10 +20,6 @@ export class BytecodeEnv implements Environment<BytecodeCompiler> {
   #baseAddr = 0
 
   constructor(private readonly parent: BytecodeEnv | null = null) {}
-
-  get locals() {
-    return this.#vars as ReadonlyMap<string, number>
-  }
 
   get localCount() {
     let count = 0
@@ -62,16 +58,16 @@ export class BytecodeEnv implements Environment<BytecodeCompiler> {
       return this.parent.lookup(name)
     }
 
+    // TODO: undefined variable or unit
     throw Error(`undefined variable: ${name}`)
   }
 }
 
-// TODO: Remove the circular import between `env` and `mod/fn`.
 // TODO: Distinguish the identifier of the builtin and the external.
 export class QBEEnv implements Environment<QBECompiler> {
   readonly #vars = new Map<
     string,
-    (string | Slot | UnitConstructor<QBECompiler> | QBECompiler)[]
+    (string | UnitConstructor<QBECompiler> | QBECompiler)[]
   >()
   #counter = 0
 
@@ -84,47 +80,36 @@ export class QBEEnv implements Environment<QBECompiler> {
   get slots() {
     return this.#vars
       .values()
-      .flatMap((xs) => xs.filter((x) => x instanceof Slot))
-      .map((slot) => slot.ptr)
+      .flatMap((xs) => xs.filter((x) => typeof x === 'string'))
       .toArray()
-  }
-
-  genId() {
-    return `${this.#isGlobal ? '$' : '%'}v_${this.#counter++}`
   }
 
   defineUnit(name: string, constructor: UnitConstructor<QBECompiler>) {
     this.#vars.set(name, [constructor])
   }
 
-  defineTemp() {
-    return `%t_${this.#counter++}`
+  defineVarUnit(name: string, unit: QBECompiler) {
+    this.#vars.set(name, [unit])
   }
 
   defineVar(name: string) {
-    const id = this.genId()
+    if (this.#isGlobal) {
+      throw Error('QBEEnv: cannot define slot in global environment')
+    }
+    const id = this.genId('v')
     this.#vars.getOrInsert(name, []).push(id)
     return id
   }
 
-  defineSlot(name: string) {
-    if (this.#isGlobal) {
-      throw Error('QBEEnv: cannot define slot in global environment')
-    }
-    const id = this.genId()
-    this.#vars.getOrInsert(name, []).push(new Slot(id))
-    return id
+  defineTemp() {
+    return this.genId('t')
   }
 
   defineBlock() {
     return `@b_${this.#counter++}`
   }
 
-  defineVarUnit(name: string, unit: QBECompiler) {
-    this.#vars.set(name, [unit])
-  }
-
-  lookup(name: string): string | Slot | QBECompiler {
+  lookup(name: string): string | QBECompiler {
     if (this.#vars.has(name)) {
       const item = this.#vars.get(name)!.at(-1)!
       if (isUnitConstructor<QBECompiler>(item)) {
@@ -140,11 +125,7 @@ export class QBEEnv implements Environment<QBECompiler> {
     throw Error(`undefined variable: ${name}`)
   }
 
-  has(name: string): boolean {
-    return this.#vars.has(name) || (this.parent?.has(name) ?? false)
+  genId(prefix: 't' | 'v') {
+    return `${this.#isGlobal ? '$' : '%'}${prefix}_${this.#counter++}`
   }
-}
-
-export class Slot {
-  constructor(public ptr: string) {}
 }
