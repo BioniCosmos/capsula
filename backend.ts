@@ -1,7 +1,7 @@
 import { encode } from '@msgpack/msgpack'
 import { $ } from 'bun'
 import { Instruction } from './bytecode'
-import { BytecodeEnv, QBEEnv, Slot, type Environment } from './env'
+import { BytecodeEnv, QBEEnv, type Environment } from './env'
 import { parse } from './parser'
 import {
   BytecodeFnChunk,
@@ -150,13 +150,13 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
         return ((expr.value << 3) | qbeConst.i64).toString()
       case 'sym': {
         const x = env.lookup(expr.value)
-        if (x instanceof Slot) {
+        if (typeof x === 'string') {
           const id = env.defineTemp()
-          this.emit(`${id} =l loadl ${x.ptr}`)
+          this.emit(`${id} =l loadl ${x}`)
           return id
         }
         // TODO: Check type `QBECompiler`. Consider whether to allow shadowing keywords/builtin.
-        return x as string
+        throw Error('unimplemented')
       }
       case 'cell': {
         const sym = expr.car[0]
