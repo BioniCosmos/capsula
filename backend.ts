@@ -129,7 +129,25 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
     const code =
       (this.#global.length !== 0 ? this.#global.join('\n') + '\n\n' : '') +
       this.#chunks.map((chunk) => chunk.build()).join('\n\n')
-    await $`qbe < ${new Response(code)} | clang -std=c23 mem.c -x assembler -`
+    let extra = ''
+    if (import.meta.env.DEBUG === 'true') {
+      const lines = code.split('\n')
+
+      let rows = lines.length
+      let pad = 0
+      while (Math.trunc(rows) !== 0) {
+        pad++
+        rows /= 10
+      }
+
+      console.log(
+        lines
+          .map((line, i) => `${(i + 1).toString().padStart(pad)} | ${line}`)
+          .join('\n'),
+      )
+      extra = '-fsanitize=address'
+    }
+    await $`qbe < ${new Response(code)} | ${import.meta.env.CLANG ?? 'clang'} -std=c23 ${extra} mem.c -x assembler -`
   }
 
   /**
