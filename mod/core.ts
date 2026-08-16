@@ -1,4 +1,4 @@
-import type { BytecodeBackend, QBEBackend } from '@/backend'
+import { QBEBackend, type BytecodeBackend } from '@/backend'
 import { Instruction, Label } from '@/bytecode'
 import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
@@ -251,3 +251,36 @@ export default {
   },
   prelude: '',
 } satisfies Module
+
+declare module '@/backend' {
+  interface QBEBackend {
+    if(
+      pred: () => string,
+      thenBody: () => string,
+      elseBody: (() => string) | null,
+      env: QBEEnv,
+    ): string
+  }
+}
+
+QBEBackend.prototype.if = function (pred, thenBody, elseBody, env) {
+  const thenBranch = env.defineBlock()
+  const elseBranch = env.defineBlock()
+  const end = env.defineBlock()
+  let result: string
+  this.emit(
+    `jnz ${pred()}, ${thenBranch}, ${elseBody !== null ? elseBranch : end}`,
+  )
+
+  this.emit(thenBranch)
+  result = thenBody()
+  this.emit(`jmp ${end}`)
+
+  if (elseBody !== null) {
+    this.emit(elseBranch)
+    result = elseBody()
+  }
+
+  this.emit(end)
+  return result
+}
