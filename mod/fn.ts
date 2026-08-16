@@ -32,71 +32,57 @@ export class BytecodeFn implements BytecodeCompiler {
   }
 }
 
-// TODO:
-//   1. Consider remove `required` and `rest`.
-//   2. Rest parameters are not tested on all backends because of the lack of cons cell list. The array should be
-//      replaced by list.
 export class QBEFn implements QBECompiler {
   constructor(
     public id: string,
     private requiredLen: number,
-    // public env: QBEEnv,
-    // private required: ASTNode<SExprSym>[],
-    // private rest: ASTNode<SExprSym> | null,
-  ) {
-    // for (const param of required) {
-    //   env.defineVar(param.expr.value)
-    // }
-    // if (rest) {
-    //   env.defineVar(rest.expr.value)
-    // }
-  }
-
-  // get params() {
-  //   return this.required
-  //     .concat(this.rest ? [this.rest] : [])
-  //     .map((x) => `l ${this.env.lookup(x.expr.value)}`)
-  //     .join(', ')
-  // }
+    private hasRest: boolean,
+  ) {}
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const args = ctx.compileArgs(cell, env)
 
-    if (args.length !== this.requiredLen) {
+    if (args.length < this.requiredLen) {
       error(
         cell.expr.car[0].meta,
-        `compiling: The function requires ${this.requiredLen} arguments, found ${args.length}.`,
+        `compiling: The function expects ${this.hasRest ? 'at least ' : ''}${this.requiredLen} arguments, but found ${args.length}.`,
+      )
+    }
+    if (!this.hasRest && args.length > this.requiredLen) {
+      error(
+        cell.expr.car[1 + this.requiredLen].meta,
+        `compiling: The function expects exactly ${this.requiredLen} arguments, but found ${args.length}.`,
       )
     }
 
-    // TODO: redesign
-    // let rest: string | null = null
-    // if (this.rest) {
-    //   rest = ctx.compileExpr(
-    //     {
-    //       expr: {
-    //         type: 'cell',
-    //         car: [
-    //           { expr: { type: 'sym', value: 'array' }, meta: cell.meta },
-    //           ...cell.expr.car.slice(1 + this.required.length),
-    //         ],
-    //         cdr: null,
-    //       },
-    //       meta: cell.meta,
-    //     },
-    //     env,
-    //   )
-    // }
+    const rest = this.hasRest
+      ? ctx.compileExpr(
+          {
+            expr: {
+              type: 'cell',
+              car: [
+                { expr: { type: 'sym', value: 'array' }, meta: cell.meta },
+                // (fn a b c d e f)
+                //          [     ]
+                //  1 ( len )
+                ...cell.expr.car.slice(1 + this.requiredLen),
+              ],
+              cdr: null,
+            },
+            meta: cell.meta,
+          },
+          env,
+        )
+      : null
 
-    const result = env.defineTemp()
-    ctx.emit(
-      `${result} =l call ${this.id}(${args
-        // .slice(0, this.required.length)
-        // .concat(rest !== null ? [rest] : [])
+    return ctx.defineTemp(
+      `call ${this.id}(${args
+        .slice(0, this.requiredLen)
+        .concat(rest !== null ? [rest] : [])
         .map((x) => `l ${x}`)
         .join(', ')})`,
+      env,
     )
-    return result
   }
 }
 
@@ -158,19 +144,9 @@ class Defn implements BytecodeCompiler, QBECompiler {
     // Ensure all required parameters are symbol.
     Defn.#assertAllSymbols(car)
     // Ensure the rest parameter is a symbol.
-    if (cdr !== null && cdr.expr.type !== 'sym') {
-      throw Error(
-        `compiling \`defn\`: expecting \`symbol\`, found \`${cdr.expr.type}\``,
-      )
-    }
+    Defn.#assertSymbol(cdr)
 
-    const fn = new QBEFn(
-      ctx.env.genId('v'),
-      car.length,
-      // new QBEEnv(env),
-      // car,
-      // cdr as ASTNode<SExprSym> | null,
-    )
+    const fn = new QBEFn(ctx.env.genId('v'), car.length, cdr !== null)
     env.defineVarUnit(id.expr.value, fn)
 
     const fnEnv = new QBEEnv(env)
@@ -179,6 +155,13 @@ class Defn implements BytecodeCompiler, QBECompiler {
     for (const param of car) {
       const origin = fnEnv.defineTemp()
       const slot = fnEnv.defineVar(param.expr.value)
+      paramDef.push(`l ${origin}`)
+      prologue.push(`${slot} =l alloc8 8`)
+      prologue.push(`storel ${origin}, ${slot}`)
+    }
+    if (cdr !== null) {
+      const origin = fnEnv.defineTemp()
+      const slot = fnEnv.defineVar(cdr.expr.value)
       paramDef.push(`l ${origin}`)
       prologue.push(`${slot} =l alloc8 8`)
       prologue.push(`storel ${origin}, ${slot}`)
@@ -213,6 +196,16 @@ class Defn implements BytecodeCompiler, QBECompiler {
           `compiling \`defn\`: expecting \`symbol\`, found \`${x.expr.type}\``,
         )
       }
+    }
+  }
+
+  static #assertSymbol(
+    x: ASTNode | null,
+  ): asserts x is null | ASTNode<SExprSym> {
+    if (x !== null && x.expr.type !== 'sym') {
+      throw Error(
+        `compiling \`defn\`: expecting \`symbol\`, found \`${x.expr.type}\``,
+      )
     }
   }
 }
