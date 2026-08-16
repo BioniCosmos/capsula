@@ -9,6 +9,7 @@ import {
   type SExprCell,
   type SExprSym,
 } from '@/type'
+import { error } from '@/utils'
 import type { Module } from '.'
 
 // TODO: support rest parameters
@@ -38,53 +39,62 @@ export class BytecodeFn implements BytecodeCompiler {
 export class QBEFn implements QBECompiler {
   constructor(
     public id: string,
-    public env: QBEEnv,
-    private required: ASTNode<SExprSym>[],
-    private rest: ASTNode<SExprSym> | null,
+    private requiredLen: number,
+    // public env: QBEEnv,
+    // private required: ASTNode<SExprSym>[],
+    // private rest: ASTNode<SExprSym> | null,
   ) {
-    for (const param of required) {
-      env.defineVar(param.expr.value)
-    }
-    if (rest) {
-      env.defineVar(rest.expr.value)
-    }
+    // for (const param of required) {
+    //   env.defineVar(param.expr.value)
+    // }
+    // if (rest) {
+    //   env.defineVar(rest.expr.value)
+    // }
   }
 
-  get params() {
-    return this.required
-      .concat(this.rest ? [this.rest] : [])
-      .map((x) => `l ${this.env.lookup(x.expr.value)}`)
-      .join(', ')
-  }
+  // get params() {
+  //   return this.required
+  //     .concat(this.rest ? [this.rest] : [])
+  //     .map((x) => `l ${this.env.lookup(x.expr.value)}`)
+  //     .join(', ')
+  // }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const required = ctx.compileArgs(cell, env, this.required.length)
+    const args = ctx.compileArgs(cell, env)
 
-    // TODO: redesign
-    let rest: string | null = null
-    if (this.rest) {
-      rest = ctx.compileExpr(
-        {
-          expr: {
-            type: 'cell',
-            car: [
-              { expr: { type: 'sym', value: 'array' }, meta: cell.meta },
-              ...cell.expr.car.slice(1 + required.length),
-            ],
-            cdr: null,
-          },
-          meta: cell.meta,
-        },
-        env,
+    if (args.length !== this.requiredLen) {
+      error(
+        cell.expr.car[0].meta,
+        `compiling: The function requires ${this.requiredLen} arguments, found ${args.length}.`,
       )
     }
 
+    // TODO: redesign
+    // let rest: string | null = null
+    // if (this.rest) {
+    //   rest = ctx.compileExpr(
+    //     {
+    //       expr: {
+    //         type: 'cell',
+    //         car: [
+    //           { expr: { type: 'sym', value: 'array' }, meta: cell.meta },
+    //           ...cell.expr.car.slice(1 + this.required.length),
+    //         ],
+    //         cdr: null,
+    //       },
+    //       meta: cell.meta,
+    //     },
+    //     env,
+    //   )
+    // }
+
     const result = env.defineTemp()
     ctx.emit(
-      `${result} =l call ${this.id}(${required
-        .concat(rest !== null ? [rest] : [])
+      `${result} =l call ${this.id}(${args
+        // .slice(0, this.required.length)
+        // .concat(rest !== null ? [rest] : [])
         .map((x) => `l ${x}`)
-        .join('\n')})`,
+        .join(', ')})`,
     )
     return result
   }
@@ -154,37 +164,41 @@ class Defn implements BytecodeCompiler, QBECompiler {
       )
     }
 
-    // TODO: Generate id without defining new Var.
     const fn = new QBEFn(
-      ctx.env.defineVar(id.expr.value),
-      new QBEEnv(env),
-      car,
-      cdr as ASTNode<SExprSym> | null,
+      ctx.env.genId('v'),
+      car.length,
+      // new QBEEnv(env),
+      // car,
+      // cdr as ASTNode<SExprSym> | null,
     )
     env.defineVarUnit(id.expr.value, fn)
-    ctx.startFn(fn.id, fn.params)
+
+    const fnEnv = new QBEEnv(env)
+    const paramDef: string[] = []
+    const prologue: string[] = []
+    for (const param of car) {
+      const origin = fnEnv.defineTemp()
+      const slot = fnEnv.defineVar(param.expr.value)
+      paramDef.push(`l ${origin}`)
+      prologue.push(`${slot} =l alloc8 8`)
+      prologue.push(`storel ${origin}, ${slot}`)
+    }
+
+    ctx.startFn(fn.id, paramDef.join(', '))
+    for (const line of prologue) {
+      ctx.emitPrologue(line)
+    }
 
     let result = qbeConst.Unit
     for (const expr of cell.expr.car.slice(3)) {
-      result = ctx.compileExpr(expr, fn.env)
+      result = ctx.compileExpr(expr, fnEnv)
     }
 
-    const { slots } = fn.env
-    ctx.emitPrologue(
-      `%frame =l alloc8 ${8 + 8 + 8 * (slots.length + car.length)}`,
-    )
+    const { slots } = fnEnv
+    ctx.emitPrologue(`%frame =l alloc8 ${8 + 8 + 8 * slots.length}`)
     ctx.emitPrologue(`call $frame_push(l %frame, l ${slots.length})`)
     for (const [i, ptr] of slots.entries()) {
       ctx.emitPrologue(`call $frame_slot_push(l ${i}, l ${ptr})`)
-    }
-    for (const [i, param] of car.entries()) {
-      const id = fn.env.lookup(param.expr.value)
-      const slot = fn.env.defineSlot(param.expr.value)
-      ctx.emitPrologue(`${slot} =l alloc8 8`)
-      ctx.emitPrologue(`storel ${id}, ${slot}`)
-      ctx.emitPrologue(
-        `call $frame_slot_push(l ${slots.length + i}, l ${slot})`,
-      )
     }
     ctx.emit('call $frame_pop()')
 
