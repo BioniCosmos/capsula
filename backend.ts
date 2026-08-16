@@ -7,6 +7,7 @@ import {
   BytecodeFnChunk,
   isBytecodeCompiler,
   isQBECompiler,
+  isUnit,
   qbeConst,
   QBEFnChunk,
   type ASTNode,
@@ -15,6 +16,7 @@ import {
   type SExprCell,
   type Unit,
 } from './type'
+import { error } from './utils'
 
 export interface Backend<U extends Unit, Artifact> {
   readonly env: Environment<U>
@@ -74,7 +76,13 @@ export class BytecodeBackend implements Backend<
         }
         const compiler = env.lookup(sym.expr.value)
         if (!isBytecodeCompiler(compiler)) {
-          throw Error('compiling: not callable')
+          if (isUnit(compiler)) {
+            error(
+              sym.meta,
+              'compiling: This unit is currently not supported by Bytecode backend.',
+            )
+          }
+          error(sym.meta, 'compiling: This expression is not callable.')
         }
         compiler.compile(this, node as ASTNode<SExprCell>, env)
         return
@@ -183,7 +191,13 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
         }
         const compiler = env.lookup(sym.expr.value)
         if (!isQBECompiler(compiler)) {
-          throw Error('compiling: not callable')
+          if (isUnit(compiler)) {
+            error(
+              sym.meta,
+              'compiling: This unit is currently not supported by QBE backend.',
+            )
+          }
+          error(sym.meta, 'compiling: This expression is not callable.')
         }
         return compiler.compileToQBE(this, node as ASTNode<SExprCell>, env)
       }

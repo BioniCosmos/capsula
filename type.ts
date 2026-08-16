@@ -30,6 +30,7 @@ export const qbeConst = {
 }
 
 export type Unit = BytecodeCompiler | QBECompiler
+const unitSymbol = Symbol('unit')
 const unitConstructorSymbol = Symbol('unit-constructor')
 export type UnitClass<T extends Unit = Unit> = new () => T
 export type UnitConstructor<T extends Unit> = {
@@ -38,9 +39,17 @@ export type UnitConstructor<T extends Unit> = {
 }
 
 export function unitConstructor<T extends Unit>(Unit: UnitClass<T>) {
-  const cons = () => new Unit()
+  const cons = () => {
+    const unit = new Unit()
+    Object.defineProperty(unit, unitSymbol, { value: true })
+    return unit
+  }
   Object.defineProperty(cons, unitConstructorSymbol, { value: true })
   return cons as UnitConstructor<T>
+}
+
+export function isUnit(x: any): x is Unit {
+  return x[unitSymbol] === true
 }
 
 export function isUnitConstructor<T extends Unit>(
