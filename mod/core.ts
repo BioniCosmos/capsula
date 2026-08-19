@@ -166,7 +166,7 @@ class Def implements BytecodeCompiler, QBECompiler {
     }
     // Ensure that values are evaluated first, then assigned.
     const x = ctx.compileExpr(cell.expr.car[2], env)
-    const slot = env.defineSlot(id.expr.value)
+    const slot = env.defineVar(id.expr.value)
     ctx.emitPrologue(`${slot} =l alloc8 8`)
     ctx.emitPrologue(`storel ${qbeConst.unit}, ${slot}`)
     ctx.emit(`storel ${x}, ${slot}`)
