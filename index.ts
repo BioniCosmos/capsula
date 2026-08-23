@@ -7,7 +7,7 @@ import type { Unit } from './type'
 
 const { values, positionals } = parseArgs({
   args: Bun.argv,
-  options: { backend: { type: 'string' } },
+  options: { backend: { type: 'string' }, eval: { type: 'string' } },
   allowPositionals: true,
 })
 
@@ -22,6 +22,9 @@ let source: string
 if (positionals.length >= 3) {
   fileName = positionals[2]
   source = await Bun.file(fileName).text()
+} else if (values.eval) {
+  fileName = '-'
+  source = values.eval
 } else if (Bun.stdin.size !== Infinity) {
   fileName = '-'
   source = await Bun.stdin.text()
@@ -29,7 +32,8 @@ if (positionals.length >= 3) {
   console.log(`capsula [options...] <file>
 
 options:
-  --backend <backend>  specifies a compiler backend. available backends: \`bytecode\`, \`qbe\``)
+  --backend <backend>  specifies a compiler backend. available backends: \`bytecode\`, \`qbe\`
+  --eval <source>      uses a string as source code instead of reading from file`)
   exit(1)
 }
 
