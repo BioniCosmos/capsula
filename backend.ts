@@ -20,7 +20,8 @@ import { error } from './utils'
 
 export interface Backend<U extends Unit, Artifact> {
   readonly env: Environment<U>
-  compile(source: ASTNode[]): Artifact
+  compile(source: ASTNode[], output?: string): Artifact
+  run(output: string): Promise<void>
 }
 
 export class BytecodeBackend implements Backend<
@@ -39,7 +40,7 @@ export class BytecodeBackend implements Backend<
     return this.#fn.code
   }
 
-  async compile(source: ASTNode[]) {
+  async compile(source: ASTNode[], output = 'bytecode.💊') {
     this.startFn()
     const mainEnv = new BytecodeEnv(this.env)
     for (const node of source) {
@@ -47,10 +48,14 @@ export class BytecodeBackend implements Backend<
     }
     this.endFn(mainEnv.localCount)
 
-    await Bun.write(
-      'bytecode.💊',
-      encode(this.#functions.map((fn) => fn.serialize())),
-    )
+    await Bun.write(output, encode(this.#functions.map((fn) => fn.serialize())))
+  }
+
+  async run(output: string) {
+    await Bun.spawn(['zig', 'build', 'run', '--', output], {
+      cwd: 'vm',
+      stdout: 'inherit',
+    }).exited
   }
 
   compileExpr(node: ASTNode, env: BytecodeEnv) {
@@ -112,7 +117,7 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
   readonly #currentFn: number[] = []
   readonly #global = Array.of<string>()
 
-  async compile(source: ASTNode[]) {
+  async compile(source: ASTNode[], output = 'a.out') {
     this.startFn('$main', '', 'w', true)
     this.emitPrologue(`call $map_init()`)
     const env = new QBEEnv(this.env)
@@ -155,7 +160,11 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
       )
       extra = '-fsanitize=address'
     }
-    await $`qbe < ${new Response(code)} | ${import.meta.env.CLANG ?? 'clang'} -std=c23 ${extra} mem.c -x assembler -`
+    await $`qbe < ${new Response(code)} | ${import.meta.env.CLANG ?? 'clang'} -std=c23 ${extra} -o ${output} mem.c -x assembler -`
+  }
+
+  async run(output: string) {
+    await Bun.spawn([output], { stdout: 'inherit' }).exited
   }
 
   /**
