@@ -80,20 +80,13 @@ export function isQBECompiler(x: any): x is QBECompiler {
 
 export class BytecodeFnChunk {
   code = new CodeBuffer()
-  constants: SExpr[] = []
+  constants: (SExprBool | SExprNum | SExprStr)[] = []
   localCount = 0
 
   serialize() {
     return {
       code: this.code.u8Array,
-      constants: this.constants.map((x) => {
-        switch (x.type) {
-          case 'bool':
-            return [1, x]
-          case 'num':
-            return [2, x]
-        }
-      }),
+      constants: this.constants.map((x) => x.value),
       local_count: this.localCount,
     }
   }

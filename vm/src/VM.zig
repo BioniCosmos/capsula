@@ -10,7 +10,7 @@ const meta = std.meta;
 
 const msgpack = @import("msgpack");
 
-pub const Var = union(VarType) {
+pub const Var = union(enum) {
     unit: void,
     bool: bool,
     i64: i64,
@@ -30,37 +30,16 @@ pub const Var = union(VarType) {
             inline else => |x| try writer.print("{}", .{x}),
         }
     }
-
-    pub fn serialize(self: Var, allocator: mem.Allocator) !msgpack.Payload {
-        const varType = msgpack.Payload.uintToPayload(@intFromEnum(self));
-        const value = switch (self) {
-            .unit => msgpack.Payload.nilToPayload(),
-            .bool => |x| msgpack.Payload.boolToPayload(x),
-            .i64 => |x| msgpack.Payload.intToPayload(x),
-            .array => unreachable,
-            .state => unreachable,
-        };
-
-        var payload = try msgpack.Payload.arrPayload(2, allocator);
-        try payload.setArrElement(0, varType);
-        try payload.setArrElement(1, value);
-
-        return payload;
-    }
-
-    pub fn deserialize(serialized: msgpack.Payload) !Var {
-        const varType: VarType = @enumFromInt(try (try serialized.getArrElement(0)).asUint());
-        return switch (varType) {
-            .unit => .{ .unit = {} },
-            .bool => .{ .bool = try (try serialized.getArrElement(1)).asBool() },
-            .i64 => .{ .i64 = try (try serialized.getArrElement(1)).getInt() },
-            .array => unreachable,
-            .state => unreachable,
-        };
-    }
 };
 
-const VarType = enum { unit, bool, i64, array, state };
+fn sexprToVar(serialized: msgpack.Payload) Var {
+    return switch (serialized) {
+        .bool => |x| .{ .bool = x },
+        .int => |x| .{ .i64 = x },
+        .uint => |x| .{ .i64 = @intCast(x) },
+        else => unreachable,
+    };
+}
 
 /// All the memory should be allocated by arena.
 pub const Fn = struct {
@@ -72,7 +51,7 @@ pub const Fn = struct {
         const constants_payload = (try serialized.mapGet("constants")).?;
         const constants = try allocator.alloc(Var, try constants_payload.getArrLen());
         for (constants, 0..) |*constant, i| {
-            constant.* = try Var.deserialize(try constants_payload.getArrElement(i));
+            constant.* = sexprToVar(try constants_payload.getArrElement(i));
         }
         return .{
             .code = try (try serialized.mapGet("code")).?.asBin(),
