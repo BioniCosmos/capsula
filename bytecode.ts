@@ -16,6 +16,7 @@ export const Instruction = {
   Call: (addr: number) => ({ type: 'Call', addr }) as const,
   Ret: { type: 'Ret' },
   BEqZ: (offset: number) => ({ type: 'BEqZ', offset }) as const,
+  Panic: { type: 'Panic' },
   IsI64: { type: 'IsI64' },
   Print: { type: 'Print' },
   ArrayNew: (len: number) => ({ type: 'ArrayNew', len }) as const,

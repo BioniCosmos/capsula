@@ -15,6 +15,7 @@ pub const Var = union(enum) {
     bool: bool,
     i64: i64,
     array: []const Var,
+    str: []const u8,
     state: State,
 
     pub fn format(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
@@ -27,6 +28,7 @@ pub const Var = union(enum) {
                 }
                 try writer.print("]", .{});
             },
+            .str => |x| try writer.print("{s}", .{x}),
             inline else => |x| try writer.print("{}", .{x}),
         }
     }
@@ -37,6 +39,7 @@ fn sexprToVar(serialized: msgpack.Payload) Var {
         .bool => |x| .{ .bool = x },
         .int => |x| .{ .i64 = x },
         .uint => |x| .{ .i64 = @intCast(x) },
+        .str => |x| .{ .str = x.value() },
         else => unreachable,
     };
 }
@@ -81,6 +84,7 @@ pub const Instruction = enum(u8) {
     call,
     ret,
     beqz,
+    panic,
     is_i64,
     print,
     array_new,
@@ -197,6 +201,15 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
                     self.pc = jump(current, offset);
                     stop_add = true;
                 }
+            },
+            .panic => {
+                debug.print("{s}:{}:{} panic: {s}\n", .{
+                    self.pop().str,
+                    self.pop().i64,
+                    self.pop().i64,
+                    self.pop().str,
+                });
+                break;
             },
             .is_i64 => try self.pushToList(.{ .bool = self.pop() == .i64 }, &self.stack),
             .print => {

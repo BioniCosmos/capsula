@@ -160,7 +160,7 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
       )
       extra = '-fsanitize=address'
     }
-    await $`qbe < ${new Response(code)} | ${import.meta.env.CLANG ?? 'clang'} -std=c23 ${extra} -o ${output} mem.c -x assembler -`
+    await $`qbe < ${new Response(code)} | ${import.meta.env.CLANG ?? 'clang'} -std=c23 ${extra} -o ${output} core.c mem.c -x assembler -`
   }
 
   async run(output: string) {
