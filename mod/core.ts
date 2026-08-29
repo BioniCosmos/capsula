@@ -1,4 +1,4 @@
-import { QBEBackend, type BytecodeBackend } from '@/backend'
+import { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction, Label } from '@/bytecode'
 import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
@@ -253,6 +253,10 @@ export default {
 } satisfies Module
 
 declare module '@/backend' {
+  interface BytecodeBackend {
+    if(pred: () => void, thenBody: () => void, elseBody?: () => void): void
+  }
+
   interface QBEBackend {
     if(
       pred: () => string,
@@ -261,6 +265,35 @@ declare module '@/backend' {
       env: QBEEnv,
     ): string
   }
+}
+
+BytecodeBackend.prototype.if = function (pred, thenBody, elseBody) {
+  pred()
+
+  const elseBranch = new Label()
+  const end = new Label()
+
+  const skipThenFrom = this.code.len
+  const skipThen = this.emit(Instruction.BEqZ(0))
+  ;(elseBody !== undefined ? elseBranch : end).jumpFrom({
+    from: skipThenFrom,
+    fill: (offset) => skipThen.setInt16(1, offset, true),
+  })
+
+  thenBody()
+  const jumpToEndFrom = this.code.len
+  const jumpToEnd = this.emit(Instruction.Jump(0))
+  end.jumpFrom({
+    from: jumpToEndFrom,
+    fill: (offset) => jumpToEnd.setInt16(1, offset, true),
+  })
+
+  if (elseBody !== undefined) {
+    elseBranch.fillOffset(this.code.len)
+    elseBody()
+  }
+
+  end.fillOffset(this.code.len)
 }
 
 QBEBackend.prototype.if = function (pred, thenBody, elseBody, env) {
