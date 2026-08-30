@@ -82,6 +82,7 @@ pub const Instruction = enum(u8) {
     save,
     jump,
     call,
+    native_call,
     ret,
     beqz,
     panic,
@@ -186,6 +187,7 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
                 self.base = self.top + 1;
                 self.top = self.base + functions[fn_idx].local_count;
             },
+            .native_call => try native_functions.get(self.pop().str).?(self),
             .ret => {
                 const top = self.base - 1;
                 const state = self.local[top].state;
@@ -266,4 +268,12 @@ fn pushToList(self: *Self, x: Var, xs: *std.ArrayList(Var)) !void {
 
 fn jump(from: usize, offset: i16) usize {
     return @intCast(@as(isize, @intCast(from)) + @as(isize, @intCast(offset)));
+}
+
+var native_functions = std
+    .StaticStringMap(*const fn (vm: *Self) mem.Allocator.Error!void)
+    .initComptime(.{.{ "type-of", &typeOf }});
+
+fn typeOf(vm: *Self) !void {
+    try vm.pushToList(.{ .i64 = @intFromEnum(vm.pop()) }, &vm.stack);
 }

@@ -14,6 +14,7 @@ export const Instruction = {
   Save: (addr: number) => ({ type: 'Save', addr }) as const,
   Jump: (offset: number) => ({ type: 'Jump', offset }) as const,
   Call: (addr: number) => ({ type: 'Call', addr }) as const,
+  NativeCall: { type: 'NativeCall' },
   Ret: { type: 'Ret' },
   BEqZ: (offset: number) => ({ type: 'BEqZ', offset }) as const,
   Panic: { type: 'Panic' },
