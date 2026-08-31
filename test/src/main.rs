@@ -3,8 +3,14 @@ use std::{env, process::Command};
 #[derive(Debug)]
 struct Case<'a> {
     source: &'a str,
-    expect: &'a str,
+    expect: Expect<'a>,
     line: usize,
+}
+
+#[derive(Debug)]
+enum Expect<'a> {
+    Output(&'a str),
+    Error(&'a str),
 }
 
 #[derive(Clone, Copy)]
@@ -25,20 +31,31 @@ fn main() {
         let stdout = str::from_utf8(&result.stdout).unwrap();
         let stderr = str::from_utf8(&result.stderr).unwrap();
 
-        if !stderr.is_empty() {
-            eprintln!(
-                "{}: Error occurs when testing `{}`: {}.",
+        match case.expect {
+            Expect::Output(expect) => {
+                if !stderr.is_empty() {
+                    eprintln!(
+                        "{}: Error occurs when testing `{}`: {}.",
+                        case.line,
+                        case.source,
+                        stderr.trim(),
+                    );
+                    break;
+                }
+                assert_eq!(
+                    stdout, expect,
+                    "{}: `{}` test failed.",
+                    case.line, case.source,
+                );
+            }
+            Expect::Error(expect) => assert_eq!(
+                stderr.trim(),
+                expect,
+                "{}: `{}` test failed.",
                 case.line,
                 case.source,
-                stderr.trim(),
-            );
-            break;
+            ),
         }
-        assert_eq!(
-            stdout, case.expect,
-            "{}: `{}` test failed.",
-            case.line, case.source,
-        );
     }
 }
 
@@ -49,6 +66,7 @@ fn parse_case(raw: &str) -> Vec<Case<'_>> {
     let mut i = 0;
     let mut state = State::Source(i);
     let mut prev_state = state;
+    let mut expect_err = false;
     let mut source = "";
     let mut line = 1;
     while i < raw.len() {
@@ -57,7 +75,13 @@ fn parse_case(raw: &str) -> Vec<Case<'_>> {
             State::Source(_) => {
                 if c == '=' {
                     prev_state = state;
-                    state = State::Arrow
+                    state = State::Arrow;
+                    expect_err = false;
+                }
+                if c == '!' {
+                    prev_state = state;
+                    state = State::Arrow;
+                    expect_err = true;
                 }
             }
             State::Arrow => {
@@ -73,9 +97,14 @@ fn parse_case(raw: &str) -> Vec<Case<'_>> {
             }
             State::Expect(start) => {
                 if c == '\n' {
+                    let expect = unsafe { str::from_utf8_unchecked(&raw[start..i]) }.trim();
                     cases.push(Case {
                         source,
-                        expect: unsafe { str::from_utf8_unchecked(&raw[start..i]) }.trim(),
+                        expect: if expect_err {
+                            Expect::Error(expect)
+                        } else {
+                            Expect::Output(expect)
+                        },
                         line,
                     });
                     line += 1;
