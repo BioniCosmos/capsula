@@ -2,4 +2,4 @@
 (print (+ 1 2)) => 3
 (print (+ 10 -9)) => 1
 (print (+ 1 2 3)) !> -:1:15 compiling: `+` expects exactly 2 arguments, but found 3.
-(print (+ true 2)) !> -:1:11 panic: expecting `i64`
+(print (+ true 2)) !> -:1:11 panic: expecting `i64`, found `bool`

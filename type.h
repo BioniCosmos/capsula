@@ -10,6 +10,7 @@ typedef struct {
 } ArrayHeader;
 
 void print_var(const uint64_t x);
+const char* type_name(const uint64_t x);
 
 static inline int64_t tag(const uint64_t x) {
     return x & 0b111;
@@ -54,6 +55,25 @@ void print_var(const uint64_t x) {
         }
         default:
             printf("%llu", x);
+    }
+}
+
+// TODO: Returning when no tag matched seems to be not a good idea.
+const char* type_name(const uint64_t x) {
+    switch (tag(x)) {
+        case 0b000:
+            return "box";
+        case 0b001:
+            if (x == 0b10001) {
+                return "unit";
+            }
+            return "bool";
+        case 0b010:
+            return "i64";
+        case 0b011:
+            return "array";
+        default:
+            return nullptr;
     }
 }
 

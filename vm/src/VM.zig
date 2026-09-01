@@ -85,7 +85,6 @@ pub const Instruction = enum(u8) {
     native_call,
     ret,
     beqz,
-    panic,
     is_i64,
     print,
     array_new,
@@ -187,7 +186,8 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
                 self.base = self.top + 1;
                 self.top = self.base + functions[fn_idx].local_count;
             },
-            .native_call => try native_functions.get(self.pop().str).?(self),
+            .native_call => native_functions.get(self.pop().str).?(self) catch |err|
+                if (err == NativeFnError.Break) break else return @errorCast(err),
             .ret => {
                 const top = self.base - 1;
                 const state = self.local[top].state;
@@ -203,15 +203,6 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
                     self.pc = jump(current, offset);
                     stop_add = true;
                 }
-            },
-            .panic => {
-                debug.print("{s}:{}:{} panic: {s}\n", .{
-                    self.pop().str,
-                    self.pop().i64,
-                    self.pop().i64,
-                    self.pop().str,
-                });
-                break;
             },
             .is_i64 => try self.pushToList(.{ .bool = self.pop() == .i64 }, &self.stack),
             .print => {
@@ -270,10 +261,34 @@ fn jump(from: usize, offset: i16) usize {
     return @intCast(@as(isize, @intCast(from)) + @as(isize, @intCast(offset)));
 }
 
+const NativeFnError = error{Break} || mem.Allocator.Error;
+
 var native_functions = std
-    .StaticStringMap(*const fn (vm: *Self) mem.Allocator.Error!void)
-    .initComptime(.{.{ "type-of", &typeOf }});
+    .StaticStringMap(*const fn (vm: *Self) NativeFnError!void)
+    .initComptime(.{ .{ "panic", &panic }, .{ "type-of", &typeOf }, .{ "type-name", &typeName } });
+
+fn panic(vm: *Self) !void {
+    debug.print("{s}:{}:{} panic: ", .{ vm.pop().str, vm.pop().i64, vm.pop().i64 });
+    const format = vm.pop().str;
+    var prev: u8 = 0;
+    for (format) |c| {
+        if (c == '}' and prev == '{') {
+            debug.print("{f}", .{vm.pop()});
+        } else if (c != '}' and prev == '{') {
+            debug.print("}}{c}", .{c});
+        } else if (c != '{') {
+            debug.print("{c}", .{c});
+        }
+        prev = c;
+    }
+    debug.print("\n", .{});
+    return NativeFnError.Break;
+}
 
 fn typeOf(vm: *Self) !void {
     try vm.pushToList(.{ .i64 = @intFromEnum(vm.pop()) }, &vm.stack);
+}
+
+fn typeName(vm: *Self) !void {
+    try vm.pushToList(.{ .str = @tagName(vm.pop()) }, &vm.stack);
 }

@@ -11,13 +11,14 @@ import {
 import { error } from '@/utils'
 import type { Module } from '.'
 
-// TODO: `panic` should support string format to enhance the error message.
+// TODO: Unify `type-name` in both backends.
 // TODO: Add `VM.Var` enum to the compiler frontend.
 // TODO: Fix error message of `QBEBackend.compileArgs` (expect).
 // TODO: Check if it is possible to fill cdr of a cell.
 // TODO: Fix/Check the handling when `args.len == 0`.
 // TODO: Support `ne` VM instruction.
 // TODO: Handle edge integer conditions like JS integer, MessagePack integer, i64, i61.
+// TODO: constant type check
 
 function checkLen(cell: ASTNode<SExprCell>, expect: number) {
   const len = cell.expr.car.length - 1
@@ -41,9 +42,9 @@ function bytecodeCheckI64(
   node: ASTNode,
 ) {
   const { meta } = node
-  ctx.compileExpr(node, env)
   ctx.if(
     () => {
+      ctx.compileExpr(node, env)
       ctx.compileExpr({ expr: { type: 'str', value: 'type-of' }, meta }, env)
       ctx.emit(Instruction.NativeCall)
       ctx.compileExpr({ expr: { type: 'num', value: 2 }, meta }, env)
@@ -51,17 +52,24 @@ function bytecodeCheckI64(
     },
     () => {},
     () => {
+      ctx.compileExpr(node, env)
+      ctx.compileExpr({ expr: { type: 'str', value: 'type-name' }, meta }, env)
+      ctx.emit(Instruction.NativeCall)
+
       ctx.compileExpr(
-        { expr: { type: 'str', value: 'expecting `i64`' }, meta },
+        { expr: { type: 'str', value: 'expecting `i64`, found `{}`' }, meta },
         env,
       )
+
       ctx.compileExpr({ expr: { type: 'num', value: meta.column }, meta }, env)
       ctx.compileExpr({ expr: { type: 'num', value: meta.line }, meta }, env)
       ctx.compileExpr(
         { expr: { type: 'str', value: meta.fileName }, meta },
         env,
       )
-      ctx.emit(Instruction.Panic)
+
+      ctx.compileExpr({ expr: { type: 'str', value: 'panic' }, meta }, env)
+      ctx.emit(Instruction.NativeCall)
     },
   )
 }
@@ -80,10 +88,15 @@ function qbeCheckI64(ctx: QBEBackend, env: QBEEnv, node: ASTNode) {
       ctx.emitGlobal(`data ${fileName} = { b "${meta.fileName}", b 0 }`)
 
       const message = ctx.env.defineTemp()
-      ctx.emitGlobal(`data ${message} = { b "expecting \`i64\`", b 0 }`)
+      ctx.emitGlobal(
+        `data ${message} = { b "expecting \`i64\`, found \`%s\`", b 0 }`,
+      )
 
       ctx.emit(
-        `call $panic(l ${fileName}, w ${meta.line}, w ${meta.column}, l ${message})`,
+        `call $panic(l ${fileName}, w ${meta.line}, w ${meta.column}, l ${message}, ..., l ${ctx.defineTemp(
+          `call $type_name(l ${ctx.compileExpr(node, env)})`,
+          env,
+        )})`,
       )
       return qbeConst.Unit
     },
