@@ -11,6 +11,13 @@ export type SExpr = SExprBool | SExprNum | SExprStr | SExprSym | SExprCell
 export type ASTMeta = { fileName: string; line: number; column: number }
 export type ASTNode<T extends SExpr = SExpr> = { expr: T; meta: ASTMeta }
 
+export const vmVarType = {
+  unit: 1,
+  bool: 2,
+  i64: 3,
+  array: 4,
+}
+
 export const qbeConst = {
   box: 0,
   bool: 0b001,

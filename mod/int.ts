@@ -3,6 +3,7 @@ import { Instruction } from '@/bytecode'
 import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
   qbeConst,
+  vmVarType,
   type ASTNode,
   type BytecodeCompiler,
   type QBECompiler,
@@ -12,7 +13,6 @@ import { error } from '@/utils'
 import type { Module } from '.'
 
 // TODO: Unify `type-name` in both backends.
-// TODO: Add `VM.Var` enum to the compiler frontend.
 // TODO: Fix error message of `QBEBackend.compileArgs` (expect).
 // TODO: Check if it is possible to fill cdr of a cell.
 // TODO: Fix/Check the handling when `args.len == 0`.
@@ -46,7 +46,10 @@ function bytecodeCheckI64(
       ctx.compileExpr(node, env)
       ctx.compileExpr({ expr: { type: 'str', value: 'type-of' }, meta }, env)
       ctx.emit(Instruction.NativeCall)
-      ctx.compileExpr({ expr: { type: 'num', value: 2 }, meta }, env)
+      ctx.compileExpr(
+        { expr: { type: 'num', value: vmVarType.i64 }, meta },
+        env,
+      )
       ctx.emit(Instruction.Ne)
     },
     () => {
