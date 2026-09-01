@@ -228,7 +228,7 @@ class Call implements QBECompiler {
 
     const result = env.defineTemp()
     ctx.emit(
-      `${result} =l call $${id}(${cell.expr.car
+      `${result} =l call $${id.expr.value}(${cell.expr.car
         .slice(2)
         .map((arg) => `l ${ctx.compileExpr(arg, env)}`)
         .join(', ')})`,

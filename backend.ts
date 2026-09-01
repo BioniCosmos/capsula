@@ -48,7 +48,17 @@ export class BytecodeBackend implements Backend<
     }
     this.endFn(mainEnv.localCount)
 
-    await Bun.write(output, encode(this.#functions.map((fn) => fn.serialize())))
+    await Bun.write(
+      output,
+      encode(
+        this.#functions.map((fn) => {
+          if (import.meta.env.DEBUG === 'true') {
+            console.log(fn.toString())
+          }
+          return fn.serialize()
+        }),
+      ),
+    )
   }
 
   async run(output: string) {

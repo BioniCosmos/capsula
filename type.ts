@@ -94,7 +94,7 @@ export class BytecodeFnChunk {
   toString() {
     return `code =
 ${this.code.toString('  ')}
-constants = [${this.constants.join(' ')}]
+constants = [${this.constants.map((x) => (x.type === 'str' ? `"${x.value}"` : x.value)).join(' ')}]
 localCount = ${this.localCount}`
   }
 }

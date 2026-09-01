@@ -28,7 +28,7 @@ class Alloc implements QBECompiler {
           `mul ${ctx.arrayLen(result, env)}, 8`,
           env,
         )
-        const newData = ctx.defineTemp(`$gc_alloc(l ${dataSize})`, env)
+        const newData = ctx.defineTemp(`call $gc_alloc(l ${dataSize})`, env)
         const ptrField = ctx.defineTemp(`add ${result}, 16`, env)
         const oldData = ctx.defineTemp(`loadl ${ptrField}`, env)
         ctx.emit(`call $memcpy(l ${newData}, l ${oldData}, l ${dataSize})`)
