@@ -5,6 +5,7 @@ export const Instruction = {
   Div: { type: 'Div' },
   Rem: { type: 'Rem' },
   Eq: { type: 'Eq' },
+  Ne: { type: 'Ne' },
   Lt: { type: 'Lt' },
   Gt: { type: 'Gt' },
   Le: { type: 'Le' },

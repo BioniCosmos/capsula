@@ -16,7 +16,6 @@ import type { Module } from '.'
 // TODO: Fix error message of `QBEBackend.compileArgs` (expect).
 // TODO: Check if it is possible to fill cdr of a cell.
 // TODO: Fix/Check the handling when `args.len == 0`.
-// TODO: Support `ne` VM instruction.
 // TODO: Handle edge integer conditions like JS integer, MessagePack integer, i64, i61.
 // TODO: constant type check
 
@@ -48,9 +47,8 @@ function bytecodeCheckI64(
       ctx.compileExpr({ expr: { type: 'str', value: 'type-of' }, meta }, env)
       ctx.emit(Instruction.NativeCall)
       ctx.compileExpr({ expr: { type: 'num', value: 2 }, meta }, env)
-      ctx.emit(Instruction.Eq)
+      ctx.emit(Instruction.Ne)
     },
-    () => {},
     () => {
       ctx.compileExpr(node, env)
       ctx.compileExpr({ expr: { type: 'str', value: 'type-name' }, meta }, env)
