@@ -3,123 +3,27 @@ import { Instruction } from '@/bytecode'
 import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
   qbeConst,
-  vmVarType,
+  type ArgumentChecker,
   type ASTNode,
   type BytecodeCompiler,
+  type CheckRule,
   type QBECompiler,
   type SExprCell,
 } from '@/type'
-import { error } from '@/utils'
 import type { Module } from '.'
 
 // TODO: Unify `type-name` in both backends.
-// TODO: Fix error message of `QBEBackend.compileArgs` (expect).
-// TODO: Check if it is possible to fill cdr of a cell.
-// TODO: Fix/Check the handling when `args.len == 0`.
 // TODO: Handle edge integer conditions like JS integer, MessagePack integer, i64, i61.
-// TODO: constant type check
 
-function checkLen(cell: ASTNode<SExprCell>, expect: number) {
-  const len = cell.expr.car.length - 1
-  if (len < expect) {
-    error(
-      cell.expr.car[0].meta,
-      `compiling: \`+\` expects ${expect} arguments, but found ${len}.`,
-    )
-  }
-  if (len > expect) {
-    error(
-      cell.expr.car[1 + expect].meta,
-      `compiling: \`+\` expects exactly ${expect} arguments, but found ${len}.`,
-    )
-  }
-}
-
-function bytecodeCheckI64(
-  ctx: BytecodeBackend,
-  env: BytecodeEnv,
-  node: ASTNode,
-) {
-  const { meta } = node
-  ctx.if(
-    () => {
-      ctx.compileExpr(node, env)
-      ctx.compileExpr({ expr: { type: 'str', value: 'type-of' }, meta }, env)
-      ctx.emit(Instruction.NativeCall)
-      ctx.compileExpr(
-        { expr: { type: 'num', value: vmVarType.i64 }, meta },
-        env,
-      )
-      ctx.emit(Instruction.Ne)
-    },
-    () => {
-      ctx.compileExpr(node, env)
-      ctx.compileExpr({ expr: { type: 'str', value: 'type-name' }, meta }, env)
-      ctx.emit(Instruction.NativeCall)
-
-      ctx.compileExpr(
-        { expr: { type: 'str', value: 'expecting `i64`, found `{}`' }, meta },
-        env,
-      )
-
-      ctx.compileExpr({ expr: { type: 'num', value: meta.column }, meta }, env)
-      ctx.compileExpr({ expr: { type: 'num', value: meta.line }, meta }, env)
-      ctx.compileExpr(
-        { expr: { type: 'str', value: meta.fileName }, meta },
-        env,
-      )
-
-      ctx.compileExpr({ expr: { type: 'str', value: 'panic' }, meta }, env)
-      ctx.emit(Instruction.NativeCall)
-    },
-  )
-}
-
-function qbeCheckI64(ctx: QBEBackend, env: QBEEnv, node: ASTNode) {
-  ctx.if(
-    () =>
-      ctx.defineTemp(
-        `cnel ${ctx.tag(ctx.compileExpr(node, env), env)}, ${qbeConst.i64}`,
-        env,
-      ),
-    () => {
-      const { meta } = node
-
-      const fileName = ctx.env.defineTemp()
-      ctx.emitGlobal(`data ${fileName} = { b "${meta.fileName}", b 0 }`)
-
-      const message = ctx.env.defineTemp()
-      ctx.emitGlobal(
-        `data ${message} = { b "expecting \`i64\`, found \`%s\`", b 0 }`,
-      )
-
-      ctx.emit(
-        `call $panic(l ${fileName}, w ${meta.line}, w ${meta.column}, l ${message}, ..., l ${ctx.defineTemp(
-          `call $type_name(l ${ctx.compileExpr(node, env)})`,
-          env,
-        )})`,
-      )
-      return qbeConst.Unit
-    },
-    null,
-    env,
-  )
-}
-
-class Add implements BytecodeCompiler, QBECompiler {
+class Add implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    checkLen(cell, 2)
-    bytecodeCheckI64(ctx, env, cell.expr.car[1])
-    bytecodeCheckI64(ctx, env, cell.expr.car[2])
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.Add)
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
-    qbeCheckI64(ctx, env, cell.expr.car[1])
-    qbeCheckI64(ctx, env, cell.expr.car[2])
+    const [lhs, rhs] = ctx.compileArgs(cell, env)
     return ctx.wrapI64(
       ctx.defineTemp(
         `add ${ctx.unwrapI64(lhs, env)}, ${ctx.unwrapI64(rhs, env)}`,
@@ -128,6 +32,8 @@ class Add implements BytecodeCompiler, QBECompiler {
       env,
     )
   }
+
+  checkRule: CheckRule = { car: ['i64', 'i64'] }
 }
 
 class Sub implements BytecodeCompiler, QBECompiler {

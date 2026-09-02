@@ -5,23 +5,34 @@ import { BytecodeEnv, QBEEnv, type Environment } from './env'
 import { parse } from './parser'
 import {
   BytecodeFnChunk,
+  checkArgs,
+  hasArgumentChecker,
   isBytecodeCompiler,
   isQBECompiler,
   isUnit,
   qbeConst,
   QBEFnChunk,
+  typeToQBETag,
+  typeToVMVarType,
   type ASTNode,
   type BytecodeCompiler,
+  type PrimitiveType,
   type QBECompiler,
   type SExprCell,
   type Unit,
 } from './type'
 import { error } from './utils'
 
+// TODO: Consider simplifying the type parameters.
 export interface Backend<U extends Unit, Artifact> {
   readonly env: Environment<U>
   compile(source: ASTNode[], output?: string): Artifact
   run(output: string): Promise<void>
+  runtimeCheckArg(
+    paramType: PrimitiveType,
+    env: Environment<U>,
+    node: ASTNode,
+  ): void
 }
 
 export class BytecodeBackend implements Backend<
@@ -68,6 +79,54 @@ export class BytecodeBackend implements Backend<
     }).exited
   }
 
+  runtimeCheckArg(paramType: PrimitiveType, env: BytecodeEnv, node: ASTNode) {
+    const { meta } = node
+    this.if(
+      () => {
+        this.compileExpr(node, env)
+        this.compileExpr({ expr: { type: 'str', value: 'type-of' }, meta }, env)
+        this.emit(Instruction.NativeCall)
+        this.compileExpr(
+          { expr: { type: 'num', value: typeToVMVarType(paramType) }, meta },
+          env,
+        )
+        this.emit(Instruction.Ne)
+      },
+      () => {
+        this.compileExpr(node, env)
+        this.compileExpr(
+          { expr: { type: 'str', value: 'type-name' }, meta },
+          env,
+        )
+        this.emit(Instruction.NativeCall)
+
+        this.compileExpr(
+          {
+            expr: {
+              type: 'str',
+              value: `expecting \`${paramType}\`, found \`{}\``,
+            },
+            meta,
+          },
+          env,
+        )
+
+        this.compileExpr(
+          { expr: { type: 'num', value: meta.column }, meta },
+          env,
+        )
+        this.compileExpr({ expr: { type: 'num', value: meta.line }, meta }, env)
+        this.compileExpr(
+          { expr: { type: 'str', value: meta.fileName }, meta },
+          env,
+        )
+
+        this.compileExpr({ expr: { type: 'str', value: 'panic' }, meta }, env)
+        this.emit(Instruction.NativeCall)
+      },
+    )
+  }
+
   compileExpr(node: ASTNode, env: BytecodeEnv) {
     const { expr } = node
     switch (expr.type) {
@@ -89,6 +148,7 @@ export class BytecodeBackend implements Backend<
         if (sym.expr.type !== 'sym') {
           throw Error(`compiling: expecting symbol, found \`${sym.expr.type}\``)
         }
+
         const compiler = env.lookup(sym.expr.value)
         if (!isBytecodeCompiler(compiler)) {
           if (isUnit(compiler)) {
@@ -99,8 +159,12 @@ export class BytecodeBackend implements Backend<
           }
           error(sym.meta, 'compiling: This expression is not callable.')
         }
-        compiler.compile(this, node as ASTNode<SExprCell>, env)
-        return
+
+        const cell = node as ASTNode<SExprCell>
+        if (hasArgumentChecker(compiler)) {
+          checkArgs(compiler.checkRule, this, env, cell)
+        }
+        compiler.compile(this, cell, env)
       }
     }
   }
@@ -177,6 +241,55 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
     await Bun.spawn([output], { stdout: 'inherit' }).exited
   }
 
+  runtimeCheckArg(paramType: PrimitiveType, env: QBEEnv, node: ASTNode) {
+    const x = this.compileExpr(node, env)
+    this.if(
+      () => {
+        const baseCheck = this.defineTemp(
+          `cnel ${this.tag(x, env)}, ${typeToQBETag(paramType)}`,
+          env,
+        )
+        switch (paramType) {
+          case 'bool':
+          case 'i64':
+            return baseCheck
+          case 'arr':
+          case 'struct': {
+            const innerCheck = env.defineTemp()
+            this.emit(`${innerCheck} =l loadl ${this.unwrapArray(x, env)}`)
+            this.emit(
+              `${innerCheck} =l cnel ${innerCheck}, ${paramType === 'arr' ? 0 : 1}`,
+            )
+            return this.defineTemp(`or ${baseCheck}, ${innerCheck}`, env)
+          }
+          default:
+            throw Error('unimplemented')
+        }
+      },
+      () => {
+        const { meta } = node
+
+        const fileName = this.env.defineTemp()
+        this.emitGlobal(`data ${fileName} = { b "${meta.fileName}", b 0 }`)
+
+        const message = this.env.defineTemp()
+        this.emitGlobal(
+          `data ${message} = { b "expecting \`${paramType}\`, found \`%s\`", b 0 }`,
+        )
+
+        this.emit(
+          `call $panic(l ${fileName}, w ${meta.line}, w ${meta.column}, l ${message}, ..., l ${this.defineTemp(
+            `call $type_name(l ${x})`,
+            env,
+          )})`,
+        )
+        return qbeConst.Unit
+      },
+      null,
+      env,
+    )
+  }
+
   /**
    * - pointer: 000
    * - bool: 001
@@ -208,6 +321,7 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
         if (sym.expr.type !== 'sym') {
           throw Error(`compiling: expecting symbol, found \`${sym.expr.type}\``)
         }
+
         const compiler = env.lookup(sym.expr.value)
         if (!isQBECompiler(compiler)) {
           if (isUnit(compiler)) {
@@ -218,13 +332,18 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
           }
           error(sym.meta, 'compiling: This expression is not callable.')
         }
-        return compiler.compileToQBE(this, node as ASTNode<SExprCell>, env)
+
+        const cell = node as ASTNode<SExprCell>
+        if (hasArgumentChecker(compiler)) {
+          checkArgs(compiler.checkRule, this, env, cell)
+        }
+        return compiler.compileToQBE(this, cell, env)
       }
     }
     throw Error('unreachable')
   }
 
-  compileArgs(cell: ASTNode, env: QBEEnv, expect?: number) {
+  compileArgs(cell: ASTNode, env: QBEEnv) {
     if (cell.expr.type != 'cell') {
       throw Error('compileArgs: invalid AST node type')
     }
@@ -239,9 +358,7 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
         protectCount++
       }
     }
-    if (expect !== undefined && args.length !== expect) {
-      throw Error(`compileArgs: unexpected arguments`)
-    }
+
     for (let i = 0; i < protectCount; i++) {
       this.emit(`call $gc_release()`)
     }

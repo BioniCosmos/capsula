@@ -1,6 +1,7 @@
-import type { BytecodeBackend, QBEBackend } from './backend'
+import type { Backend, BytecodeBackend, QBEBackend } from './backend'
 import { CodeBuffer } from './bytecode'
-import type { BytecodeEnv, QBEEnv } from './env'
+import type { BytecodeEnv, Environment, QBEEnv } from './env'
+import { error } from './utils'
 
 export type SExprBool = { type: 'bool'; value: boolean }
 export type SExprNum = { type: 'num'; value: number }
@@ -11,11 +12,14 @@ export type SExpr = SExprBool | SExprNum | SExprStr | SExprSym | SExprCell
 export type ASTMeta = { fileName: string; line: number; column: number }
 export type ASTNode<T extends SExpr = SExpr> = { expr: T; meta: ASTMeta }
 
+export type PrimitiveType =
+  'bool' | 'i64' | 'sym' | 'str' | 'arr' | 'struct' | 'any'
+
 export const vmVarType = {
-  unit: 1,
-  bool: 2,
-  i64: 3,
-  array: 4,
+  unit: 0,
+  bool: 1,
+  i64: 2,
+  array: 3,
 }
 
 export const qbeConst = {
@@ -34,6 +38,37 @@ export const qbeConst = {
   Unit: `${0b10001}`,
   I64: `${0b010}`,
   Array: `${0b011}`,
+}
+
+export function typeToVMVarType(paramType: PrimitiveType) {
+  switch (paramType) {
+    case 'bool':
+      return vmVarType.bool
+    case 'i64':
+      return vmVarType.i64
+    case 'arr':
+      return vmVarType.array
+    case 'any':
+      throw Error('`any` is not a real type.')
+    default:
+      throw Error('unimplemented')
+  }
+}
+
+export function typeToQBETag(paramType: PrimitiveType) {
+  switch (paramType) {
+    case 'bool':
+      return qbeConst.bool
+    case 'i64':
+      return qbeConst.i64
+    case 'arr':
+    case 'struct':
+      return qbeConst.array
+    case 'any':
+      throw Error('`any` is not a real type.')
+    default:
+      throw Error('unimplemented')
+  }
 }
 
 export type Unit = BytecodeCompiler | QBECompiler
@@ -63,6 +98,80 @@ export function isUnitConstructor<T extends Unit>(
   target: any,
 ): target is UnitConstructor<T> {
   return typeof target === 'function' && target[unitConstructorSymbol] === true
+}
+
+export type CheckRule = { car: PrimitiveType[]; cdr?: boolean }
+export interface ArgumentChecker {
+  checkRule: CheckRule
+}
+
+export function hasArgumentChecker(x: any): x is ArgumentChecker {
+  return 'checkRule' in x
+}
+
+export function checkArgs(
+  rule: CheckRule,
+  ctx: Backend<Unit, unknown>,
+  env: Environment<Unit>,
+  { expr }: ASTNode<SExprCell>,
+) {
+  if (expr.cdr !== null) {
+    error(expr.cdr.meta, 'compiling: unexpected `cdr`')
+  }
+
+  const { car } = expr
+  const unit = car[0]
+  const unitValue = (unit.expr as SExprSym).value
+
+  const args = car.slice(1)
+  const paramLen = rule.car.length
+  const argLen = args.length
+
+  if (argLen < paramLen) {
+    error(
+      unit.meta,
+      `compiling: \`${unitValue}\` expects ${rule.cdr ? 'at least ' : ''}${paramLen} arguments, but found ${argLen}.`,
+    )
+  }
+  if (!rule.cdr && argLen > paramLen) {
+    error(
+      args[paramLen].meta,
+      `compiling: \`${unitValue}\` expects exactly ${paramLen} arguments, but found ${argLen}.`,
+    )
+  }
+
+  for (const [i, paramType] of rule.car.entries()) {
+    if (paramType === 'any') {
+      continue
+    }
+
+    const arg = args[i]
+    const argType = arg.expr.type
+    switch (argType) {
+      case 'sym':
+      case 'cell':
+        ctx.runtimeCheckArg(paramType, env, arg)
+        break
+      case 'num':
+        if (!Number.isInteger(arg.expr.value)) {
+          error(arg.meta, `compiling: Float number is currently unsupported.`)
+        }
+        if (paramType !== 'i64') {
+          error(
+            arg.meta,
+            `compiling: expecting \`${paramType}\`, found \`i64\``,
+          )
+        }
+        break
+      default:
+        if (argType !== paramType) {
+          error(
+            arg.meta,
+            `compiling: expecting \`${paramType}\`, found \`${argType}\``,
+          )
+        }
+    }
+  }
 }
 
 export interface BytecodeCompiler {
