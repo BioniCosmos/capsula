@@ -1,5 +1,30 @@
 (print 2277852) => 2277852
+(print -1) => -1
+(print -0) => 0
+(print true) => true
+(print false) => false
+
 (print (+ 1 2)) => 3
 (print (+ 10 -9)) => 1
 (print (+ 1 2 3)) !> -:1:15 compiling: `+` expects exactly 2 arguments, but found 3.
 (print (+ true 2)) !> -:1:11 compiling: expecting `i64`, found `bool`
+(print (+ 10 (- 82 -32))) => 124
+(print (- 10 3)) => 7
+(print (* 512 512)) => 262144
+(print (/ 4 2)) => 2
+(print (/ -4 3)) => -1
+(print (/ 5 -2)) => -2
+(print (% 4 3)) => 1
+(print (% -4 3)) => -1
+(print (/ 1 0)) !> -:1:13 compiling: The divisor cannot be zero.
+(print (% -1 0)) !> -:1:14 compiling: The divisor cannot be zero.
+
+(print (< 1 10)) => true
+(print (> 1 10)) => false
+(print (<= 1 10)) => true
+(print (>= 1 10)) => false
+(print (<= 5 5)) => true
+(print (>= 6 5)) => true
+
+(print (i64? -100)) => true
+(print (i64? true)) => false

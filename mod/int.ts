@@ -9,7 +9,9 @@ import {
   type CheckRule,
   type QBECompiler,
   type SExprCell,
+  type SExprNum,
 } from '@/type'
+import { error } from '@/utils'
 import type { Module } from '.'
 
 // TODO: Unify `type-name` in both backends.
@@ -36,7 +38,7 @@ class Add implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   checkRule: CheckRule = { car: ['i64', 'i64'] }
 }
 
-class Sub implements BytecodeCompiler, QBECompiler {
+class Sub implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.compileExpr(cell.expr.car[1], env)
@@ -44,16 +46,20 @@ class Sub implements BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
-    const result = env.defineTemp()
-    ctx.emit(
-      `${result} =l sub ${ctx.unwrapI64(lhs, env)}, ${ctx.unwrapI64(rhs, env)}`,
+    const [lhs, rhs] = ctx.compileArgs(cell, env)
+    return ctx.wrapI64(
+      ctx.defineTemp(
+        `sub ${ctx.unwrapI64(lhs, env)}, ${ctx.unwrapI64(rhs, env)}`,
+        env,
+      ),
+      env,
     )
-    return ctx.wrapI64(result, env)
   }
+
+  checkRule: CheckRule = { car: ['i64', 'i64'] }
 }
 
-class Mul implements BytecodeCompiler, QBECompiler {
+class Mul implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.compileExpr(cell.expr.car[1], env)
@@ -61,50 +67,114 @@ class Mul implements BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
-    const result = env.defineTemp()
-    ctx.emit(
-      `${result} =l mul ${ctx.unwrapI64(lhs, env)}, ${ctx.unwrapI64(rhs, env)}`,
+    const [lhs, rhs] = ctx.compileArgs(cell, env)
+    return ctx.wrapI64(
+      ctx.defineTemp(
+        `mul ${ctx.unwrapI64(lhs, env)}, ${ctx.unwrapI64(rhs, env)}`,
+        env,
+      ),
+      env,
     )
-    return ctx.wrapI64(result, env)
+  }
+
+  checkRule: CheckRule = { car: ['i64', 'i64'] }
+}
+
+function compileTimeCheckZero({ expr, meta }: ASTNode) {
+  if ((expr as SExprNum).value === 0) {
+    error(meta, 'compiling: The divisor cannot be zero.')
   }
 }
 
-class Div implements BytecodeCompiler, QBECompiler {
+function bytecodeCheckZero(
+  ctx: BytecodeBackend,
+  env: BytecodeEnv,
+  node: ASTNode,
+) {
+  const { meta } = node
+  ctx.if(
+    () => {
+      ctx.compileExpr(node, env)
+      ctx.compileExpr({ expr: { type: 'num', value: 0 }, meta }, env)
+      ctx.emit(Instruction.Eq)
+    },
+    () => ctx.panic(meta, 'The divisor cannot be zero.', env),
+  )
+}
+
+function qbeCheckZero(ctx: QBEBackend, env: QBEEnv, node: ASTNode) {
+  const { meta } = node
+  ctx.if(
+    () =>
+      ctx.defineTemp(
+        `ceql ${ctx.compileExpr(node, env)}, ${ctx.compileExpr({ expr: { type: 'num', value: 0 }, meta }, env)}`,
+        env,
+      ),
+    () => ctx.panic(meta, 'The divisor cannot be zero.'),
+    null,
+    env,
+  )
+}
+
+class Div implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    ctx.compileExpr(cell.expr.car[2], env)
+    const divisor = cell.expr.car[2]
+    compileTimeCheckZero(divisor)
+    bytecodeCheckZero(ctx, env, divisor)
+
+    ctx.compileExpr(divisor, env)
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.Div)
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
-    const result = env.defineTemp()
-    ctx.emit(
-      `${result} =l div ${ctx.unwrapI64(lhs, env)}, ${ctx.unwrapI64(rhs, env)}`,
+    const divisor = cell.expr.car[2]
+    compileTimeCheckZero(divisor)
+    qbeCheckZero(ctx, env, divisor)
+
+    const [lhs, rhs] = ctx.compileArgs(cell, env)
+    return ctx.wrapI64(
+      ctx.defineTemp(
+        `div ${ctx.unwrapI64(lhs, env)}, ${ctx.unwrapI64(rhs, env)}`,
+        env,
+      ),
+      env,
     )
-    return ctx.wrapI64(result, env)
   }
+
+  checkRule: CheckRule = { car: ['i64', 'i64'] }
 }
 
-class Rem implements BytecodeCompiler, QBECompiler {
+class Rem implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    ctx.compileExpr(cell.expr.car[2], env)
+    const divisor = cell.expr.car[2]
+    compileTimeCheckZero(divisor)
+    bytecodeCheckZero(ctx, env, divisor)
+
+    ctx.compileExpr(divisor, env)
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.Rem)
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
-    const result = env.defineTemp()
-    ctx.emit(
-      `${result} =l rem ${ctx.unwrapI64(lhs, env)}, ${ctx.unwrapI64(rhs, env)}`,
+    const divisor = cell.expr.car[2]
+    compileTimeCheckZero(divisor)
+    qbeCheckZero(ctx, env, divisor)
+
+    const [lhs, rhs] = ctx.compileArgs(cell, env)
+    return ctx.wrapI64(
+      ctx.defineTemp(
+        `rem ${ctx.unwrapI64(lhs, env)}, ${ctx.unwrapI64(rhs, env)}`,
+        env,
+      ),
+      env,
     )
-    return ctx.wrapI64(result, env)
   }
+
+  checkRule: CheckRule = { car: ['i64', 'i64'] }
 }
 
-class Lt implements BytecodeCompiler, QBECompiler {
+class Lt implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.compileExpr(cell.expr.car[1], env)
@@ -112,14 +182,14 @@ class Lt implements BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
-    const result = env.defineTemp()
-    ctx.emit(`${result} =l csltl ${lhs}, ${rhs}`)
-    return ctx.wrapBool(result, env)
+    const [lhs, rhs] = ctx.compileArgs(cell, env)
+    return ctx.wrapBool(ctx.defineTemp(`csltl ${lhs}, ${rhs}`, env), env)
   }
+
+  checkRule: CheckRule = { car: ['i64', 'i64'] }
 }
 
-class Gt implements BytecodeCompiler, QBECompiler {
+class Gt implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.compileExpr(cell.expr.car[1], env)
@@ -127,14 +197,14 @@ class Gt implements BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
-    const result = env.defineTemp()
-    ctx.emit(`${result} =l csgtl ${lhs}, ${rhs}`)
-    return ctx.wrapBool(result, env)
+    const [lhs, rhs] = ctx.compileArgs(cell, env)
+    return ctx.wrapBool(ctx.defineTemp(`csgtl ${lhs}, ${rhs}`, env), env)
   }
+
+  checkRule: CheckRule = { car: ['i64', 'i64'] }
 }
 
-class Le implements BytecodeCompiler, QBECompiler {
+class Le implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.compileExpr(cell.expr.car[1], env)
@@ -142,14 +212,14 @@ class Le implements BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
-    const result = env.defineTemp()
-    ctx.emit(`${result} =l cslel ${lhs}, ${rhs}`)
-    return ctx.wrapBool(result, env)
+    const [lhs, rhs] = ctx.compileArgs(cell, env)
+    return ctx.wrapBool(ctx.defineTemp(`cslel ${lhs}, ${rhs}`, env), env)
   }
+
+  checkRule: CheckRule = { car: ['i64', 'i64'] }
 }
 
-class Ge implements BytecodeCompiler, QBECompiler {
+class Ge implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.compileExpr(cell.expr.car[1], env)
@@ -157,35 +227,30 @@ class Ge implements BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
-    const result = env.defineTemp()
-    ctx.emit(`${result} =l csgel ${lhs}, ${rhs}`)
-    return ctx.wrapBool(result, env)
+    const [lhs, rhs] = ctx.compileArgs(cell, env)
+    return ctx.wrapBool(ctx.defineTemp(`csgel ${lhs}, ${rhs}`, env), env)
   }
+
+  checkRule: CheckRule = { car: ['i64', 'i64'] }
 }
 
-class IsI64 implements BytecodeCompiler, QBECompiler {
+class IsI64 implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    const args = cell.expr.car.slice(1)
-    if (args.length !== 1) {
-      throw Error(`\`i64?\`: expecting 1 argument, found ${args.length}`)
-    }
-    ctx.compileExpr(args[0], env)
+    ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.IsI64)
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const args = cell.expr.car.slice(1)
-    if (args.length !== 1) {
-      throw Error(`\`i64?\`: expecting 1 argument, found ${args.length}`)
-    }
-
-    const x = ctx.compileExpr(args[0], env)
-    const tag = ctx.tag(x, env)
-    const result = env.defineTemp()
-    ctx.emit(`${result} =l ceql ${tag}, ${qbeConst.i64}`)
-    return ctx.wrapBool(result, env)
+    return ctx.wrapBool(
+      ctx.defineTemp(
+        `ceql ${ctx.tag(ctx.compileExpr(cell.expr.car[1], env), env)}, ${qbeConst.i64}`,
+        env,
+      ),
+      env,
+    )
   }
+
+  checkRule: CheckRule = { car: ['any'] }
 }
 
 export default {
