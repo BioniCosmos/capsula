@@ -3,6 +3,7 @@ import { Instruction, Label } from '@/bytecode'
 import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
   qbeConst,
+  type ASTMeta,
   type ASTNode,
   type BytecodeCompiler,
   type QBECompiler,
@@ -255,6 +256,7 @@ export default {
 declare module '@/backend' {
   interface BytecodeBackend {
     if(pred: () => void, thenBody: () => void, elseBody?: () => void): void
+    panic(meta: ASTMeta, format: string, env: BytecodeEnv): void
   }
 
   interface QBEBackend {
@@ -264,6 +266,7 @@ declare module '@/backend' {
       elseBody: (() => string) | null,
       env: QBEEnv,
     ): string
+    panic(meta: ASTMeta, format: string, ...args: string[]): string
   }
 }
 
@@ -296,6 +299,17 @@ BytecodeBackend.prototype.if = function (pred, thenBody, elseBody) {
   end.fillOffset(this.code.len)
 }
 
+BytecodeBackend.prototype.panic = function (meta, format, env) {
+  this.compileExpr({ expr: { type: 'str', value: format }, meta }, env)
+
+  this.compileExpr({ expr: { type: 'num', value: meta.column }, meta }, env)
+  this.compileExpr({ expr: { type: 'num', value: meta.line }, meta }, env)
+  this.compileExpr({ expr: { type: 'str', value: meta.fileName }, meta }, env)
+
+  this.compileExpr({ expr: { type: 'str', value: 'panic' }, meta }, env)
+  this.emit(Instruction.NativeCall)
+}
+
 QBEBackend.prototype.if = function (pred, thenBody, elseBody, env) {
   const thenBranch = env.defineBlock()
   const elseBranch = env.defineBlock()
@@ -316,4 +330,17 @@ QBEBackend.prototype.if = function (pred, thenBody, elseBody, env) {
 
   this.emit(end)
   return result
+}
+
+QBEBackend.prototype.panic = function (meta, format, ...args) {
+  const fileName = this.env.defineTemp()
+  this.emitGlobal(`data ${fileName} = { b "${meta.fileName}", b 0 }`)
+
+  const message = this.env.defineTemp()
+  this.emitGlobal(`data ${message} = { b "${format}", b 0 }`)
+
+  this.emit(
+    `call $panic(l ${fileName}, w ${meta.line}, w ${meta.column}, l ${message}, ..., ${args.join(', ')})`,
+  )
+  return qbeConst.Unit
 }

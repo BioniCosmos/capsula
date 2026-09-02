@@ -99,30 +99,7 @@ export class BytecodeBackend implements Backend<
           env,
         )
         this.emit(Instruction.NativeCall)
-
-        this.compileExpr(
-          {
-            expr: {
-              type: 'str',
-              value: `expecting \`${paramType}\`, found \`{}\``,
-            },
-            meta,
-          },
-          env,
-        )
-
-        this.compileExpr(
-          { expr: { type: 'num', value: meta.column }, meta },
-          env,
-        )
-        this.compileExpr({ expr: { type: 'num', value: meta.line }, meta }, env)
-        this.compileExpr(
-          { expr: { type: 'str', value: meta.fileName }, meta },
-          env,
-        )
-
-        this.compileExpr({ expr: { type: 'str', value: 'panic' }, meta }, env)
-        this.emit(Instruction.NativeCall)
+        this.panic(meta, `expecting \`${paramType}\`, found \`{}\``, env)
       },
     )
   }
@@ -266,25 +243,12 @@ export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
             throw Error('unimplemented')
         }
       },
-      () => {
-        const { meta } = node
-
-        const fileName = this.env.defineTemp()
-        this.emitGlobal(`data ${fileName} = { b "${meta.fileName}", b 0 }`)
-
-        const message = this.env.defineTemp()
-        this.emitGlobal(
-          `data ${message} = { b "expecting \`${paramType}\`, found \`%s\`", b 0 }`,
-        )
-
-        this.emit(
-          `call $panic(l ${fileName}, w ${meta.line}, w ${meta.column}, l ${message}, ..., l ${this.defineTemp(
-            `call $type_name(l ${x})`,
-            env,
-          )})`,
-        )
-        return qbeConst.Unit
-      },
+      () =>
+        this.panic(
+          node.meta,
+          `expecting \`${paramType}\`, found \`%s\``,
+          `l ${this.defineTemp(`call $type_name(l ${x})`, env)}`,
+        ),
       null,
       env,
     )
