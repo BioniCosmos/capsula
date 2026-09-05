@@ -11,6 +11,7 @@ import {
   type QBECompiler,
   type SExprCell,
 } from '@/type'
+import { error } from '@/utils'
 import type { Module } from '.'
 
 class Eq implements BytecodeCompiler, QBECompiler, ArgumentChecker {
@@ -28,24 +29,28 @@ class Eq implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   checkRule: CheckRule = { car: ['any', 'any'] }
 }
 
-// TODO: support `else`
 // TODO: Consider returning other type when all clauses are false.
 class Cond implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const end = new Label()
 
     let nextClause = new Label()
-    for (const clause of cell.expr.car.slice(1)) {
+
+    const clauses = cell.expr.car.slice(1)
+    for (const [i, clause] of clauses.entries()) {
       if (clause.expr.type !== 'cell' || clause.expr.car.length === 0) {
         throw Error(
           `compiling \`cond\`: expecting non-empty \`list\`, found \`${clause.expr.type}\``,
         )
       }
 
+      const predicate = clause.expr.car[0]
+      this.#replaceElse(predicate, this.#isLastClause(i, clauses.length))
+
       nextClause.fillOffset(ctx.code.len)
       nextClause = new Label()
 
-      ctx.compileExpr(clause.expr.car[0], env)
+      ctx.compileExpr(predicate, env)
       // TODO: check type
 
       const jumpToNextFrom = ctx.code.len
@@ -77,26 +82,29 @@ class Cond implements BytecodeCompiler, QBECompiler {
     const end = env.defineBlock()
 
     let nextClause = env.defineBlock()
-    for (const clause of cell.expr.car.slice(1)) {
+
+    const clauses = cell.expr.car.slice(1)
+    for (const [i, clause] of clauses.entries()) {
       if (clause.expr.type !== 'cell' || clause.expr.car.length === 0) {
         throw Error(
           `compiling \`cond\`: expecting non-empty \`list\`, found \`${clause.expr.type}\``,
         )
       }
 
+      const predicate = clause.expr.car[0]
+      this.#replaceElse(predicate, this.#isLastClause(i, clauses.length))
+
       const current = nextClause
       nextClause = env.defineBlock()
       ctx.emit(current)
 
-      const condition = env.defineTemp()
-      ctx.emit(
-        `${condition} =l copy ${ctx.compileExpr(clause.expr.car[0], env)}`,
-      )
+      const testResult = env.defineTemp()
+      ctx.emit(`${testResult} =l copy ${ctx.compileExpr(predicate, env)}`)
       // TODO: check type
-      ctx.emit(`${condition} =l shr ${condition}, 3`)
+      ctx.emit(`${testResult} =l shr ${testResult}, 3`)
 
       const body = env.defineBlock()
-      ctx.emit(`jnz ${condition}, ${body}, ${nextClause}`)
+      ctx.emit(`jnz ${testResult}, ${body}, ${nextClause}`)
       ctx.emit(body)
       ctx.emit(
         `${result} =l copy ${clause.expr.car
@@ -110,6 +118,20 @@ class Cond implements BytecodeCompiler, QBECompiler {
     ctx.emit(end)
 
     return result
+  }
+
+  #replaceElse(predicate: ASTNode, isLastClause: boolean) {
+    if (predicate.expr.type === 'sym' && predicate.expr.value === 'else') {
+      if (isLastClause) {
+        predicate.expr = { type: 'bool', value: true }
+      } else {
+        error(predicate.meta, 'compiling: The `else` clause must be the last.')
+      }
+    }
+  }
+
+  #isLastClause(index: number, clausesLen: number) {
+    return index === clausesLen - 1
   }
 }
 

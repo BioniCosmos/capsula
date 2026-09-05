@@ -33,3 +33,8 @@
 (print (i64? true)) => false
 
 (panic "YOU ARE DEAD! 🫨") !> -:1:1 panic: YOU ARE DEAD! 🫨
+
+(print (cond (false 999) (true 2) (false 3))) => 2
+(print (cond (true 1 2 3))) => 3
+(print (cond (false 999) (else 3))) => 3
+(cond (else 0) (true 1)) !> -:1:8 compiling: The `else` clause must be the last.
