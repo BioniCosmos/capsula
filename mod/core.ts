@@ -29,7 +29,6 @@ class Eq implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   checkRule: CheckRule = { car: ['any', 'any'] }
 }
 
-// TODO: Consider returning other type when all clauses are false.
 class Cond implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const end = new Label()
@@ -59,8 +58,17 @@ class Cond implements BytecodeCompiler, QBECompiler {
         from: jumpToNextFrom,
         fill: (offset) => jumpToNext.setInt16(1, offset, true),
       })
-      for (const x of clause.expr.car.slice(1)) {
-        ctx.compileExpr(x, env)
+
+      const body = clause.expr.car.slice(1)
+      if (body.length !== 0) {
+        for (const [i, x] of body.entries()) {
+          ctx.compileExpr(x, env)
+          if (i !== body.length - 1) {
+            ctx.emit(Instruction.Pop)
+          }
+        }
+      } else {
+        ctx.emit(Instruction.Unit)
       }
 
       const jumpToEndFrom = ctx.code.len
@@ -70,7 +78,9 @@ class Cond implements BytecodeCompiler, QBECompiler {
         fill: (offset) => jumpToEnd.setInt16(1, offset, true),
       })
     }
+
     nextClause.fillOffset(ctx.code.len)
+    ctx.emit(Instruction.Unit)
 
     end.fillOffset(ctx.code.len)
   }

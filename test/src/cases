@@ -38,3 +38,7 @@
 (print (cond (true 1 2 3))) => 3
 (print (cond (false 999) (else 3))) => 3
 (cond (else 0) (true 1)) !> -:1:8 compiling: The `else` clause must be the last.
+(print (cond (false 1))) => ()
+(print (cond)) => ()
+(print (cond (true))) => ()
+(print (cond (else))) => ()
