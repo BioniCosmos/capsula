@@ -3,15 +3,17 @@ import { Instruction, Label } from '@/bytecode'
 import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
   qbeConst,
+  type ArgumentChecker,
   type ASTMeta,
   type ASTNode,
   type BytecodeCompiler,
+  type CheckRule,
   type QBECompiler,
   type SExprCell,
 } from '@/type'
 import type { Module } from '.'
 
-class Eq implements BytecodeCompiler, QBECompiler {
+class Eq implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.compileExpr(cell.expr.car[2], env)
@@ -19,11 +21,11 @@ class Eq implements BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const [lhs, rhs] = ctx.compileArgs(cell, env, 2)
-    const result = env.defineTemp()
-    ctx.emit(`${result} =l ceql ${lhs}, ${rhs}`)
-    return ctx.wrapBool(result, env)
+    const [lhs, rhs] = ctx.compileArgs(cell, env)
+    return ctx.wrapBool(ctx.defineTemp(`ceql ${lhs}, ${rhs}`, env), env)
   }
+
+  checkRule: CheckRule = { car: ['any', 'any'] }
 }
 
 // TODO: support `else`
