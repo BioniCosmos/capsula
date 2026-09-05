@@ -314,18 +314,18 @@ QBEBackend.prototype.if = function (pred, thenBody, elseBody, env) {
   const thenBranch = env.defineBlock()
   const elseBranch = env.defineBlock()
   const end = env.defineBlock()
-  let result: string
+  const result = env.defineTemp()
   this.emit(
     `jnz ${pred()}, ${thenBranch}, ${elseBody !== null ? elseBranch : end}`,
   )
 
   this.emit(thenBranch)
-  result = thenBody()
+  this.emit(`${result} =l copy ${thenBody()}`)
   this.emit(`jmp ${end}`)
 
   if (elseBody !== null) {
     this.emit(elseBranch)
-    result = elseBody()
+    this.emit(`${result} =l copy ${elseBody()}`)
   }
 
   this.emit(end)
