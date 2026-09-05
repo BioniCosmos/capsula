@@ -8,7 +8,7 @@ export type Module = {
   prelude: string
 }
 
-export async function init(ctx: Backend<any, unknown>) {
+export async function init(ctx: Backend) {
   const moduleRegistry = new Map<string, Module>()
   function registerModule(mod: Module) {
     moduleRegistry.set(mod.name, mod)

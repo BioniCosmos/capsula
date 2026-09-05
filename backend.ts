@@ -23,10 +23,9 @@ import {
 } from './type'
 import { error } from './utils'
 
-// TODO: Consider simplifying the type parameters.
-export interface Backend<U extends Unit, Artifact> {
+export interface Backend<U extends Unit = Unit> {
   readonly env: Environment<U>
-  compile(source: ASTNode[], output?: string): Artifact
+  compile(source: ASTNode[], output?: string): Promise<void>
   run(output: string): Promise<void>
   runtimeCheckArg(
     paramType: PrimitiveType,
@@ -35,10 +34,7 @@ export interface Backend<U extends Unit, Artifact> {
   ): void
 }
 
-export class BytecodeBackend implements Backend<
-  BytecodeCompiler,
-  Promise<void>
-> {
+export class BytecodeBackend implements Backend<BytecodeCompiler> {
   readonly env = new BytecodeEnv()
   readonly #functions: BytecodeFnChunk[] = []
   readonly #fnStack: number[] = []
@@ -162,7 +158,7 @@ export class BytecodeBackend implements Backend<
   }
 }
 
-export class QBEBackend implements Backend<QBECompiler, Promise<void>> {
+export class QBEBackend implements Backend<QBECompiler> {
   readonly env = new QBEEnv()
   readonly #chunks: QBEFnChunk[] = []
   readonly #currentFn: number[] = []

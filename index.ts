@@ -3,7 +3,6 @@ import { exit } from 'node:process'
 import { parseArgs } from 'node:util'
 import { init } from './mod'
 import { parse } from './parser'
-import type { Unit } from './type'
 
 const { values, positionals } = parseArgs({
   args: Bun.argv,
@@ -48,7 +47,7 @@ options:
   exit(1)
 }
 
-let backend: Backend<Unit, unknown>
+let backend: Backend
 switch (backendOption) {
   case 'bytecode':
     backend = new BytecodeBackend()

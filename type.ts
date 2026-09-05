@@ -111,8 +111,8 @@ export function hasArgumentChecker(x: any): x is ArgumentChecker {
 
 export function checkArgs(
   rule: CheckRule,
-  ctx: Backend<Unit, unknown>,
-  env: Environment<Unit>,
+  ctx: Backend,
+  env: Environment,
   { expr }: ASTNode<SExprCell>,
 ) {
   if (expr.cdr !== null) {

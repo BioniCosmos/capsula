@@ -8,7 +8,7 @@ import {
 
 // TODO: improve `isUnitConstructor` check in `lookup` to more specific type check
 // TODO: BytecodeEnv().#baseAddr and QBEEnv().#counter may be static to implement block variable scope.
-export interface Environment<T extends Unit> {
+export interface Environment<T extends Unit = Unit> {
   defineUnit(name: string, constructor: UnitConstructor<T>): void
 }
 
