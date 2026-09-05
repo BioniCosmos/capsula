@@ -69,8 +69,21 @@ fn parse_case(raw: &str) -> Vec<Case<'_>> {
     let mut expect_err = false;
     let mut source = "";
     let mut line = 1;
+    let mut on_start = true;
     while i < raw.len() {
         let c = raw[i] as char;
+
+        if on_start && c == '/' && i + 1 < raw.len() && raw[i + 1] as char == '/' {
+            while raw[i] as char != '\n' && i < raw.len() {
+                i += 1;
+            }
+            i += 1;
+            state = State::Source(i);
+            continue;
+        }
+
+        on_start = false;
+
         match state {
             State::Source(_) => {
                 if c == '=' {
@@ -109,6 +122,7 @@ fn parse_case(raw: &str) -> Vec<Case<'_>> {
                     });
                     line += 1;
                     state = State::Source(i + 1);
+                    on_start = true;
                 }
             }
         }
