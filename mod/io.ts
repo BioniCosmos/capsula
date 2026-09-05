@@ -18,7 +18,7 @@ class Print implements BytecodeCompiler, QBECompiler {
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const value = ctx.compileExpr(cell.expr.car[1], env)
-    ctx.emit(`call $print_var(l ${value})`)
+    ctx.emit(`call $var_display(l ${value})`)
     return qbeConst.Unit
   }
 }

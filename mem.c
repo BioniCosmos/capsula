@@ -138,7 +138,7 @@ void frame_display() {
     for (size_t i = 0; i < current_frame->len; i++) {
         const auto slot = current_frame->slots[i];
         printf("{ ptr = %p, value = ", slot);
-        print_var(*(uint64_t*)slot);
+        var_debug(*(uint64_t*)slot);
         printf(" } ");
     }
     puts("] }");
