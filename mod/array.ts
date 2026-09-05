@@ -22,6 +22,7 @@ class ArrayOf implements BytecodeCompiler, QBECompiler {
   /**
    * - array: 0
    * - struct: 1
+   * - string: 2
    * - array (managed): 0 | (1 << 63) = 0x8000000000000000
    * - struct (managed): 1 | (1 << 63) = 0x8000000000000001
    */

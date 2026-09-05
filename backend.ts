@@ -276,6 +276,26 @@ export class QBEBackend implements Backend<QBECompiler> {
         // TODO: Check type `QBECompiler`. Consider whether to allow shadowing keywords/builtin.
         throw Error('unimplemented')
       }
+      case 'str': {
+        const s = this.env.defineTemp()
+        this.emitGlobal(`data ${s} = { b "${expr.value}" }`)
+
+        const x = env.defineTemp()
+        this.emit(`${x} =l alloc8 24`)
+
+        this.emit(`storel 2, ${x}`)
+
+        const p = env.defineTemp()
+        this.emit(`${p} =l add ${x}, 8`)
+        this.emit(
+          `storel ${new TextEncoder().encode(expr.value).byteLength}, ${p}`,
+        )
+
+        this.emit(`${p} =l add ${x}, 16`)
+        this.emit(`storel ${s}, ${p}`)
+
+        return this.wrapArray(x, env)
+      }
       case 'cell': {
         const sym = expr.car[0]
         if (sym.expr.type !== 'sym') {
@@ -300,7 +320,6 @@ export class QBEBackend implements Backend<QBECompiler> {
         return compiler.compileToQBE(this, cell, env)
       }
     }
-    throw Error('unreachable')
   }
 
   compileArgs(cell: ASTNode, env: QBEEnv) {
