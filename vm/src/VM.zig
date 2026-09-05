@@ -20,7 +20,7 @@ pub const Var = union(enum) {
 
     pub fn format(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
         switch (self) {
-            .unit => {},
+            .unit => try writer.print("()", .{}),
             .array => |xs| {
                 try writer.print("[{}]: [{f}", .{ xs.len, xs[0] });
                 for (xs[1..]) |x| {
@@ -86,6 +86,7 @@ pub const Instruction = enum(u8) {
     native_call,
     ret,
     beqz,
+    unit,
     is_i64,
     print,
     array_new,
@@ -206,6 +207,7 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
                     stop_add = true;
                 }
             },
+            .unit => try self.pushToList(.{ .unit = {} }, &self.stack),
             .is_i64 => try self.pushToList(.{ .bool = self.pop() == .i64 }, &self.stack),
             .print => {
                 self.stdout.print("{f}", .{self.pop()}) catch |err| {

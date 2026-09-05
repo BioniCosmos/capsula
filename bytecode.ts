@@ -18,6 +18,7 @@ export const Instruction = {
   NativeCall: { type: 'NativeCall' },
   Ret: { type: 'Ret' },
   BEqZ: (offset: number) => ({ type: 'BEqZ', offset }) as const,
+  Unit: { type: 'Unit' },
   IsI64: { type: 'IsI64' },
   Print: { type: 'Print' },
   ArrayNew: (len: number) => ({ type: 'ArrayNew', len }) as const,
