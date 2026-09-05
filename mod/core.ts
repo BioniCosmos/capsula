@@ -1,6 +1,6 @@
-import { BytecodeBackend, QBEBackend } from '@/backend'
+import { BytecodeBackend, QBEBackend, type Backend } from '@/backend'
 import { Instruction, Label } from '@/bytecode'
-import type { BytecodeEnv, QBEEnv } from '@/env'
+import type { BytecodeEnv, Environment, QBEEnv } from '@/env'
 import {
   qbeConst,
   type ArgumentChecker,
@@ -31,17 +31,21 @@ class Eq implements BytecodeCompiler, QBECompiler, ArgumentChecker {
 
 class Cond implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
+    this.#validateCell(cell)
+
     const end = new Label()
 
     let nextClause = new Label()
 
     const clauses = cell.expr.car.slice(1)
     for (const [i, clause] of clauses.entries()) {
-      if (clause.expr.type !== 'cell' || clause.expr.car.length === 0) {
-        throw Error(
-          `compiling \`cond\`: expecting non-empty \`list\`, found \`${clause.expr.type}\``,
-        )
-      }
+      this.#validateClause(clause)
+      this.#validatePredicate(
+        ctx,
+        env,
+        clause,
+        this.#bytecodeValidatePredicateFormat,
+      )
 
       const predicate = clause.expr.car[0]
       this.#replaceElse(predicate, this.#isLastClause(i, clauses.length))
@@ -50,7 +54,6 @@ class Cond implements BytecodeCompiler, QBECompiler {
       nextClause = new Label()
 
       ctx.compileExpr(predicate, env)
-      // TODO: check type
 
       const jumpToNextFrom = ctx.code.len
       const jumpToNext = ctx.emit(Instruction.BEqZ(0))
@@ -86,31 +89,34 @@ class Cond implements BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
+    this.#validateCell(cell)
+
     const result = env.defineTemp()
     ctx.emit(`${result} =l copy ${qbeConst.unit}`)
-
     const end = env.defineBlock()
 
     let nextClause = env.defineBlock()
 
     const clauses = cell.expr.car.slice(1)
     for (const [i, clause] of clauses.entries()) {
-      if (clause.expr.type !== 'cell' || clause.expr.car.length === 0) {
-        throw Error(
-          `compiling \`cond\`: expecting non-empty \`list\`, found \`${clause.expr.type}\``,
-        )
-      }
+      this.#validateClause(clause)
+      this.#validatePredicate(
+        ctx,
+        env,
+        clause,
+        this.#qbeValidatePredicateFormat,
+      )
 
       const predicate = clause.expr.car[0]
       this.#replaceElse(predicate, this.#isLastClause(i, clauses.length))
 
-      const current = nextClause
+      // Insert the current branch label (as the preview branch jump target).
+      ctx.emit(nextClause)
+      // Generate the next branch label (used in the current branch `jnz`).
       nextClause = env.defineBlock()
-      ctx.emit(current)
 
       const testResult = env.defineTemp()
       ctx.emit(`${testResult} =l copy ${ctx.compileExpr(predicate, env)}`)
-      // TODO: check type
       ctx.emit(`${testResult} =l shr ${testResult}, 3`)
 
       const body = env.defineBlock()
@@ -123,10 +129,10 @@ class Cond implements BytecodeCompiler, QBECompiler {
       )
       ctx.emit(`jmp ${end}`)
     }
+
     ctx.emit(nextClause)
 
     ctx.emit(end)
-
     return result
   }
 
@@ -142,6 +148,64 @@ class Cond implements BytecodeCompiler, QBECompiler {
 
   #isLastClause(index: number, clausesLen: number) {
     return index === clausesLen - 1
+  }
+
+  #validatePredicate(
+    ctx: Backend,
+    env: Environment,
+    { expr, meta }: ASTNode<SExprCell>,
+    runtimeFormat: string,
+  ) {
+    if (expr.cdr !== null) {
+      error(expr.cdr.meta, 'compiling: unexpected `cdr`')
+    }
+
+    if (expr.car.length === 0) {
+      error(meta, `compiling: Clause must at least have a predicate.`)
+    }
+
+    const predicate = expr.car[0]
+    switch (predicate.expr.type) {
+      case 'bool':
+        break
+      case 'sym':
+        if (predicate.expr.value !== 'else') {
+          ctx.runtimeCheckArg('bool', env, predicate, runtimeFormat)
+        }
+        break
+      case 'cell':
+        ctx.runtimeCheckArg('bool', env, predicate, runtimeFormat)
+        break
+      default:
+        error(
+          predicate.meta,
+          `compiling: The predicate type must be \`bool\`, found \`${predicate.expr.type === 'num' ? 'i64' : predicate.expr.type}\`.`,
+        )
+    }
+  }
+
+  #bytecodeValidatePredicateFormat = `The predicate type must be \`bool\`, found \`{}\`.`
+  #qbeValidatePredicateFormat = `The predicate type must be \`bool\`, found \`%s\`.`
+
+  #validateClause(node: ASTNode): asserts node is ASTNode<SExprCell> {
+    const { expr, meta } = node
+
+    if (expr.type !== 'cell') {
+      error(
+        meta,
+        `compiling: expecting clause, found \`${expr.value}\` (\`${expr.type === 'num' ? 'i64' : expr.type}\`)`,
+      )
+    }
+
+    if (expr.cdr !== null) {
+      error(expr.cdr.meta, 'compiling: unexpected `cdr`')
+    }
+  }
+
+  #validateCell({ expr }: ASTNode<SExprCell>) {
+    if (expr.cdr !== null) {
+      error(expr.cdr.meta, 'compiling: unexpected `cdr`')
+    }
   }
 }
 

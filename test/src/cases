@@ -42,3 +42,9 @@
 (print (cond)) => ()
 (print (cond (true))) => ()
 (print (cond (else))) => ()
+(cond ()) !> -:1:7 compiling: Clause must at least have a predicate.
+(cond (1)) !> -:1:8 compiling: The predicate type must be `bool`, found `i64`.
+(def pred 0) (cond (pred)) !> -:1:21 panic: The predicate type must be `bool`, found `i64`.
+(cond (true 1) (false . 0)) !> -:1:25 compiling: unexpected `cdr`
+(cond 100) !> -:1:7 compiling: expecting clause, found `100` (`i64`)
+(cond . 100) !> -:1:9 compiling: unexpected `cdr`

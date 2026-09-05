@@ -31,6 +31,7 @@ export interface Backend<U extends Unit = Unit> {
     paramType: PrimitiveType,
     env: Environment<U>,
     node: ASTNode,
+    format?: string,
   ): void
 }
 
@@ -75,7 +76,12 @@ export class BytecodeBackend implements Backend<BytecodeCompiler> {
     }).exited
   }
 
-  runtimeCheckArg(paramType: PrimitiveType, env: BytecodeEnv, node: ASTNode) {
+  runtimeCheckArg(
+    paramType: PrimitiveType,
+    env: BytecodeEnv,
+    node: ASTNode,
+    format = `expecting \`${paramType}\`, found \`{}\``,
+  ) {
     const { meta } = node
     this.if(
       () => {
@@ -95,7 +101,7 @@ export class BytecodeBackend implements Backend<BytecodeCompiler> {
           env,
         )
         this.emit(Instruction.NativeCall)
-        this.panic(meta, `expecting \`${paramType}\`, found \`{}\``, env)
+        this.panic(meta, format, env)
       },
     )
   }
@@ -214,7 +220,12 @@ export class QBEBackend implements Backend<QBECompiler> {
     await Bun.spawn([output], { stdout: 'inherit' }).exited
   }
 
-  runtimeCheckArg(paramType: PrimitiveType, env: QBEEnv, node: ASTNode) {
+  runtimeCheckArg(
+    paramType: PrimitiveType,
+    env: QBEEnv,
+    node: ASTNode,
+    format = `expecting \`${paramType}\`, found \`%s\``,
+  ) {
     const x = this.compileExpr(node, env)
     this.if(
       () => {
@@ -242,7 +253,7 @@ export class QBEBackend implements Backend<QBECompiler> {
       () =>
         this.panic(
           node.meta,
-          `expecting \`${paramType}\`, found \`%s\``,
+          format,
           `l ${this.defineTemp(`call $type_name(l ${x})`, env)}`,
         ),
       null,
