@@ -79,6 +79,7 @@ pub const Instruction = enum(u8) {
     le,
     ge,
     push,
+    pop,
     load,
     save,
     jump,
@@ -170,6 +171,7 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
             .le => try self.pushToList(.{ .bool = self.pop().i64 <= self.pop().i64 }, &self.stack),
             .ge => try self.pushToList(.{ .bool = self.pop().i64 >= self.pop().i64 }, &self.stack),
             .push => try self.pushToList(func.constants[self.read(u16, func.code)], &self.stack),
+            .pop => _ = self.pop(),
             .load => try self.pushToList(self.local[self.base + self.read(u16, func.code)], &self.stack),
             .save => self.local[self.base + self.read(u16, func.code)] = self.pop(),
             .jump => {

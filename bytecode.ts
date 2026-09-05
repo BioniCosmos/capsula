@@ -11,6 +11,7 @@ export const Instruction = {
   Le: { type: 'Le' },
   Ge: { type: 'Ge' },
   Push: (addr: number) => ({ type: 'Push', addr }) as const,
+  Pop: { type: 'Pop' },
   Load: (addr: number) => ({ type: 'Load', addr }) as const,
   Save: (addr: number) => ({ type: 'Save', addr }) as const,
   Jump: (offset: number) => ({ type: 'Jump', offset }) as const,
