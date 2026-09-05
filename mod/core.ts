@@ -240,6 +240,52 @@ class Call implements QBECompiler {
   }
 }
 
+class Panic implements BytecodeCompiler, QBECompiler, ArgumentChecker {
+  compile(
+    ctx: BytecodeBackend,
+    { expr, meta }: ASTNode<SExprCell>,
+    env: BytecodeEnv,
+  ) {
+    ctx.compileExpr(expr.car[1], env)
+
+    ctx.compileExpr({ expr: { type: 'num', value: meta.column }, meta }, env)
+    ctx.compileExpr({ expr: { type: 'num', value: meta.line }, meta }, env)
+    ctx.compileExpr({ expr: { type: 'str', value: meta.fileName }, meta }, env)
+
+    ctx.compileExpr({ expr: { type: 'str', value: 'panic' }, meta }, env)
+    ctx.emit(Instruction.NativeCall)
+  }
+
+  compileToQBE(
+    ctx: QBEBackend,
+    { expr, meta }: ASTNode<SExprCell>,
+    env: QBEEnv,
+  ) {
+    const fileName = ctx.env.defineTemp()
+    ctx.emitGlobal(`data ${fileName} = { b "${meta.fileName}", b 0 }`)
+
+    const header = ctx.unwrapArray(ctx.compileExpr(expr.car[1], env), env)
+
+    const size = ctx.defineTemp(`add ${header}, 8`, env)
+    ctx.emit(`${size} =l loadl ${size}`)
+    const newSize = ctx.defineTemp(`add ${size}, 1`, env)
+
+    const ptr = ctx.defineTemp(`add ${header}, 16`, env)
+    ctx.emit(`${ptr} =l loadl ${ptr}`)
+
+    const message = ctx.defineTemp(`call $gc_alloc(l ${newSize})`, env)
+    ctx.emit(`call $memset(l ${message}, w 0, l ${newSize})`)
+    ctx.emit(`call $memcpy(l ${message}, l ${ptr}, l ${size})`)
+
+    ctx.emit(
+      `call $panic(l ${fileName}, w ${meta.line}, w ${meta.column}, l ${message})`,
+    )
+    return qbeConst.Unit
+  }
+
+  checkRule: CheckRule = { car: ['str'] }
+}
+
 export default {
   name: 'core',
   dependencies: [],
@@ -251,6 +297,7 @@ export default {
     loop: Loop,
     'size-of': SizeOf,
     call: Call,
+    panic: Panic,
   },
   prelude: '',
 } satisfies Module

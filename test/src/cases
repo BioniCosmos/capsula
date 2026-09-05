@@ -31,3 +31,5 @@
 
 (print (i64? -100)) => true
 (print (i64? true)) => false
+
+(panic "YOU ARE DEAD! 🫨") !> -:1:1 panic: YOU ARE DEAD! 🫨
