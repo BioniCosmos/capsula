@@ -48,3 +48,15 @@
 (cond (true 1) (false . 0)) !> -:1:25 compiling: unexpected `cdr`
 (cond 100) !> -:1:7 compiling: expecting clause, found `100` (`i64`)
 (cond . 100) !> -:1:9 compiling: unexpected `cdr`
+
+(print (if true 0 1)) => 0
+(print (if false 0 1)) => 1
+(print (if true 0)) => 0
+(print (if false 0)) => ()
+(print (if (i64? true) 55 66)) => 66
+(if 0 1 2) !> -:1:5 compiling: The predicate type must be `bool`, found `i64`.
+(if true 0 1 2) !> -:1:14 compiling: too many arguments passed to `if`
+(if true) !> -:1:2 compiling: `if` requires result expression.
+(if) !> -:1:2 compiling: bad syntax. `if` requires predicate and result expression.
+(if else 0 1) !> -:1:5 compiling: Symbol `else` cannot be used as a predicate in `if`.
+(if true 0 1 . 2) !> -:1:16 compiling: unexpected `cdr`

@@ -219,23 +219,57 @@ class If implements BytecodeCompiler, QBECompiler {
   }
 
   static #cond({ expr, meta }: ASTNode<SExprCell>): ASTNode<SExprCell> {
+    if (expr.cdr !== null) {
+      error(expr.cdr.meta, 'compiling: unexpected `cdr`')
+    }
+
+    const { car } = expr
+    const unit = car[0]
+    if (car.length === 1) {
+      error(
+        unit.meta,
+        'compiling: bad syntax. `if` requires predicate and result expression.',
+      )
+    }
+    if (car.length === 2) {
+      error(unit.meta, 'compiling: `if` requires result expression.')
+    }
+    if (car.length > 4) {
+      error(car[4].meta, 'compiling: too many arguments passed to `if`')
+    }
+
+    const pred = car[1]
+    if (pred.expr.type === 'sym' && pred.expr.value === 'else') {
+      error(
+        pred.meta,
+        'compiling: Symbol `else` cannot be used as a predicate in `if`.',
+      )
+    }
+
     return {
       expr: {
         type: 'cell',
         car: [
-          { expr: { type: 'sym', value: 'cond' }, meta: expr.car[0].meta },
+          { expr: { type: 'sym', value: 'cond' }, meta: unit.meta },
           {
-            expr: { type: 'cell', car: [expr.car[1], expr.car[2]], cdr: null },
+            expr: { type: 'cell', car: [pred, expr.car[2]], cdr: null },
             meta,
           },
-          {
-            expr: {
-              type: 'cell',
-              car: [{ expr: { type: 'bool', value: true }, meta }, expr.car[3]],
-              cdr: null,
-            },
-            meta,
-          },
+          ...(car.length === 4
+            ? [
+                {
+                  expr: {
+                    type: 'cell' as const,
+                    car: [
+                      { expr: { type: 'bool' as const, value: true }, meta },
+                      expr.car[3],
+                    ],
+                    cdr: null,
+                  },
+                  meta,
+                },
+              ]
+            : []),
         ],
         cdr: null,
       },
