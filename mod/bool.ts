@@ -1,9 +1,16 @@
 import { QBEBackend, type BytecodeBackend } from '@/backend'
 import type { BytecodeEnv, QBEEnv } from '@/env'
-import type { ASTNode, BytecodeCompiler, QBECompiler, SExprCell } from '@/type'
+import type {
+  ArgumentChecker,
+  ASTNode,
+  BytecodeCompiler,
+  CheckRule,
+  QBECompiler,
+  SExprCell,
+} from '@/type'
 import type { Module } from '.'
 
-class And implements BytecodeCompiler, QBECompiler {
+class And implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(And.#if(cell), env)
   }
@@ -11,6 +18,8 @@ class And implements BytecodeCompiler, QBECompiler {
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     return ctx.compileExpr(And.#if(cell), env)
   }
+
+  checkRule: CheckRule = { car: ['bool', 'bool'] }
 
   static #if({ expr, meta }: ASTNode<SExprCell>): ASTNode<SExprCell> {
     return {
@@ -29,7 +38,7 @@ class And implements BytecodeCompiler, QBECompiler {
   }
 }
 
-class Or implements BytecodeCompiler, QBECompiler {
+class Or implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(Or.#if(cell), env)
   }
@@ -37,6 +46,8 @@ class Or implements BytecodeCompiler, QBECompiler {
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     return ctx.compileExpr(Or.#if(cell), env)
   }
+
+  checkRule: CheckRule = { car: ['bool', 'bool'] }
 
   static #if({ expr, meta }: ASTNode<SExprCell>): ASTNode<SExprCell> {
     return {
@@ -55,7 +66,7 @@ class Or implements BytecodeCompiler, QBECompiler {
   }
 }
 
-class Not implements BytecodeCompiler, QBECompiler {
+class Not implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(Not.#eq(cell), env)
   }
@@ -63,6 +74,8 @@ class Not implements BytecodeCompiler, QBECompiler {
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     return ctx.compileExpr(Not.#eq(cell), env)
   }
+
+  checkRule: CheckRule = { car: ['bool'] }
 
   static #eq({ expr, meta }: ASTNode<SExprCell>): ASTNode<SExprCell> {
     return {

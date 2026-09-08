@@ -60,3 +60,17 @@
 (if) !> -:1:2 compiling: bad syntax. `if` requires predicate and result expression.
 (if else 0 1) !> -:1:5 compiling: Symbol `else` cannot be used as a predicate in `if`.
 (if true 0 1 . 2) !> -:1:16 compiling: unexpected `cdr`
+
+(print (and true false)) => false
+(print (and true true)) => true
+(print (and false true)) => false
+(print (and false false)) => false
+(print (or true false)) => true
+(print (or true true)) => true
+(print (or false true)) => true
+(print (or false false)) => false
+(print (not true)) => false
+(print (not false)) => true
+(print (or false (and true true))) => true
+(print (and true (not false))) => true
+(print (not (or false false))) => true
