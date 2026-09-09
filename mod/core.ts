@@ -10,6 +10,7 @@ import {
   type CheckRule,
   type QBECompiler,
   type SExprCell,
+  type SExprSym,
 } from '@/type'
 import { error } from '@/utils'
 import type { Module } from '.'
@@ -278,32 +279,41 @@ class If implements BytecodeCompiler, QBECompiler {
   }
 }
 
-class Def implements BytecodeCompiler, QBECompiler {
+class Def implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const id = cell.expr.car[1]
-    if (id.expr.type !== 'sym') {
-      throw Error(
-        `compiling \`def\`: expecting symbol, found \`${id.expr.type}\``,
-      )
-    }
+    this.#checkId(id)
+
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.emit(Instruction.Save(env.defineVar(id.expr.value)))
+
+    ctx.emit(Instruction.Unit)
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const id = cell.expr.car[1]
-    if (id.expr.type !== 'sym') {
-      throw Error(
-        `compiling \`def\`: expecting symbol, found \`${id.expr.type}\``,
-      )
-    }
+    this.#checkId(id)
+
     // Ensure that values are evaluated first, then assigned.
     const x = ctx.compileExpr(cell.expr.car[2], env)
     const slot = env.defineVar(id.expr.value)
     ctx.emitPrologue(`${slot} =l alloc8 8`)
     ctx.emitPrologue(`storel ${qbeConst.unit}, ${slot}`)
     ctx.emit(`storel ${x}, ${slot}`)
+
     return qbeConst.Unit
+  }
+
+  checkRule: CheckRule = { car: ['any', 'any'] }
+
+  #checkId(id: ASTNode): asserts id is ASTNode<SExprSym> {
+    const { type } = id.expr
+    if (type !== 'sym') {
+      error(
+        id.meta,
+        `compiling: Bad syntax. \`def\` requires a symbol as variable identifier, found \`${type === 'num' ? 'i64' : type}\`.`,
+      )
+    }
   }
 }
 

@@ -74,3 +74,7 @@
 (print (or false (and true true))) => true
 (print (and true (not false))) => true
 (print (not (or false false))) => true
+
+(def a 101) (print a) => 101
+(def a 101) (print a) (def a true) (print a) => 101true
+(def 0 1) !> -:1:6 compiling: Bad syntax. `def` requires a symbol as variable identifier, found `i64`.
