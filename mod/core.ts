@@ -279,10 +279,20 @@ class If implements BytecodeCompiler, QBECompiler {
   }
 }
 
+function checkId(id: ASTNode, unit: string): asserts id is ASTNode<SExprSym> {
+  const { type } = id.expr
+  if (type !== 'sym') {
+    error(
+      id.meta,
+      `compiling: Bad syntax. \`${unit}\` requires a symbol as variable identifier, found \`${type === 'num' ? 'i64' : type}\`.`,
+    )
+  }
+}
+
 class Def implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const id = cell.expr.car[1]
-    this.#checkId(id)
+    checkId(id, 'def')
 
     ctx.compileExpr(cell.expr.car[2], env)
     ctx.emit(Instruction.Save(env.defineVar(id.expr.value)))
@@ -292,7 +302,7 @@ class Def implements BytecodeCompiler, QBECompiler, ArgumentChecker {
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const id = cell.expr.car[1]
-    this.#checkId(id)
+    checkId(id, 'def')
 
     // Ensure that values are evaluated first, then assigned.
     const x = ctx.compileExpr(cell.expr.car[2], env)
@@ -305,16 +315,29 @@ class Def implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   }
 
   checkRule: CheckRule = { car: ['any', 'any'] }
+}
 
-  #checkId(id: ASTNode): asserts id is ASTNode<SExprSym> {
-    const { type } = id.expr
-    if (type !== 'sym') {
-      error(
-        id.meta,
-        `compiling: Bad syntax. \`def\` requires a symbol as variable identifier, found \`${type === 'num' ? 'i64' : type}\`.`,
-      )
-    }
+class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
+    const id = cell.expr.car[1]
+    checkId(id, 'set!')
+
+    ctx.compileExpr(cell.expr.car[2], env)
+    ctx.emit(Instruction.Save(env.lookup(id.expr.value) as number))
+    ctx.emit(Instruction.Unit)
   }
+
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
+    const id = cell.expr.car[1]
+    checkId(id, 'set!')
+
+    ctx.emit(
+      `storel ${ctx.compileExpr(cell.expr.car[2], env)}, ${env.lookup(id.expr.value)}`,
+    )
+    return qbeConst.Unit
+  }
+
+  checkRule: CheckRule = { car: ['any', 'any'] }
 }
 
 class Loop implements BytecodeCompiler, QBECompiler {
@@ -434,6 +457,7 @@ export default {
     cond: Cond,
     if: If,
     def: Def,
+    'set!': Set,
     loop: Loop,
     'size-of': SizeOf,
     call: Call,

@@ -78,3 +78,7 @@
 (def a 101) (print a) => 101
 (def a 101) (print a) (def a true) (print a) => 101true
 (def 0 1) !> -:1:6 compiling: Bad syntax. `def` requires a symbol as variable identifier, found `i64`.
+
+(def a 0) (print a) (set! a 1) (print a) => 01
+(def a 0) (print a) (set! a true) (print a) => 0true
+(set! 0 1) !> -:1:7 compiling: Bad syntax. `set!` requires a symbol as variable identifier, found `i64`.
