@@ -84,6 +84,13 @@ class Cond implements BytecodeCompiler, QBECompiler {
     }
 
     nextClause.fillOffset(ctx.code.len)
+    // It is expected that the following `unit` pushing instruction is before
+    // the end label. This one should be only evaluated when no clauses are
+    // evaluated (all test results are `false` or no clauses at all) at runtime.
+    // If one clauses runs, the body result or the preview `unit` will be pushed
+    // to the evaluation stack. Then the `jump` to end instruction will skip
+    // this instruction. It turns out that no excess value will be stored to the
+    // evaluation stack.
     ctx.emit(Instruction.Unit)
 
     end.fillOffset(ctx.code.len)
