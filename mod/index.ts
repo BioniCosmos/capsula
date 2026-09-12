@@ -21,6 +21,7 @@ export async function init(ctx: Backend) {
     './int',
     './array',
     './struct',
+    './str',
     './fn',
     './mem',
     './io',

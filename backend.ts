@@ -115,11 +115,21 @@ export class BytecodeBackend implements Backend<BytecodeCompiler> {
         this.emit(Instruction.Push(this.#fn.constants.push(expr) - 1))
         return
       case 'sym': {
-        const value = env.lookup(expr.value)
-        if (typeof value !== 'number') {
-          throw Error('TODO: `BytecodeCompiler.toString()`')
+        const x = env.lookup(expr.value)
+
+        if (typeof x === 'number') {
+          this.emit(Instruction.Load(x))
+          return
         }
-        this.emit(Instruction.Load(value))
+
+        this.emit(
+          Instruction.Push(
+            this.#fn.constants.push({
+              type: 'str',
+              value: `unit:${expr.value}`,
+            }) - 1,
+          ),
+        )
         return
       }
       case 'cell': {
@@ -280,33 +290,12 @@ export class QBEBackend implements Backend<QBECompiler> {
       case 'sym': {
         const x = env.lookup(expr.value)
         if (typeof x === 'string') {
-          const id = env.defineTemp()
-          this.emit(`${id} =l loadl ${x}`)
-          return id
+          return this.defineTemp(`loadl ${x}`, env)
         }
-        // TODO: Check type `QBECompiler`. Consider whether to allow shadowing keywords/builtin.
-        throw Error('unimplemented')
+        return this.buildString(`unit:${expr.value}`, env)
       }
-      case 'str': {
-        const s = this.env.defineTemp()
-        this.emitGlobal(`data ${s} = { b "${expr.value}" }`)
-
-        const x = env.defineTemp()
-        this.emit(`${x} =l alloc8 24`)
-
-        this.emit(`storel 2, ${x}`)
-
-        const p = env.defineTemp()
-        this.emit(`${p} =l add ${x}, 8`)
-        this.emit(
-          `storel ${new TextEncoder().encode(expr.value).byteLength}, ${p}`,
-        )
-
-        this.emit(`${p} =l add ${x}, 16`)
-        this.emit(`storel ${s}, ${p}`)
-
-        return this.wrapArray(x, env)
-      }
+      case 'str':
+        return this.buildString(expr.value, env)
       case 'cell': {
         const sym = expr.car[0]
         if (sym.expr.type !== 'sym') {
