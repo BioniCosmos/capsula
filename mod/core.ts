@@ -1,6 +1,6 @@
 import { BytecodeBackend, QBEBackend, type Backend } from '@/backend'
 import { Instruction, Label } from '@/bytecode'
-import type { BytecodeEnv, Environment, QBEEnv } from '@/env'
+import { BytecodeEnv, type Environment, type QBEEnv } from '@/env'
 import {
   qbeConst,
   type ArgumentChecker,
@@ -356,11 +356,20 @@ class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
 
 class Loop implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
+    const scope = new BytecodeEnv(env)
+
     const start = ctx.code.len
+    const end = new Label()
+    scope.defineVarUnit('break', new Break(end))
+    scope.defineVarUnit('continue', new Continue(start))
+
     for (const expr of cell.expr.car.slice(1)) {
-      ctx.compileExpr(expr, env)
+      ctx.compileExpr(expr, scope)
     }
     ctx.emit(Instruction.Jump(start - ctx.code.len))
+
+    end.fillOffset(ctx.code.len)
+    ctx.emit(Instruction.Unit)
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
@@ -372,6 +381,27 @@ class Loop implements BytecodeCompiler, QBECompiler {
     ctx.emit(`jmp ${loop}`)
     ctx.emit(env.defineBlock())
     return qbeConst.Unit
+  }
+}
+
+class Break implements BytecodeCompiler {
+  constructor(private end: Label) {}
+
+  compile(ctx: BytecodeBackend, _cell: ASTNode<SExprCell>, _env: BytecodeEnv) {
+    const from = ctx.code.len
+    const jump = ctx.emit(Instruction.Jump(0))
+    this.end.jumpFrom({
+      from,
+      fill: (offset) => jump.setInt16(1, offset, true),
+    })
+  }
+}
+
+class Continue implements BytecodeCompiler {
+  constructor(private start: number) {}
+
+  compile(ctx: BytecodeBackend, _cell: ASTNode<SExprCell>, _env: BytecodeEnv) {
+    ctx.emit(Instruction.Jump(this.start - ctx.code.len))
   }
 }
 
