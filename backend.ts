@@ -50,11 +50,11 @@ export class BytecodeBackend implements Backend<BytecodeCompiler> {
 
   async compile(source: ASTNode[], output = 'bytecode.💊') {
     this.startFn()
-    const mainEnv = new BytecodeEnv(this.env)
+    const mainEnv = new BytecodeEnv(this.env, true)
     for (const node of source) {
       this.compileExpr(node, mainEnv)
     }
-    this.endFn(mainEnv.localCount)
+    this.endFn(mainEnv.sp!)
 
     await Bun.write(
       output,

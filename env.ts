@@ -7,7 +7,7 @@ import {
 } from './type'
 
 // TODO: improve `isUnitConstructor` check in `lookup` to more specific type check
-// TODO: BytecodeEnv().#baseAddr and QBEEnv().#counter may be static to implement block variable scope.
+// TODO: QBEEnv().#counter may be static to implement block variable scope.
 export interface Environment<T extends Unit = Unit> {
   defineUnit(name: string, constructor: UnitConstructor<T>): void
 }
@@ -17,18 +17,13 @@ export class BytecodeEnv implements Environment<BytecodeCompiler> {
     string,
     number | UnitConstructor<BytecodeCompiler> | BytecodeCompiler
   >()
-  #baseAddr = 0
+  sp: number | null
 
-  constructor(private readonly parent: BytecodeEnv | null = null) {}
-
-  get localCount() {
-    let count = 0
-    for (const [, v] of this.#vars) {
-      if (typeof v === 'number') {
-        count++
-      }
-    }
-    return count
+  constructor(
+    private readonly parent: BytecodeEnv | null = null,
+    isFnScope = false,
+  ) {
+    this.sp = isFnScope ? 0 : null
   }
 
   defineUnit(name: string, constructor: UnitConstructor<BytecodeCompiler>) {
@@ -40,7 +35,7 @@ export class BytecodeEnv implements Environment<BytecodeCompiler> {
   }
 
   defineVar(name: string) {
-    const addr = this.#baseAddr++
+    const addr = this.#updateSP((sp) => sp + 1)
     this.#vars.set(name, addr)
     return addr
   }
@@ -60,6 +55,15 @@ export class BytecodeEnv implements Environment<BytecodeCompiler> {
 
     // TODO: undefined variable or unit
     throw Error(`undefined variable: ${name}`)
+  }
+
+  #updateSP(updater: (newSP: number) => number): number {
+    if (this.sp !== null) {
+      const old = this.sp
+      this.sp = updater(old)
+      return old
+    }
+    return this.parent!.#updateSP(updater)
   }
 }
 

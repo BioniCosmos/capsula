@@ -112,7 +112,7 @@ class Defn implements BytecodeCompiler, QBECompiler {
       )
     }
 
-    const fn = new BytecodeFn(ctx.startFn(), new BytecodeEnv(env), car)
+    const fn = new BytecodeFn(ctx.startFn(), new BytecodeEnv(env, true), car)
     env.defineVarUnit(id.expr.value, fn)
 
     for (const param of fn.required.toReversed()) {
@@ -123,7 +123,7 @@ class Defn implements BytecodeCompiler, QBECompiler {
     }
     ctx.emit(Instruction.Ret)
 
-    ctx.endFn(fn.env.localCount)
+    ctx.endFn(fn.env.sp!)
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
