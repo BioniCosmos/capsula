@@ -330,7 +330,11 @@ class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     checkId(id, 'set!')
 
     ctx.compileExpr(cell.expr.car[2], env)
-    ctx.emit(Instruction.Save(env.lookup(id.expr.value) as number))
+    const addr = env.lookup(id.expr.value)
+    if (typeof addr !== 'number') {
+      error(id.meta, 'compiling: cannot mutate built-in unit')
+    }
+    ctx.emit(Instruction.Save(addr))
     ctx.emit(Instruction.Unit)
   }
 
@@ -338,9 +342,12 @@ class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     const id = cell.expr.car[1]
     checkId(id, 'set!')
 
-    ctx.emit(
-      `storel ${ctx.compileExpr(cell.expr.car[2], env)}, ${env.lookup(id.expr.value)}`,
-    )
+    const x = ctx.compileExpr(cell.expr.car[2], env)
+    const innerId = env.lookup(id.expr.value)
+    if (typeof innerId !== 'number') {
+      error(id.meta, 'compiling: cannot mutate built-in unit')
+    }
+    ctx.emit(`storel ${x}, ${innerId}`)
     return qbeConst.Unit
   }
 
