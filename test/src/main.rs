@@ -1,28 +1,21 @@
 use std::{env, process::Command};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct Case<'a> {
     source: &'a str,
     expect: Expect<'a>,
     line: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum Expect<'a> {
     Output(&'a str),
     Error(&'a str),
 }
 
-#[derive(Clone, Copy)]
-enum State {
-    Source(usize),
-    Arrow,
-    Expect(usize),
-}
-
 fn main() {
     let backend = env::var("BACKEND").expect("requires a backend");
-    for case in parse_case(include_str!("cases")) {
+    for case in parse_cases(include_str!("cases")).expect("invalid syntax") {
         let result = Command::new("bun")
             .args(["index", "run", "--backend", &backend, "--eval", case.source])
             .current_dir("..")
@@ -59,80 +52,245 @@ fn main() {
     }
 }
 
-fn parse_case(raw: &str) -> Vec<Case<'_>> {
+#[derive(Debug, PartialEq)]
+enum State<'a> {
+    Init,
+    Source {
+        start_line: usize,
+        start: usize,
+    },
+    BeforeExpect {
+        start_line: usize,
+        source: &'a str,
+        is_error: bool,
+    },
+    Expect {
+        start_line: usize,
+        source: &'a str,
+        is_error: bool,
+        start: usize,
+    },
+}
+
+fn parse_cases(raw: &str) -> Option<Vec<Case<'_>>> {
     let raw = raw.as_bytes();
     let mut cases = vec![];
 
     let mut i = 0;
-    let mut state = State::Source(i);
-    let mut prev_state = state;
-    let mut expect_err = false;
-    let mut source = "";
     let mut line = 1;
-    let mut on_start = true;
+    let mut state = State::Init;
     while i < raw.len() {
-        let c = raw[i] as char;
-
-        if c == '\n' {
-            line += 1;
-            i += 1;
-            continue;
-        }
-
-        if on_start && c == '/' && i + 1 < raw.len() && raw[i + 1] == b'/' {
-            while raw[i] != b'\n' && i < raw.len() {
+        match raw[i] {
+            b'/' if raw.get(i + 1) == Some(&b'/') && state == State::Init => {
+                while i < raw.len() && raw[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            b' ' => i += 1,
+            b'\n' => {
                 i += 1;
+                line += 1;
             }
-            i += 1;
-            state = State::Source(i);
-            continue;
-        }
-
-        on_start = false;
-
-        match state {
-            State::Source(_) => {
-                if c == '=' {
-                    prev_state = state;
-                    state = State::Arrow;
-                    expect_err = false;
-                }
-                if c == '!' {
-                    prev_state = state;
-                    state = State::Arrow;
-                    expect_err = true;
-                }
-            }
-            State::Arrow => {
-                if c == '>' {
-                    let State::Source(start) = prev_state else {
-                        unreachable!();
+            b'=' if raw.get(i + 1) == Some(&b'>') => {
+                if let State::Source { start_line, start } = state {
+                    state = State::BeforeExpect {
+                        start_line,
+                        source: unsafe { str::from_utf8_unchecked(&raw[start..i]) }.trim_end(),
+                        is_error: false,
                     };
-                    source = unsafe { str::from_utf8_unchecked(&raw[start..i - 1]) }.trim();
-                    state = State::Expect(i + 1);
+                    i += 2;
                 } else {
-                    state = prev_state;
+                    panic!("invalid state: {state:?}");
                 }
             }
-            State::Expect(start) => {
-                if c == ';' {
-                    let expect = unsafe { str::from_utf8_unchecked(&raw[start..i]) }.trim();
+            b'!' if raw.get(i + 1) == Some(&b'>') => {
+                if let State::Source { start_line, start } = state {
+                    state = State::BeforeExpect {
+                        start_line,
+                        source: unsafe { str::from_utf8_unchecked(&raw[start..i]) }.trim_end(),
+                        is_error: true,
+                    };
+                    i += 2;
+                } else {
+                    panic!("invalid state: {state:?}");
+                }
+            }
+            b';' => {
+                if let State::Expect {
+                    start_line,
+                    source,
+                    is_error,
+                    start,
+                } = state
+                {
+                    let expect = unsafe { str::from_utf8_unchecked(&raw[start..i]) };
                     cases.push(Case {
                         source,
-                        expect: if expect_err {
+                        expect: if is_error {
                             Expect::Error(expect)
                         } else {
                             Expect::Output(expect)
                         },
-                        line,
+                        line: start_line,
                     });
-                    state = State::Source(i + 1);
-                    on_start = true;
+
+                    state = State::Init;
+                    i += 1;
+                } else {
+                    panic!("invalid state: {state:?}");
                 }
             }
+            _ => match state {
+                State::Init => {
+                    state = State::Source {
+                        start_line: line,
+                        start: i,
+                    }
+                }
+                State::Source { .. } => {
+                    while i + 1 < raw.len() && raw[i + 1] != b'>' {
+                        if raw[i] == b'\n' {
+                            line += 1;
+                        }
+                        i += 1;
+                    }
+                }
+                State::BeforeExpect {
+                    start_line,
+                    source,
+                    is_error,
+                } => {
+                    state = State::Expect {
+                        start_line,
+                        source,
+                        is_error,
+                        start: i,
+                    }
+                }
+                State::Expect { .. } => {
+                    while i < raw.len() && raw[i] != b';' {
+                        if raw[i] == b'\n' {
+                            line += 1;
+                        }
+                        i += 1;
+                    }
+                }
+            },
         }
-        i += 1;
     }
 
-    cases
+    (state == State::Init).then_some(cases)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_cases_normal() {
+        assert_eq!(
+            parse_cases(
+                r"
+(foo)
+(bar) => baz;
+cat !> neko;
+                "
+            ),
+            Some(vec![
+                Case {
+                    source: "(foo)\n(bar)",
+                    expect: Expect::Output("baz"),
+                    line: 2,
+                },
+                Case {
+                    source: "cat",
+                    expect: Expect::Error("neko"),
+                    line: 4,
+                },
+            ]),
+        );
+
+        assert_eq!(
+            parse_cases(
+                r"
+(foo)
+(bar) => baz
+cat !> neko;
+                ",
+            ),
+            Some(vec![Case {
+                source: "(foo)\n(bar)",
+                expect: Expect::Output("baz\ncat !> neko"),
+                line: 2,
+            }]),
+        );
+
+        assert_eq!(
+            parse_cases(
+                r"
+(foo)
+(bar) baz;
+cat !> neko;
+                ",
+            ),
+            Some(vec![Case {
+                source: "(foo)\n(bar) baz;\ncat",
+                expect: Expect::Error("neko"),
+                line: 2,
+            }]),
+        );
+    }
+
+    #[test]
+    fn test_parse_cases_abnormal() {
+        assert_eq!(
+            parse_cases(
+                r"
+(foo)
+(bar) => baz;
+cat !> neko
+                ",
+            ),
+            None,
+        );
+
+        assert_eq!(
+            parse_cases(
+                r"
+(foo)
+(bar) => baz;
+cat neko;
+                ",
+            ),
+            None,
+        );
+    }
+
+    #[test]
+    fn test_parse_cases_comment() {
+        assert_eq!(
+            parse_cases(
+                r"
+// 1
+(foo) // 5
+(bar) => baz; // 2
+  // 3
+cat !> //6 neko;
+// 4
+                "
+            ),
+            Some(vec![
+                Case {
+                    source: "(foo) // 5\n(bar)",
+                    expect: Expect::Output("baz"),
+                    line: 3,
+                },
+                Case {
+                    source: "cat",
+                    expect: Expect::Error("//6 neko"),
+                    line: 6,
+                },
+            ]),
+        );
+    }
 }
