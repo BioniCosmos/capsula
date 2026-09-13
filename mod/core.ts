@@ -12,7 +12,7 @@ import {
   type SExprCell,
   type SExprSym,
 } from '@/type'
-import { error } from '@/utils'
+import { error, mustLookup } from '@/utils'
 import type { Module } from '.'
 
 class Eq implements BytecodeCompiler, QBECompiler, ArgumentChecker {
@@ -330,7 +330,7 @@ class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     checkId(id, 'set!')
 
     ctx.compileExpr(cell.expr.car[2], env)
-    const addr = env.lookup(id.expr.value)
+    const addr = mustLookup(id, env)
     if (typeof addr !== 'number') {
       error(id.meta, 'compiling: cannot mutate built-in unit')
     }
@@ -343,7 +343,7 @@ class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     checkId(id, 'set!')
 
     const x = ctx.compileExpr(cell.expr.car[2], env)
-    const innerId = env.lookup(id.expr.value)
+    const innerId = mustLookup(id, env)
     if (typeof innerId !== 'string') {
       error(id.meta, 'compiling: cannot mutate built-in unit')
     }

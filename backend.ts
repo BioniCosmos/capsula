@@ -19,9 +19,10 @@ import {
   type PrimitiveType,
   type QBECompiler,
   type SExprCell,
+  type SExprSym,
   type Unit,
 } from './type'
-import { error } from './utils'
+import { error, mustLookup } from './utils'
 
 export interface Backend<U extends Unit = Unit> {
   readonly env: Environment<U>
@@ -115,7 +116,7 @@ export class BytecodeBackend implements Backend<BytecodeCompiler> {
         this.emit(Instruction.Push(this.#fn.constants.push(expr) - 1))
         return
       case 'sym': {
-        const x = env.lookup(expr.value)
+        const x = mustLookup(node as ASTNode<SExprSym>, env)
 
         if (typeof x === 'number') {
           this.emit(Instruction.Load(x))
@@ -138,7 +139,7 @@ export class BytecodeBackend implements Backend<BytecodeCompiler> {
           throw Error(`compiling: expecting symbol, found \`${sym.expr.type}\``)
         }
 
-        const compiler = env.lookup(sym.expr.value)
+        const compiler = mustLookup(sym as ASTNode<SExprSym>, env)
         if (!isBytecodeCompiler(compiler)) {
           if (isUnit(compiler)) {
             error(
@@ -288,7 +289,7 @@ export class QBEBackend implements Backend<QBECompiler> {
       case 'num':
         return ((expr.value << 3) | qbeConst.i64).toString()
       case 'sym': {
-        const x = env.lookup(expr.value)
+        const x = mustLookup(node as ASTNode<SExprSym>, env)
         if (typeof x === 'string') {
           return this.defineTemp(`loadl ${x}`, env)
         }
@@ -302,7 +303,7 @@ export class QBEBackend implements Backend<QBECompiler> {
           throw Error(`compiling: expecting symbol, found \`${sym.expr.type}\``)
         }
 
-        const compiler = env.lookup(sym.expr.value)
+        const compiler = mustLookup(sym as ASTNode<SExprSym>, env)
         if (!isQBECompiler(compiler)) {
           if (isUnit(compiler)) {
             error(

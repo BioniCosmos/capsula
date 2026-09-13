@@ -6,13 +6,13 @@ import {
   type UnitConstructor,
 } from './type'
 
-// TODO: improve `isUnitConstructor` check in `lookup` to more specific type check
 // TODO: QBEEnv().#counter may be static to implement block variable scope.
-export interface Environment<T extends Unit = Unit> {
+export interface Environment<T extends Unit = Unit, R = unknown> {
   defineUnit(name: string, constructor: UnitConstructor<T>): void
+  lookup(name: string): R | T | null
 }
 
-export class BytecodeEnv implements Environment<BytecodeCompiler> {
+export class BytecodeEnv implements Environment<BytecodeCompiler, number> {
   readonly #vars = new Map<
     string,
     number | UnitConstructor<BytecodeCompiler> | BytecodeCompiler
@@ -40,7 +40,7 @@ export class BytecodeEnv implements Environment<BytecodeCompiler> {
     return addr
   }
 
-  lookup(name: string): number | BytecodeCompiler {
+  lookup(name: string): number | BytecodeCompiler | null {
     if (this.#vars.has(name)) {
       const item = this.#vars.get(name)!
       if (isUnitConstructor(item)) {
@@ -53,8 +53,7 @@ export class BytecodeEnv implements Environment<BytecodeCompiler> {
       return this.parent.lookup(name)
     }
 
-    // TODO: undefined variable or unit
-    throw Error(`undefined variable: ${name}`)
+    return null
   }
 
   #updateSP(updater: (newSP: number) => number): number {
@@ -68,7 +67,7 @@ export class BytecodeEnv implements Environment<BytecodeCompiler> {
 }
 
 // TODO: Distinguish the identifier of the builtin and the external.
-export class QBEEnv implements Environment<QBECompiler> {
+export class QBEEnv implements Environment<QBECompiler, string> {
   readonly #vars = new Map<
     string,
     (string | UnitConstructor<QBECompiler> | QBECompiler)[]
@@ -113,7 +112,7 @@ export class QBEEnv implements Environment<QBECompiler> {
     return `@b_${this.#counter++}`
   }
 
-  lookup(name: string): string | QBECompiler {
+  lookup(name: string): string | QBECompiler | null {
     if (this.#vars.has(name)) {
       const item = this.#vars.get(name)!.at(-1)!
       if (isUnitConstructor<QBECompiler>(item)) {
@@ -126,7 +125,7 @@ export class QBEEnv implements Environment<QBECompiler> {
       return this.parent.lookup(name)
     }
 
-    throw Error(`undefined variable: ${name}`)
+    return null
   }
 
   genId(prefix: 't' | 'v') {
