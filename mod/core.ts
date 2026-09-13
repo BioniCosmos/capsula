@@ -344,7 +344,7 @@ class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
 
     const x = ctx.compileExpr(cell.expr.car[2], env)
     const innerId = env.lookup(id.expr.value)
-    if (typeof innerId !== 'number') {
+    if (typeof innerId !== 'string') {
       error(id.meta, 'compiling: cannot mutate built-in unit')
     }
     ctx.emit(`storel ${x}, ${innerId}`)
