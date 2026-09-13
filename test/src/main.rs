@@ -80,18 +80,18 @@ fn parse_cases(raw: &str) -> Option<Vec<Case<'_>>> {
     let mut line = 1;
     let mut state = State::Init;
     while i < raw.len() {
-        match raw[i] {
-            b'/' if raw.get(i + 1) == Some(&b'/') && state == State::Init => {
+        match (raw[i], raw.get(i + 1).copied()) {
+            (b' ', _) => i += 1,
+            (b'\n', _) => {
+                i += 1;
+                line += 1;
+            }
+            (b'/', Some(b'/')) if state == State::Init => {
                 while i < raw.len() && raw[i] != b'\n' {
                     i += 1;
                 }
             }
-            b' ' => i += 1,
-            b'\n' => {
-                i += 1;
-                line += 1;
-            }
-            b'=' if raw.get(i + 1) == Some(&b'>') => {
+            (b'=', Some(b'>')) => {
                 if let State::Source { start_line, start } = state {
                     state = State::BeforeExpect {
                         start_line,
@@ -103,7 +103,7 @@ fn parse_cases(raw: &str) -> Option<Vec<Case<'_>>> {
                     panic!("invalid state: {state:?}");
                 }
             }
-            b'!' if raw.get(i + 1) == Some(&b'>') => {
+            (b'!', Some(b'>')) => {
                 if let State::Source { start_line, start } = state {
                     state = State::BeforeExpect {
                         start_line,
@@ -115,7 +115,13 @@ fn parse_cases(raw: &str) -> Option<Vec<Case<'_>>> {
                     panic!("invalid state: {state:?}");
                 }
             }
-            b';' => {
+            (c, Some(b'>')) => {
+                if c == b'\n' {
+                    line += 1;
+                }
+                i += 1;
+            }
+            (b';', _) => {
                 if let State::Expect {
                     start_line,
                     source,
@@ -292,5 +298,28 @@ cat !> //6 neko;
                 },
             ]),
         );
+    }
+
+    #[test]
+    fn test_parse_cases_right_angle_bracket() {
+        assert_eq!(
+            parse_cases(
+                "123
+>= 456 => false;
+foo !> bar;"
+            ),
+            Some(vec![
+                Case {
+                    source: "123\n>= 456",
+                    expect: Expect::Output("false"),
+                    line: 1,
+                },
+                Case {
+                    source: "foo",
+                    expect: Expect::Error("bar"),
+                    line: 3,
+                },
+            ]),
+        )
     }
 }
