@@ -73,8 +73,14 @@ fn parse_case(raw: &str) -> Vec<Case<'_>> {
     while i < raw.len() {
         let c = raw[i] as char;
 
-        if on_start && c == '/' && i + 1 < raw.len() && raw[i + 1] as char == '/' {
-            while raw[i] as char != '\n' && i < raw.len() {
+        if c == '\n' {
+            line += 1;
+            i += 1;
+            continue;
+        }
+
+        if on_start && c == '/' && i + 1 < raw.len() && raw[i + 1] == b'/' {
+            while raw[i] != b'\n' && i < raw.len() {
                 i += 1;
             }
             i += 1;
@@ -109,7 +115,7 @@ fn parse_case(raw: &str) -> Vec<Case<'_>> {
                 }
             }
             State::Expect(start) => {
-                if c == '\n' {
+                if c == ';' {
                     let expect = unsafe { str::from_utf8_unchecked(&raw[start..i]) }.trim();
                     cases.push(Case {
                         source,
@@ -120,7 +126,6 @@ fn parse_case(raw: &str) -> Vec<Case<'_>> {
                         },
                         line,
                     });
-                    line += 1;
                     state = State::Source(i + 1);
                     on_start = true;
                 }

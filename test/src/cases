@@ -1,84 +1,84 @@
-(print 2277852) => 2277852
-(print -1) => -1
-(print -0) => 0
-(print true) => true
-(print false) => false
+(print 2277852) => 2277852;
+(print -1) => -1;
+(print -0) => 0;
+(print true) => true;
+(print false) => false;
 
-(print (+ 1 2)) => 3
-(print (+ 10 -9)) => 1
-(print (+ 1 2 3)) !> -:1:15 compiling: `+` expects exactly 2 arguments, but found 3.
-(print (+ true 2)) !> -:1:11 compiling: expecting `i64`, found `bool`
-(print (+ 10 (- 82 -32))) => 124
-(print (- 10 3)) => 7
-(print (* 512 512)) => 262144
-(print (/ 4 2)) => 2
-(print (/ -4 3)) => -1
-(print (/ 5 -2)) => -2
-(print (% 4 3)) => 1
-(print (% -4 3)) => -1
-(print (/ 1 0)) !> -:1:13 compiling: The divisor cannot be zero.
-(print (% -1 0)) !> -:1:14 compiling: The divisor cannot be zero.
+(print (+ 1 2)) => 3;
+(print (+ 10 -9)) => 1;
+(print (+ 1 2 3)) !> -:1:15 compiling: `+` expects exactly 2 arguments, but found 3.;
+(print (+ true 2)) !> -:1:11 compiling: expecting `i64`, found `bool`;
+(print (+ 10 (- 82 -32))) => 124;
+(print (- 10 3)) => 7;
+(print (* 512 512)) => 262144;
+(print (/ 4 2)) => 2;
+(print (/ -4 3)) => -1;
+(print (/ 5 -2)) => -2;
+(print (% 4 3)) => 1;
+(print (% -4 3)) => -1;
+(print (/ 1 0)) !> -:1:13 compiling: The divisor cannot be zero.;
+(print (% -1 0)) !> -:1:14 compiling: The divisor cannot be zero.;
 
-(print (< 1 10)) => true
-(print (> 1 10)) => false
-(print (<= 1 10)) => true
-(print (>= 1 10)) => false
-(print (<= 5 5)) => true
-(print (>= 6 5)) => true
+(print (< 1 10)) => true;
+(print (> 1 10)) => false;
+(print (<= 1 10)) => true;
+(print (>= 1 10)) => false;
+(print (<= 5 5)) => true;
+(print (>= 6 5)) => true;
 
-(print (= 1 1)) => true
-(print (= 1 true)) => false
+(print (= 1 1)) => true;
+(print (= 1 true)) => false;
 
-(print (i64? -100)) => true
-(print (i64? true)) => false
+(print (i64? -100)) => true;
+(print (i64? true)) => false;
 
-(panic "YOU ARE DEAD! 🫨") !> -:1:1 panic: YOU ARE DEAD! 🫨
+(panic "YOU ARE DEAD! 🫨") !> -:1:1 panic: YOU ARE DEAD! 🫨;
 
-(print (cond (false 999) (true 2) (false 3))) => 2
-(print (cond (true 1 2 3))) => 3
-(print (cond (false 999) (else 3))) => 3
-(cond (else 0) (true 1)) !> -:1:8 compiling: The `else` clause must be the last.
-(print (cond (false 1))) => ()
-(print (cond)) => ()
-(print (cond (true))) => ()
-(print (cond (else))) => ()
-(cond ()) !> -:1:7 compiling: Clause must at least have a predicate.
-(cond (1)) !> -:1:8 compiling: The predicate type must be `bool`, found `i64`.
-(def pred 0) (cond (pred)) !> -:1:21 panic: The predicate type must be `bool`, found `i64`.
-(cond (true 1) (false . 0)) !> -:1:25 compiling: unexpected `cdr`
-(cond 100) !> -:1:7 compiling: expecting clause, found `100` (`i64`)
-(cond . 100) !> -:1:9 compiling: unexpected `cdr`
+(print (cond (false 999) (true 2) (false 3))) => 2;
+(print (cond (true 1 2 3))) => 3;
+(print (cond (false 999) (else 3))) => 3;
+(cond (else 0) (true 1)) !> -:1:8 compiling: The `else` clause must be the last.;
+(print (cond (false 1))) => ();
+(print (cond)) => ();
+(print (cond (true))) => ();
+(print (cond (else))) => ();
+(cond ()) !> -:1:7 compiling: Clause must at least have a predicate.;
+(cond (1)) !> -:1:8 compiling: The predicate type must be `bool`, found `i64`.;
+(def pred 0) (cond (pred)) !> -:1:21 panic: The predicate type must be `bool`, found `i64`.;
+(cond (true 1) (false . 0)) !> -:1:25 compiling: unexpected `cdr`;
+(cond 100) !> -:1:7 compiling: expecting clause, found `100` (`i64`);
+(cond . 100) !> -:1:9 compiling: unexpected `cdr`;
 
-(print (if true 0 1)) => 0
-(print (if false 0 1)) => 1
-(print (if true 0)) => 0
-(print (if false 0)) => ()
-(print (if (i64? true) 55 66)) => 66
-(if 0 1 2) !> -:1:5 compiling: The predicate type must be `bool`, found `i64`.
-(if true 0 1 2) !> -:1:14 compiling: too many arguments passed to `if`
-(if true) !> -:1:2 compiling: `if` requires result expression.
-(if) !> -:1:2 compiling: bad syntax. `if` requires predicate and result expression.
-(if else 0 1) !> -:1:5 compiling: Symbol `else` cannot be used as a predicate in `if`.
-(if true 0 1 . 2) !> -:1:16 compiling: unexpected `cdr`
+(print (if true 0 1)) => 0;
+(print (if false 0 1)) => 1;
+(print (if true 0)) => 0;
+(print (if false 0)) => ();
+(print (if (i64? true) 55 66)) => 66;
+(if 0 1 2) !> -:1:5 compiling: The predicate type must be `bool`, found `i64`.;
+(if true 0 1 2) !> -:1:14 compiling: too many arguments passed to `if`;
+(if true) !> -:1:2 compiling: `if` requires result expression.;
+(if) !> -:1:2 compiling: bad syntax. `if` requires predicate and result expression.;
+(if else 0 1) !> -:1:5 compiling: Symbol `else` cannot be used as a predicate in `if`.;
+(if true 0 1 . 2) !> -:1:16 compiling: unexpected `cdr`;
 
-(print (and true false)) => false
-(print (and true true)) => true
-(print (and false true)) => false
-(print (and false false)) => false
-(print (or true false)) => true
-(print (or true true)) => true
-(print (or false true)) => true
-(print (or false false)) => false
-(print (not true)) => false
-(print (not false)) => true
-(print (or false (and true true))) => true
-(print (and true (not false))) => true
-(print (not (or false false))) => true
+(print (and true false)) => false;
+(print (and true true)) => true;
+(print (and false true)) => false;
+(print (and false false)) => false;
+(print (or true false)) => true;
+(print (or true true)) => true;
+(print (or false true)) => true;
+(print (or false false)) => false;
+(print (not true)) => false;
+(print (not false)) => true;
+(print (or false (and true true))) => true;
+(print (and true (not false))) => true;
+(print (not (or false false))) => true;
 
-(def a 101) (print a) => 101
-(def a 101) (print a) (def a true) (print a) => 101true
-(def 0 1) !> -:1:6 compiling: Bad syntax. `def` requires a symbol as variable identifier, found `i64`.
+(def a 101) (print a) => 101;
+(def a 101) (print a) (def a true) (print a) => 101true;
+(def 0 1) !> -:1:6 compiling: Bad syntax. `def` requires a symbol as variable identifier, found `i64`.;
 
-(def a 0) (print a) (set! a 1) (print a) => 01
-(def a 0) (print a) (set! a true) (print a) => 0true
-(set! 0 1) !> -:1:7 compiling: Bad syntax. `set!` requires a symbol as variable identifier, found `i64`.
+(def a 0) (print a) (set! a 1) (print a) => 01;
+(def a 0) (print a) (set! a true) (print a) => 0true;
+(set! 0 1) !> -:1:7 compiling: Bad syntax. `set!` requires a symbol as variable identifier, found `i64`.;
