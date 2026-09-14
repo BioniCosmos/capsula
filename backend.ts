@@ -184,7 +184,7 @@ export class QBEBackend implements Backend<QBECompiler> {
   async compile(source: ASTNode[], output = 'a.out') {
     this.startFn('$main', '', 'w', true)
     this.emitPrologue(`call $map_init()`)
-    const env = new QBEEnv(this.env)
+    const env = new QBEEnv(this.env, true)
 
     for (const node of source) {
       this.compileExpr(node, env)

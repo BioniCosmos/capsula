@@ -149,7 +149,7 @@ class Defn implements BytecodeCompiler, QBECompiler {
     const fn = new QBEFn(ctx.env.genId('v'), car.length, cdr !== null)
     env.defineVarUnit(id.expr.value, fn)
 
-    const fnEnv = new QBEEnv(env)
+    const fnEnv = new QBEEnv(env, true)
     const paramDef: string[] = []
     const prologue: string[] = []
     for (const param of car) {

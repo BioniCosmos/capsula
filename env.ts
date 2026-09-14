@@ -6,7 +6,6 @@ import {
   type UnitConstructor,
 } from './type'
 
-// TODO: QBEEnv().#counter may be static to implement block variable scope.
 export interface Environment<T extends Unit = Unit, R = unknown> {
   defineUnit(name: string, constructor: UnitConstructor<T>): void
   lookup(name: string): R | T | null
@@ -72,9 +71,22 @@ export class QBEEnv implements Environment<QBECompiler, string> {
     string,
     (string | UnitConstructor<QBECompiler> | QBECompiler)[]
   >()
-  #counter = 0
+  #counter: number | null
+  #subScopes: QBEEnv[] | null
 
-  constructor(private readonly parent: QBEEnv | null = null) {}
+  constructor(
+    private readonly parent: QBEEnv | null = null,
+    isFnScope = false,
+  ) {
+    if (!isFnScope && parent !== null) {
+      this.#counter = null
+      this.#subScopes = null
+      parent.#linkSubScope(this)
+    } else {
+      this.#counter = 0
+      this.#subScopes = []
+    }
+  }
 
   get #isGlobal() {
     return this.parent === null
@@ -109,7 +121,7 @@ export class QBEEnv implements Environment<QBECompiler, string> {
   }
 
   defineBlock() {
-    return `@b_${this.#counter++}`
+    return `@b_${this.#updateCount((count) => count + 1)}`
   }
 
   lookup(name: string): string | QBECompiler | null {
@@ -129,6 +141,23 @@ export class QBEEnv implements Environment<QBECompiler, string> {
   }
 
   genId(prefix: 't' | 'v') {
-    return `${this.#isGlobal ? '$' : '%'}${prefix}_${this.#counter++}`
+    return `${this.#isGlobal ? '$' : '%'}${prefix}_${this.#updateCount((count) => count + 1)}`
+  }
+
+  #updateCount(updater: (newCount: number) => number): number {
+    if (this.#counter !== null) {
+      const old = this.#counter
+      this.#counter = updater(old)
+      return old
+    }
+    return this.parent!.#updateCount(updater)
+  }
+
+  #linkSubScope(scope: QBEEnv) {
+    if (this.#subScopes !== null) {
+      this.#subScopes.push(scope)
+      return
+    }
+    this.parent!.#linkSubScope(scope)
   }
 }
