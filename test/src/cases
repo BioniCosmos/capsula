@@ -49,6 +49,7 @@
 (cond (true 1) (false . 0)) !> -:1:25 compiling: unexpected `cdr`;
 (cond 100) !> -:1:7 compiling: expecting clause, found `100` (`i64`);
 (cond . 100) !> -:1:9 compiling: unexpected `cdr`;
+(def x true) (cond (true (def x 1) (print x))) (print x) => 1true;
 
 (print (if true 0 1)) => 0;
 (print (if false 0 1)) => 1;

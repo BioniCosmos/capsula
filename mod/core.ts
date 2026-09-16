@@ -1,6 +1,6 @@
 import { BytecodeBackend, QBEBackend, type Backend } from '@/backend'
 import { Instruction, Label } from '@/bytecode'
-import { BytecodeEnv, type Environment, type QBEEnv } from '@/env'
+import { BytecodeEnv, QBEEnv, type Environment } from '@/env'
 import {
   qbeConst,
   type ArgumentChecker,
@@ -65,8 +65,9 @@ class Cond implements BytecodeCompiler, QBECompiler {
 
       const body = clause.expr.car.slice(1)
       if (body.length !== 0) {
+        const scope = new BytecodeEnv(env)
         for (const [i, x] of body.entries()) {
-          ctx.compileExpr(x, env)
+          ctx.compileExpr(x, scope)
           if (i !== body.length - 1) {
             ctx.emit(Instruction.Pop)
           }
@@ -130,10 +131,11 @@ class Cond implements BytecodeCompiler, QBECompiler {
       const body = env.defineBlock()
       ctx.emit(`jnz ${testResult}, ${body}, ${nextClause}`)
       ctx.emit(body)
+      const scope = new QBEEnv(env)
       ctx.emit(
         `${result} =l copy ${clause.expr.car
           .slice(1)
-          .reduce((_, x) => ctx.compileExpr(x, env), qbeConst.Unit)}`,
+          .reduce((_, x) => ctx.compileExpr(x, scope), qbeConst.Unit)}`,
       )
       ctx.emit(`jmp ${end}`)
     }
