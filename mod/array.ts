@@ -28,29 +28,21 @@ class ArrayOf implements BytecodeCompiler, QBECompiler {
    */
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const xs = ctx.compileArgs(cell, env)
-    const arr = env.defineTemp()
-    ctx.emit(`${arr} =l alloc8 ${xs.length * 8}`)
-
-    const p = env.defineTemp()
-    for (const [i, x] of xs.entries()) {
-      // arr[i] = x
-      ctx.emit(`${p} =l add ${arr}, ${i * 8}`)
+    // arr := { type: u64; len: u64; data: ... }
+    const arr = ctx.defineTemp(`alloc8 ${16 + xs.length * 8}`, env)
+    const p = ctx.defineTemp(`copy ${arr}`, env)
+    // arr.type = 0
+    ctx.emit(`storel 0, ${p}`)
+    // arr.len = xs.len
+    ctx.emit(`${p} =l add ${p}, 8`)
+    ctx.emit(`storel ${xs.length}, ${p}`)
+    // arr.data <- xs
+    for (const x of xs) {
+      // arr.data[i] = x
+      ctx.emit(`${p} =l add ${p}, ${8}`)
       ctx.emit(`storel ${x}, ${p}`)
     }
-
-    // let header = { type: u64; len: u64; ptr: u64 }
-    const header = env.defineTemp()
-    ctx.emit(`${header} =l alloc8 24`)
-    // header.type = 0
-    ctx.emit(`storel 0, ${header}`)
-    // header.len = xs.len
-    ctx.emit(`${p} =l add ${header}, 8`)
-    ctx.emit(`storel ${xs.length}, ${p}`)
-    // header.ptr = arr
-    ctx.emit(`${p} =l add ${header}, 16`)
-    ctx.emit(`storel ${arr}, ${p}`)
-
-    return ctx.wrapArray(header, env)
+    return ctx.wrapArray(arr, env)
   }
 }
 

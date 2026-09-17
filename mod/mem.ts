@@ -16,24 +16,34 @@ class Alloc implements QBECompiler {
     const result = ctx.if(
       () => ctx.isArray(x, env),
       () => {
-        const result = ctx.defineTemp(`alloc8 24`, env)
-        ctx.emit(`blit ${ctx.unwrapArray(x, env)}, ${result}, 24`)
+        const arr = ctx.unwrapArray(x, env)
+        const header = ctx.defineTemp(`alloc8 24`, env)
+        const p = ctx.defineTemp(`copy ${header}`, env)
 
+        // Convert and copy `type`.
         const type = env.defineTemp()
-        ctx.emit(`${type} =l loadl ${result}`)
+        ctx.emit(`${type} =l loadl ${arr}`)
         ctx.emit(`${type} =l or ${type}, ${1n << 63n}`)
-        ctx.emit(`storel ${type}, ${result}`)
+        ctx.emit(`storel ${type}, ${p}`)
 
-        const dataSize = ctx.defineTemp(
-          `mul ${ctx.arrayLen(result, env)}, 8`,
-          env,
-        )
-        const newData = ctx.defineTemp(`call $gc_alloc(l ${dataSize})`, env)
-        const ptrField = ctx.defineTemp(`add ${result}, 16`, env)
-        const oldData = ctx.defineTemp(`loadl ${ptrField}`, env)
-        ctx.emit(`call $memcpy(l ${newData}, l ${oldData}, l ${dataSize})`)
-        ctx.emit(`storel ${newData}, ${ptrField}`)
-        return ctx.wrapArray(result, env)
+        // Copy `len`.
+        ctx.emit(`${arr} =l add ${arr}, 8`)
+        ctx.emit(`${p} =l add ${p}, 8`)
+        ctx.emit(`blit ${arr}, ${p}, 8`)
+
+        // Calculate `size`.
+        const size = env.defineTemp()
+        ctx.emit(`${size} =l loadl ${arr}`)
+        ctx.emit(`${size} =l mul ${size}, 8`)
+
+        // Allocate and copy data.
+        ctx.emit(`${arr} =l add ${arr}, 8`)
+        ctx.emit(`${p} =l add ${p}, 8`)
+        const ptr = ctx.defineTemp(`call $gc_alloc(l ${size})`, env)
+        ctx.emit(`call $memcpy(l ${ptr}, l ${arr}, l ${size})`)
+        ctx.emit(`storel ${ptr}, ${p}`)
+
+        return ctx.wrapArray(header, env)
       },
       () => {
         const result = ctx.defineTemp(`call $gc_alloc(l 8)`, env)

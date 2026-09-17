@@ -169,15 +169,20 @@ void gc_check(const uint64_t x) {
             break;
         }
         case 0b011: {
-            const auto arr = (const ArrayHeader*)(x & ~0b111);
+            const auto arr = (const Array*)(x & ~0b111);
             if (array_is_managed(arr)) {
-                const auto entry = map_get(arr->ptr);
+                const auto ptr = (uint64_t*)arr->data[0];
+                const auto entry = map_get(ptr);
                 if (entry != nullptr) {
                     entry->marked = true;
                 }
-            }
-            for (size_t i = 0; i < arr->len; i++) {
-                gc_check(arr->ptr[i]);
+                for (size_t i = 0; i < arr->len; i++) {
+                    gc_check(ptr[i]);
+                }
+            } else {
+                for (size_t i = 0; i < arr->len; i++) {
+                    gc_check(arr->data[i]);
+                }
             }
             break;
         }

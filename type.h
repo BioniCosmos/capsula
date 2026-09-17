@@ -2,15 +2,20 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
-#define error(fmt, ...) \
-    fprintf(stderr, "%s:%d in %s() runtime error: " fmt "\n", __FILE__, __LINE__, __func__ __VA_OPT__(, ) __VA_ARGS__)
+#define error(fmt, ...)                                                               \
+    {                                                                                 \
+        fprintf(stderr, "%s:%d in %s() runtime error: " fmt "\n", __FILE__, __LINE__, \
+                __func__ __VA_OPT__(, ) __VA_ARGS__);                                 \
+        exit(1);                                                                      \
+    }
 
 typedef struct {
     const uint64_t type;
     const uint64_t len;
-    const uint64_t* const ptr;
-} ArrayHeader;
+    const uint64_t data[];
+} Array;
 
 void var_display(const uint64_t x);
 void var_debug(const uint64_t x);
@@ -20,7 +25,7 @@ static inline int64_t tag(const uint64_t x) {
     return x & 0b111;
 }
 
-static inline bool array_is_managed(const ArrayHeader* const arr) {
+static inline bool array_is_managed(const Array* const arr) {
     return arr->type >> 63 == 1;
 }
 
@@ -42,28 +47,51 @@ void var_display(const uint64_t x) {
             printf("%lld", (int64_t)x >> 3);
             break;
         case 0b011: {
-            const auto arr = (const ArrayHeader*)(x & ~0b111);
-            switch (arr->type & INT64_MAX) {
-                case 0:
-                    printf("[ ");
-                    for (size_t i = 0; i < arr->len; i++) {
-                        var_display(arr->ptr[i]);
-                        printf(" ");
-                    }
-                    printf("]");
-                    break;
-                // TODO: Add struct type info to runtime.
-                case 1:
-                    printf("{ ");
-                    for (size_t i = 0; i < arr->len; i++) {
-                        var_display(arr->ptr[i]);
-                        printf(" ");
-                    }
-                    printf("}");
-                    break;
-                case 2:
-                    printf("%s", (char*)arr->ptr);
-                    break;
+            const auto arr = (const Array*)(x & ~0b111);
+            if (array_is_managed(arr)) {
+                const auto ptr = (uint64_t*)arr->data[0];
+                switch (arr->type & INT64_MAX) {
+                    case 0:
+                        printf("[ ");
+                        for (size_t i = 0; i < arr->len; i++) {
+                            var_display(ptr[i]);
+                            printf(" ");
+                        }
+                        printf("]");
+                        break;
+                    // TODO: Add struct type info to runtime.
+                    case 1:
+                        printf("{ ");
+                        for (size_t i = 0; i < arr->len; i++) {
+                            var_display(ptr[i]);
+                            printf(" ");
+                        }
+                        printf("}");
+                        break;
+                    case 2:
+                        printf("%s", (char*)ptr);
+                        break;
+                }
+            } else {
+                switch (arr->type & INT64_MAX) {
+                    case 0:
+                        printf("[ ");
+                        for (size_t i = 0; i < arr->len; i++) {
+                            var_display(arr->data[i]);
+                            printf(" ");
+                        }
+                        printf("]");
+                        break;
+                    // TODO: Add struct type info to runtime.
+                    case 1:
+                        printf("{ ");
+                        for (size_t i = 0; i < arr->len; i++) {
+                            var_display(arr->data[i]);
+                            printf(" ");
+                        }
+                        printf("}");
+                        break;
+                }
             }
             break;
         }
@@ -90,29 +118,53 @@ void var_debug(const uint64_t x) {
             printf("%lld", (int64_t)x >> 3);
             break;
         case 0b011: {
-            const auto arr = (const ArrayHeader*)(x & ~0b111);
-            switch (arr->type & INT64_MAX) {
-                case 0:
-                    printf("array%s", array_is_managed(arr) ? " (managed)" : "");
-                    printf(" { len = %llu, value = [ ", arr->len);
-                    for (size_t i = 0; i < arr->len; i++) {
-                        var_debug(arr->ptr[i]);
-                        printf(" ");
-                    }
-                    printf("] }");
-                    break;
-                case 1:
-                    printf("struct%s", array_is_managed(arr) ? " (managed)" : "");
-                    printf(" { ");
-                    for (size_t i = 0; i < arr->len; i++) {
-                        var_debug(arr->ptr[i]);
-                        printf(" ");
-                    }
-                    printf("}");
-                    break;
-                case 2:
-                    printf("\"%s\"", (char*)arr->ptr);
-                    break;
+            const auto arr = (const Array*)(x & ~0b111);
+            if (array_is_managed(arr)) {
+                const auto ptr = (uint64_t*)arr->data[0];
+                switch (arr->type & INT64_MAX) {
+                    case 0:
+                        printf("array (managed)");
+                        printf(" { len = %llu, value = [ ", arr->len);
+                        for (size_t i = 0; i < arr->len; i++) {
+                            var_debug(ptr[i]);
+                            printf(" ");
+                        }
+                        printf("] }");
+                        break;
+                    case 1:
+                        printf("struct (managed)");
+                        printf(" { ");
+                        for (size_t i = 0; i < arr->len; i++) {
+                            var_debug(ptr[i]);
+                            printf(" ");
+                        }
+                        printf("}");
+                        break;
+                    case 2:
+                        printf("\"%s\"", (char*)ptr);
+                        break;
+                }
+            } else {
+                switch (arr->type & INT64_MAX) {
+                    case 0:
+                        printf("array");
+                        printf(" { len = %llu, value = [ ", arr->len);
+                        for (size_t i = 0; i < arr->len; i++) {
+                            var_debug(arr->data[i]);
+                            printf(" ");
+                        }
+                        printf("] }");
+                        break;
+                    case 1:
+                        printf("struct");
+                        printf(" { ");
+                        for (size_t i = 0; i < arr->len; i++) {
+                            var_debug(arr->data[i]);
+                            printf(" ");
+                        }
+                        printf("}");
+                        break;
+                }
             }
             break;
         }
