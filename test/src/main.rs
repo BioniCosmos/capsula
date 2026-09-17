@@ -15,7 +15,7 @@ enum Expect<'a> {
 
 fn main() {
     let backend = env::var("BACKEND").expect("requires a backend");
-    for case in parse_cases(include_str!("cases")).expect("invalid syntax") {
+    for case in parse_cases(include_str!("cases"), &[&backend]).expect("invalid syntax") {
         let result = Command::new("bun")
             .args(["index", "run", "--backend", &backend, "--eval", case.source])
             .current_dir("..")
@@ -70,15 +70,34 @@ enum State<'a> {
         is_error: bool,
         start: usize,
     },
+    Ignore,
 }
 
-fn parse_cases(raw: &str) -> Option<Vec<Case<'_>>> {
+fn parse_cases<'a>(raw: &'a str, defined_identifiers: &[&str]) -> Option<Vec<Case<'a>>> {
     let raw = raw.as_bytes();
     let mut cases = vec![];
 
     let mut i = 0;
     let mut line = 1;
     let mut state = State::Init;
+
+    macro_rules! read_until {
+        ('\n') => {
+            while i < raw.len() && raw[i] != b'\n' {
+                i += 1;
+            }
+        };
+
+        ($c:expr) => {
+            while i < raw.len() && raw[i] != $c as u8 {
+                if raw[i] == b'\n' {
+                    line += 1;
+                }
+                i += 1;
+            }
+        };
+    }
+
     while i < raw.len() {
         match (raw[i], raw.get(i + 1).copied()) {
             (b' ', _) => i += 1,
@@ -86,11 +105,43 @@ fn parse_cases(raw: &str) -> Option<Vec<Case<'_>>> {
                 i += 1;
                 line += 1;
             }
-            (b'/', Some(b'/')) if state == State::Init => {
-                while i < raw.len() && raw[i] != b'\n' {
+            (b'/', Some(b'/')) if state == State::Init => read_until!('\n'),
+            (b'#', _) if state == State::Init || state == State::Ignore => {
+                i += 1;
+                let directive_start = i;
+                while i < raw.len() && raw[i] != b' ' && raw[i] != b'\n' {
                     i += 1;
                 }
+
+                match &raw[directive_start..i] {
+                    b"if" => {
+                        if raw[i] == b'\n' {
+                            line += 1;
+                        }
+                        i += 1;
+                        let id_start = i;
+                        read_until!('\n');
+
+                        let id = str::from_utf8(&raw[id_start..i]).ok()?;
+                        if defined_identifiers.contains(&id) {
+                            i += 1;
+                            line += 1;
+                            continue;
+                        }
+
+                        state = State::Ignore;
+                    }
+                    b"endif" => {
+                        if raw[i] == b'\n' {
+                            line += 1;
+                        }
+                        i += 1;
+                        state = State::Init;
+                    }
+                    _ => return None,
+                }
             }
+            _ if state == State::Ignore => read_until!('\n'),
             (b'=', Some(b'>')) => {
                 if let State::Source { start_line, start } = state {
                     state = State::BeforeExpect {
@@ -173,14 +224,8 @@ fn parse_cases(raw: &str) -> Option<Vec<Case<'_>>> {
                         start: i,
                     }
                 }
-                State::Expect { .. } => {
-                    while i < raw.len() && raw[i] != b';' {
-                        if raw[i] == b'\n' {
-                            line += 1;
-                        }
-                        i += 1;
-                    }
-                }
+                State::Expect { .. } => read_until!(';'),
+                _ => panic!("invalid state: {state:?}"),
             },
         }
     }
@@ -200,7 +245,8 @@ mod tests {
 (foo)
 (bar) => baz;
 cat !> neko;
-                "
+                ",
+                &[],
             ),
             Some(vec![
                 Case {
@@ -223,6 +269,7 @@ cat !> neko;
 (bar) => baz
 cat !> neko;
                 ",
+                &[],
             ),
             Some(vec![Case {
                 source: "(foo)\n(bar)",
@@ -238,6 +285,7 @@ cat !> neko;
 (bar) baz;
 cat !> neko;
                 ",
+                &[],
             ),
             Some(vec![Case {
                 source: "(foo)\n(bar) baz;\ncat",
@@ -256,6 +304,7 @@ cat !> neko;
 (bar) => baz;
 cat !> neko
                 ",
+                &[],
             ),
             None,
         );
@@ -267,6 +316,7 @@ cat !> neko
 (bar) => baz;
 cat neko;
                 ",
+                &[],
             ),
             None,
         );
@@ -283,7 +333,8 @@ cat neko;
   // 3
 cat !> //6 neko;
 // 4
-                "
+                ",
+                &[],
             ),
             Some(vec![
                 Case {
@@ -306,7 +357,8 @@ cat !> //6 neko;
             parse_cases(
                 "123
 >= 456 => false;
-foo !> bar;"
+foo !> bar;",
+                &[],
             ),
             Some(vec![
                 Case {
@@ -321,5 +373,42 @@ foo !> bar;"
                 },
             ]),
         )
+    }
+
+    #[test]
+    fn test_parse_cases_if() {
+        assert_eq!(
+            parse_cases(
+                "
+(foo)
+(bar) => baz;
+#if HELLO
+cat !> neko;
+#endif
+thank => you;
+#if ignore
+nothing => here;
+#endif
+                ",
+                &["HELLO"],
+            ),
+            Some(vec![
+                Case {
+                    source: "(foo)\n(bar)",
+                    expect: Expect::Output("baz"),
+                    line: 2,
+                },
+                Case {
+                    source: "cat",
+                    expect: Expect::Error("neko"),
+                    line: 5,
+                },
+                Case {
+                    source: "thank",
+                    expect: Expect::Output("you"),
+                    line: 7,
+                },
+            ]),
+        );
     }
 }
