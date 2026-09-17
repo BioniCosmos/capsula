@@ -108,6 +108,11 @@ class Cond implements BytecodeCompiler, QBECompiler {
 
     const clauses = cell.expr.car.slice(1)
     for (const [i, clause] of clauses.entries()) {
+      // Insert the current branch label (as the preview branch jump target).
+      ctx.emit(nextClause)
+      // Generate the next branch label (used in the current branch `jnz`).
+      nextClause = env.defineBlock()
+
       this.#validateClause(clause)
       this.#validatePredicate(
         ctx,
@@ -119,11 +124,6 @@ class Cond implements BytecodeCompiler, QBECompiler {
       const predicate = clause.expr.car[0]
       this.#replaceElse(predicate, this.#isLastClause(i, clauses.length))
 
-      // Insert the current branch label (as the preview branch jump target).
-      ctx.emit(nextClause)
-      // Generate the next branch label (used in the current branch `jnz`).
-      nextClause = env.defineBlock()
-
       const testResult = env.defineTemp()
       ctx.emit(`${testResult} =l copy ${ctx.compileExpr(predicate, env)}`)
       ctx.emit(`${testResult} =l shr ${testResult}, 3`)
@@ -131,13 +131,15 @@ class Cond implements BytecodeCompiler, QBECompiler {
       const body = env.defineBlock()
       ctx.emit(`jnz ${testResult}, ${body}, ${nextClause}`)
       ctx.emit(body)
+
       const scope = new QBEEnv(env)
-      ctx.emit(
-        `${result} =l copy ${clause.expr.car
-          .slice(1)
-          .reduce((_, x) => ctx.compileExpr(x, scope), qbeConst.Unit)}`,
-      )
-      ctx.emit(`jmp ${end}`)
+      const evaluated = clause.expr.car
+        .slice(1)
+        .reduce((_, x) => ctx.compileExpr(x, scope), qbeConst.Unit)
+      if (evaluated !== '') {
+        ctx.emit(`${result} =l copy ${evaluated}`)
+        ctx.emit(`jmp ${end}`)
+      }
     }
 
     ctx.emit(nextClause)
@@ -362,8 +364,8 @@ class Loop implements BytecodeCompiler, QBECompiler {
 
     const start = ctx.code.len
     const end = new Label()
-    scope.defineVarUnit('break', new Break(end))
-    scope.defineVarUnit('continue', new Continue(start))
+    scope.defineVarUnit('break', new BytecodeBreak(end))
+    scope.defineVarUnit('continue', new BytecodeContinue(start))
 
     for (const expr of cell.expr.car.slice(1)) {
       ctx.compileExpr(expr, scope)
@@ -375,18 +377,25 @@ class Loop implements BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const loop = env.defineBlock()
-    ctx.emit(loop)
+    const scope = new QBEEnv(env)
+
+    const start = env.defineBlock()
+    const end = env.defineBlock()
+    scope.defineVarUnit('break', new QBEBreak(end))
+    scope.defineVarUnit('continue', new QBEContinue(start))
+
+    ctx.emit(start)
     for (const expr of cell.expr.car.slice(1)) {
-      ctx.compileExpr(expr, env)
+      ctx.compileExpr(expr, scope)
     }
-    ctx.emit(`jmp ${loop}`)
-    ctx.emit(env.defineBlock())
+    ctx.emit(`jmp ${start}`)
+
+    ctx.emit(end)
     return qbeConst.Unit
   }
 }
 
-class Break implements BytecodeCompiler {
+class BytecodeBreak implements BytecodeCompiler, ArgumentChecker {
   constructor(private end: Label) {}
 
   compile(ctx: BytecodeBackend, _cell: ASTNode<SExprCell>, _env: BytecodeEnv) {
@@ -397,14 +406,40 @@ class Break implements BytecodeCompiler {
       fill: (offset) => jump.setInt16(1, offset, true),
     })
   }
+
+  checkRule: CheckRule = { car: [] }
 }
 
-class Continue implements BytecodeCompiler {
+class BytecodeContinue implements BytecodeCompiler, ArgumentChecker {
   constructor(private start: number) {}
 
   compile(ctx: BytecodeBackend, _cell: ASTNode<SExprCell>, _env: BytecodeEnv) {
     ctx.emit(Instruction.Jump(this.start - ctx.code.len))
   }
+
+  checkRule: CheckRule = { car: [] }
+}
+
+class QBEBreak implements QBECompiler, ArgumentChecker {
+  constructor(private end: string) {}
+
+  compileToQBE(ctx: QBEBackend, _cell: ASTNode<SExprCell>, _env: QBEEnv) {
+    ctx.emit(`jmp ${this.end}`)
+    return ''
+  }
+
+  checkRule: CheckRule = { car: [] }
+}
+
+class QBEContinue implements QBECompiler, ArgumentChecker {
+  constructor(private start: string) {}
+
+  compileToQBE(ctx: QBEBackend, _cell: ASTNode<SExprCell>, _env: QBEEnv) {
+    ctx.emit(`jmp ${this.start}`)
+    return ''
+  }
+
+  checkRule: CheckRule = { car: [] }
 }
 
 class SizeOf implements QBECompiler {
