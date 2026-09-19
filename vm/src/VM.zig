@@ -269,9 +269,12 @@ fn jump(from: usize, offset: i16) usize {
 
 const NativeFnError = error{Break} || mem.Allocator.Error;
 
-var native_functions = std
-    .StaticStringMap(*const fn (vm: *Self) NativeFnError!void)
-    .initComptime(.{ .{ "panic", &panic }, .{ "type-of", &typeOf }, .{ "type-name", &typeName } });
+var native_functions = std.StaticStringMap(*const fn (vm: *Self) NativeFnError!void).initComptime(.{
+    .{ "panic", &panic },
+    .{ "type-of", &typeOf },
+    .{ "type-name", &typeName },
+    .{ "size-of", &sizeOf },
+});
 
 fn panic(vm: *Self) !void {
     debug.print("{s}:{}:{} panic: ", .{ vm.pop().str, vm.pop().i64, vm.pop().i64 });
@@ -297,4 +300,8 @@ fn typeOf(vm: *Self) !void {
 
 fn typeName(vm: *Self) !void {
     try vm.pushToList(.{ .str = @tagName(vm.pop()) }, &vm.stack);
+}
+
+fn sizeOf(vm: *Self) !void {
+    try vm.pushToList(.{ .i64 = @sizeOf(Var) }, &vm.stack);
 }

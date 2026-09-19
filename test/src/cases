@@ -114,3 +114,22 @@
   (print break)) => 0false1false2false3false4false;
 
 (loop (def x 0) (break)) (print x) !> -:1:33 compiling: unbound identifier;
+
+#if qbe
+(print (size-of true)) => 8;
+(print (size-of 1209)) => 8;
+(print (size-of (cond))) => 8;
+(print (size-of "あ")) => 24;
+(print (size-of (array true 1209 (cond) "あ"))) => 64;
+(struct Foo a b c d e) (print (size-of (Foo true 1209 (cond) "あ" (array true 1209 (cond) "あ")))) => 128;
+(print (size-of (alloc true))) => 8;
+(print (size-of (alloc 1209))) => 8;
+(print (size-of (alloc (cond)))) => 8;
+(print (size-of (alloc "あ"))) => 8;
+(print (size-of (alloc (array true 1209 (cond) "あ")))) => 24;
+(struct Foo a b c d e) (print (size-of (alloc (Foo true 1209 (cond) "あ" (array true 1209 (cond) "あ"))))) => 24;
+#endif
+
+#if bytecode
+(print (size-of true)) => 32;
+#endif

@@ -192,4 +192,31 @@ const char* type_name(const uint64_t x) {
     }
 }
 
+uint64_t size_of(const uint64_t x) {
+    switch (tag(x)) {
+        case 0b000:
+        case 0b001:
+        case 0b010:
+            return sizeof x;
+        case 0b011: {
+            const auto arr = (const Array*)(x & ~0b111);
+            switch (arr->type) {
+                case 0:
+                case 1: {
+                    uint64_t size = sizeof *arr;
+                    for (size_t i = 0; i < arr->len; i++) {
+                        size += size_of(arr->data[i]);
+                    }
+                    return size;
+                }
+                case 2:
+                case 0 | (1ull << 63):
+                case 1 | (1ull << 63):
+                    return sizeof *arr + sizeof(arr->data[0]);
+            }
+        }
+    }
+    error("invalid var: %#llx", x);
+}
+
 #endif

@@ -442,26 +442,22 @@ class QBEContinue implements QBECompiler, ArgumentChecker {
   checkRule: CheckRule = { car: [] }
 }
 
-class SizeOf implements QBECompiler {
+class SizeOf implements BytecodeCompiler, QBECompiler, ArgumentChecker {
+  compile(
+    ctx: BytecodeBackend,
+    { meta }: ASTNode<SExprCell>,
+    env: BytecodeEnv,
+  ) {
+    ctx.compileExpr({ expr: { type: 'str', value: 'size-of' }, meta }, env)
+    ctx.emit(Instruction.NativeCall)
+  }
+
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const x = ctx.compileExpr(cell.expr.car[1], env)
-
-    const trueBranch = env.defineBlock()
-    const falseBranch = env.defineBlock()
-    const end = env.defineBlock()
-    const result = env.defineTemp()
-    ctx.emit(`jnz ${ctx.isArray(x, env)}, ${trueBranch}, ${falseBranch}`)
-
-    ctx.emit(trueBranch)
-    ctx.emit(`${result} =l mul ${ctx.arrayLen(x, env)}, 8`)
-    ctx.emit(`jmp ${end}`)
-
-    ctx.emit(falseBranch)
-    ctx.emit(`${result} =l copy 8`)
-
-    ctx.emit(end)
-    return ctx.wrapI64(result, env)
+    return ctx.wrapI64(ctx.defineTemp(`call $size_of(l ${x})`, env), env)
   }
+
+  checkRule: CheckRule = { car: ['any'] }
 }
 
 class Call implements QBECompiler {
