@@ -22,9 +22,9 @@ pub const Var = union(enum) {
         switch (self) {
             .unit => try writer.print("()", .{}),
             .array => |xs| {
-                try writer.print("[{}]: [{f}", .{ xs.len, xs[0] });
-                for (xs[1..]) |x| {
-                    try writer.print(" {f}", .{x});
+                try writer.print("[ ", .{});
+                for (xs) |x| {
+                    try writer.print("{f} ", .{x});
                 }
                 try writer.print("]", .{});
             },
@@ -90,10 +90,7 @@ pub const Instruction = enum(u8) {
     unit,
     is_i64,
     print,
-    array_new,
     array_get,
-    array_set,
-    array_len,
 };
 
 const Error = error{MaxVariableNumberExceeded} || mem.Allocator.Error || Io.Writer.Error;
@@ -221,24 +218,7 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
                     return err;
                 };
             },
-            .array_new => {
-                const len = self.read(u16, func.code);
-                const xs = self.allocator.alloc(Var, len) catch |err| {
-                    self.err = fmt.bufPrint(
-                        &self.err_buf,
-                        "failed to allocate memory for array",
-                        .{},
-                    ) catch unreachable;
-                    return err;
-                };
-                for (0..len) |idx| {
-                    xs[idx] = self.pop();
-                }
-                try self.pushToList(.{ .array = xs }, &self.stack);
-            },
             .array_get => try self.pushToList(self.pop().array[self.read(u16, func.code)], &self.stack),
-            .array_set => debug.panic("TODO", .{}),
-            .array_len => debug.panic("TODO", .{}),
         }
     }
 
@@ -274,6 +254,7 @@ var native_functions = std.StaticStringMap(*const fn (vm: *Self) NativeFnError!v
     .{ "type-of", &typeOf },
     .{ "type-name", &typeName },
     .{ "size-of", &sizeOf },
+    .{ "array-new", &arrayNew },
 });
 
 fn panic(vm: *Self) !void {
@@ -304,4 +285,16 @@ fn typeName(vm: *Self) !void {
 
 fn sizeOf(vm: *Self) !void {
     try vm.pushToList(.{ .i64 = @sizeOf(Var) }, &vm.stack);
+}
+
+fn arrayNew(vm: *Self) !void {
+    const len: usize = @intCast(vm.pop().i64);
+    const xs = vm.allocator.alloc(Var, len) catch |err| {
+        vm.err = fmt.bufPrint(&vm.err_buf, "failed to allocate memory for array", .{}) catch unreachable;
+        return err;
+    };
+    for (0..len) |i| {
+        xs[i] = vm.pop();
+    }
+    try vm.pushToList(.{ .array = xs }, &vm.stack);
 }

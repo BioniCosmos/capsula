@@ -133,3 +133,14 @@
 #if bytecode
 (print (size-of true)) => 32;
 #endif
+
+(print (array 1 2 3)) => [ 1 2 3 ];
+(print (array)) => [ ];
+(print (array 1 true "x")) => [ 1 true x ];
+(print (array (array 1 2) (array 3))) => [ [ 1 2 ] [ 3 ] ];
+(def xs (array 1 2 3 10 -1 512)) (print xs) => [ 1 2 3 10 -1 512 ];
+#if qbe
+(print (array 1 2 3 (alloc 0))) => [ 1 2 3 0 ];
+(print (array 1 2 3 (alloc (array 2 1)))) => [ 1 2 3 [ 2 1 ] ];
+(print (alloc (array 1 2 3 (alloc (array 2 1))))) => [ 1 2 3 [ 2 1 ] ];
+#endif

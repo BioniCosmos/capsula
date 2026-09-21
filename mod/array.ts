@@ -8,15 +8,27 @@ import {
   type QBECompiler,
   type SExprCell,
 } from '@/type'
+import { error } from '@/utils'
 import type { Module } from '.'
 
 class ArrayOf implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
+    ArrayOf.#checkCell(cell)
+
     const xs = cell.expr.car.slice(1).toReversed()
     for (const x of xs) {
       ctx.compileExpr(x, env)
     }
-    ctx.emit(Instruction.ArrayNew(xs.length))
+
+    ctx.compileExpr(
+      { expr: { type: 'num', value: xs.length }, meta: cell.meta },
+      env,
+    )
+    ctx.compileExpr(
+      { expr: { type: 'str', value: 'array-new' }, meta: cell.meta },
+      env,
+    )
+    ctx.emit(Instruction.NativeCall)
   }
 
   /**
@@ -27,6 +39,8 @@ class ArrayOf implements BytecodeCompiler, QBECompiler {
    * - struct (managed): 1 | (1 << 63) = 0x8000000000000001
    */
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
+    ArrayOf.#checkCell(cell)
+
     const xs = ctx.compileArgs(cell, env)
     // arr := { type: u64; len: u64; data: ... }
     const arr = ctx.defineTemp(`alloc8 ${16 + xs.length * 8}`, env)
@@ -42,7 +56,14 @@ class ArrayOf implements BytecodeCompiler, QBECompiler {
       ctx.emit(`${p} =l add ${p}, ${8}`)
       ctx.emit(`storel ${x}, ${p}`)
     }
+
     return ctx.wrapArray(arr, env)
+  }
+
+  static #checkCell({ expr, meta }: ASTNode<SExprCell>) {
+    if (expr.cdr !== null) {
+      error(meta, 'compiling: unexpected `cdr`')
+    }
   }
 }
 
