@@ -11,8 +11,24 @@
         exit(1);                                                                      \
     }
 
+typedef enum : uint8_t { TypeBox, TypeNarrow, TypeI64, TypeArray } Type;
+
+constexpr auto unit = 0b10001;
+constexpr auto bool_false = 0b0001;
+constexpr auto bool_true = 0b1001;
+
+#define to_managed(x) ((x) | INT64_MIN)
+
+typedef enum : uint64_t {
+    ArrayTypeArray,
+    ArrayTypeStruct,
+    ArrayTypeString,
+    ArrayTypeArrayManaged = to_managed(ArrayTypeArray),
+    ArrayTypeStructManaged = to_managed(ArrayTypeStruct),
+} ArrayType;
+
 typedef struct {
-    const uint64_t type;
+    const ArrayType type;
     const uint64_t len;
     const uint64_t data[];
 } Array;
@@ -21,160 +37,173 @@ void var_display(const uint64_t x);
 void var_debug(const uint64_t x);
 const char* type_name(const uint64_t x);
 
-static inline int64_t tag(const uint64_t x) {
-    return x & 0b111;
+static inline Type tag(const uint64_t x) {
+    return x & UINT64_C(0b111);
 }
 
 static inline bool array_is_managed(const Array* const arr) {
     return arr->type >> 63 == 1;
 }
 
+static inline const Array* unwrap_array(const uint64_t x) {
+    return (Array*)(x & ~UINT64_C(0b111));
+}
+
+static inline const void* array_ptr(const Array* const arr) {
+    return (void*)arr->data[0];
+}
+
 #ifdef CAPSULA_IMPLEMENTATION
 
 void var_display(const uint64_t x) {
     switch (tag(x)) {
-        case 0b000:
+        case TypeBox:
             var_display(*(uint64_t*)x);
-            break;
-        case 0b001:
-            if (x == 0b10001) {
-                printf("()");
-            } else {
-                printf("%s", (x >> 3) ? "true" : "false");
+            return;
+        case TypeNarrow:
+            switch (x) {
+                case unit:
+                    printf("()");
+                    return;
+                case bool_false:
+                    printf("false");
+                    return;
+                case bool_true:
+                    printf("true");
+                    return;
             }
             break;
-        case 0b010:
+        case TypeI64:
             printf("%lld", (int64_t)x >> 3);
-            break;
-        case 0b011: {
-            const auto arr = (const Array*)(x & ~0b111);
-            if (array_is_managed(arr)) {
-                const auto ptr = (uint64_t*)arr->data[0];
-                switch (arr->type & INT64_MAX) {
-                    case 0:
-                        printf("[ ");
-                        for (size_t i = 0; i < arr->len; i++) {
-                            var_display(ptr[i]);
-                            printf(" ");
-                        }
-                        printf("]");
-                        break;
+            return;
+        case TypeArray: {
+            const auto arr = unwrap_array(x);
+            switch (arr->type) {
+                case ArrayTypeArray:
+                    printf("[ ");
+                    for (size_t i = 0; i < arr->len; i++) {
+                        var_display(arr->data[i]);
+                        printf(" ");
+                    }
+                    printf("]");
+                    return;
+                case ArrayTypeStruct:
                     // TODO: Add struct type info to runtime.
-                    case 1:
-                        printf("{ ");
-                        for (size_t i = 0; i < arr->len; i++) {
-                            var_display(ptr[i]);
-                            printf(" ");
-                        }
-                        printf("}");
-                        break;
+                    printf("{ ");
+                    for (size_t i = 0; i < arr->len; i++) {
+                        var_display(arr->data[i]);
+                        printf(" ");
+                    }
+                    printf("}");
+                    return;
+                case ArrayTypeString:
+                    fwrite(array_ptr(arr), sizeof(char), arr->len, stdout);
+                    fflush(stdout);
+                    return;
+                case ArrayTypeArrayManaged: {
+                    const uint64_t* const data = array_ptr(arr);
+                    printf("[ ");
+                    for (size_t i = 0; i < arr->len; i++) {
+                        var_display(data[i]);
+                        printf(" ");
+                    }
+                    printf("]");
+                    return;
                 }
-            } else {
-                switch (arr->type & INT64_MAX) {
-                    case 0:
-                        printf("[ ");
-                        for (size_t i = 0; i < arr->len; i++) {
-                            var_display(arr->data[i]);
-                            printf(" ");
-                        }
-                        printf("]");
-                        break;
-                    // TODO: Add struct type info to runtime.
-                    case 1:
-                        printf("{ ");
-                        for (size_t i = 0; i < arr->len; i++) {
-                            var_display(arr->data[i]);
-                            printf(" ");
-                        }
-                        printf("}");
-                        break;
-                    case 2:
-                        fwrite((char*)arr->data[0], sizeof(char), arr->len, stdout);
-                        fflush(stdout);
-                        break;
+                case ArrayTypeStructManaged: {
+                    const uint64_t* const data = array_ptr(arr);
+                    printf("{ ");
+                    for (size_t i = 0; i < arr->len; i++) {
+                        var_display(data[i]);
+                        printf(" ");
+                    }
+                    printf("}");
+                    return;
                 }
             }
             break;
         }
-        default:
-            error("invalid var: %#llx", x);
     }
+    error("invalid var: %#llx", x);
 }
 
 void var_debug(const uint64_t x) {
     switch (tag(x)) {
-        case 0b000:
+        case TypeBox:
             printf("box { ptr = %#llx, value = ", x);
             var_debug(*(uint64_t*)x);
             printf(" }");
-            break;
-        case 0b001:
-            if (x == 0b10001) {
-                printf("unit ()");
-            } else {
-                printf("%s", (x >> 3) ? "true" : "false");
+            return;
+        case TypeNarrow:
+            switch (x) {
+                case unit:
+                    printf("unit ()");
+                    return;
+                case bool_false:
+                    printf("false");
+                    return;
+                case bool_true:
+                    printf("true");
+                    return;
             }
             break;
-        case 0b010:
+        case TypeI64:
             printf("%lld", (int64_t)x >> 3);
-            break;
-        case 0b011: {
-            const auto arr = (const Array*)(x & ~0b111);
-            if (array_is_managed(arr)) {
-                const auto ptr = (uint64_t*)arr->data[0];
-                switch (arr->type & INT64_MAX) {
-                    case 0:
-                        printf("array (managed)");
-                        printf(" { len = %llu, value = [ ", arr->len);
-                        for (size_t i = 0; i < arr->len; i++) {
-                            var_debug(ptr[i]);
-                            printf(" ");
-                        }
-                        printf("] }");
-                        break;
-                    case 1:
-                        printf("struct (managed)");
-                        printf(" { ");
-                        for (size_t i = 0; i < arr->len; i++) {
-                            var_debug(ptr[i]);
-                            printf(" ");
-                        }
-                        printf("}");
-                        break;
+            return;
+        case TypeArray: {
+            const auto arr = unwrap_array(x);
+            switch (arr->type) {
+                case ArrayTypeArray:
+                    printf("array");
+                    printf(" { len = %llu, value = [ ", arr->len);
+                    for (size_t i = 0; i < arr->len; i++) {
+                        var_debug(arr->data[i]);
+                        printf(" ");
+                    }
+                    printf("] }");
+                    return;
+                case ArrayTypeStruct:
+                    printf("struct");
+                    printf(" { ");
+                    for (size_t i = 0; i < arr->len; i++) {
+                        var_debug(arr->data[i]);
+                        printf(" ");
+                    }
+                    printf("}");
+                    return;
+                case ArrayTypeString:
+                    fwrite("\"", sizeof(char), 1, stdout);
+                    fwrite(array_ptr(arr), sizeof(char), arr->len, stdout);
+                    fwrite("\"", sizeof(char), 1, stdout);
+                    fflush(stdout);
+                    return;
+                case ArrayTypeArrayManaged: {
+                    const uint64_t* const data = array_ptr(arr);
+                    printf("array (managed)");
+                    printf(" { len = %llu, value = [ ", arr->len);
+                    for (size_t i = 0; i < arr->len; i++) {
+                        var_debug(data[i]);
+                        printf(" ");
+                    }
+                    printf("] }");
+                    return;
                 }
-            } else {
-                switch (arr->type & INT64_MAX) {
-                    case 0:
-                        printf("array");
-                        printf(" { len = %llu, value = [ ", arr->len);
-                        for (size_t i = 0; i < arr->len; i++) {
-                            var_debug(arr->data[i]);
-                            printf(" ");
-                        }
-                        printf("] }");
-                        break;
-                    case 1:
-                        printf("struct");
-                        printf(" { ");
-                        for (size_t i = 0; i < arr->len; i++) {
-                            var_debug(arr->data[i]);
-                            printf(" ");
-                        }
-                        printf("}");
-                        break;
-                    case 2:
-                        fwrite("\"", sizeof(char), 1, stdout);
-                        fwrite((char*)arr->data[0], sizeof(char), arr->len, stdout);
-                        fwrite("\"", sizeof(char), 1, stdout);
-                        fflush(stdout);
-                        break;
+                case ArrayTypeStructManaged: {
+                    const uint64_t* const data = array_ptr(arr);
+                    printf("struct (managed)");
+                    printf(" { ");
+                    for (size_t i = 0; i < arr->len; i++) {
+                        var_debug(data[i]);
+                        printf(" ");
+                    }
+                    printf("}");
+                    return;
                 }
             }
             break;
         }
-        default:
-            error("invalid var: %#llx", x);
     }
+    error("invalid var: %#llx", x);
 }
 
 // TODO: Returning when no tag matched seems to be not a good idea.
@@ -198,25 +227,25 @@ const char* type_name(const uint64_t x) {
 
 uint64_t size_of(const uint64_t x) {
     switch (tag(x)) {
-        case 0b000:
-        case 0b001:
-        case 0b010:
+        case TypeBox:
+        case TypeNarrow:
+        case TypeI64:
             return sizeof x;
-        case 0b011: {
-            const auto arr = (const Array*)(x & ~0b111);
+        case TypeArray: {
+            const auto arr = unwrap_array(x);
             switch (arr->type) {
-                case 0:
-                case 1: {
+                case ArrayTypeArray:
+                case ArrayTypeStruct: {
                     uint64_t size = sizeof *arr;
                     for (size_t i = 0; i < arr->len; i++) {
                         size += size_of(arr->data[i]);
                     }
                     return size;
                 }
-                case 2:
-                case 0 | (1ull << 63):
-                case 1 | (1ull << 63):
-                    return sizeof *arr + sizeof(arr->data[0]);
+                case ArrayTypeString:
+                case ArrayTypeArrayManaged:
+                case ArrayTypeStructManaged:
+                    return sizeof *arr + sizeof array_ptr(arr);
             }
         }
     }

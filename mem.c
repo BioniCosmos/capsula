@@ -157,7 +157,7 @@ const void* gc_alloc(const size_t size) {
 
 void gc_check(const uint64_t x) {
     switch (tag(x)) {
-        case 0b000: {
+        case TypeBox: {
             const auto entry = map_get((void*)x);
             if (entry != nullptr) {
                 entry->marked = true;
@@ -168,8 +168,8 @@ void gc_check(const uint64_t x) {
             }
             break;
         }
-        case 0b011: {
-            const auto arr = (const Array*)(x & ~0b111);
+        case TypeArray: {
+            const auto arr = unwrap_array(x);
             if (array_is_managed(arr)) {
                 const auto ptr = (uint64_t*)arr->data[0];
                 const auto entry = map_get(ptr);
@@ -186,6 +186,7 @@ void gc_check(const uint64_t x) {
             }
             break;
         }
+        default:
     }
 }
 
