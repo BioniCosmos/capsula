@@ -68,9 +68,6 @@ void var_display(const uint64_t x) {
                         }
                         printf("}");
                         break;
-                    case 2:
-                        printf("%s", (char*)ptr);
-                        break;
                 }
             } else {
                 switch (arr->type & INT64_MAX) {
@@ -90,6 +87,10 @@ void var_display(const uint64_t x) {
                             printf(" ");
                         }
                         printf("}");
+                        break;
+                    case 2:
+                        fwrite((char*)arr->data[0], sizeof(char), arr->len, stdout);
+                        fflush(stdout);
                         break;
                 }
             }
@@ -140,9 +141,6 @@ void var_debug(const uint64_t x) {
                         }
                         printf("}");
                         break;
-                    case 2:
-                        printf("\"%s\"", (char*)ptr);
-                        break;
                 }
             } else {
                 switch (arr->type & INT64_MAX) {
@@ -163,6 +161,12 @@ void var_debug(const uint64_t x) {
                             printf(" ");
                         }
                         printf("}");
+                        break;
+                    case 2:
+                        fwrite("\"", sizeof(char), 1, stdout);
+                        fwrite((char*)arr->data[0], sizeof(char), arr->len, stdout);
+                        fwrite("\"", sizeof(char), 1, stdout);
+                        fflush(stdout);
                         break;
                 }
             }
