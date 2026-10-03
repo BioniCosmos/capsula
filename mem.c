@@ -170,19 +170,25 @@ void gc_check(const uint64_t x) {
         }
         case TypeArray: {
             const auto arr = unwrap_array(x);
-            if (array_is_managed(arr)) {
-                const auto ptr = (uint64_t*)arr->data[0];
-                const auto entry = map_get(ptr);
-                if (entry != nullptr) {
-                    entry->marked = true;
-                }
-                for (size_t i = 0; i < arr->len; i++) {
-                    gc_check(ptr[i]);
-                }
-            } else {
-                for (size_t i = 0; i < arr->len; i++) {
-                    gc_check(arr->data[i]);
-                }
+            switch (arr->type) {
+                case ArrayTypeArray:
+                case ArrayTypeStruct:
+                    for (size_t i = 0; i < arr->len; i++) {
+                        gc_check(arr->data[i]);
+                    }
+                    break;
+                case ArrayTypeString:
+                    break;
+                case ArrayTypeArrayManaged:
+                case ArrayTypeStructManaged:
+                    const uint64_t* const data = array_ptr(arr);
+                    const auto entry = map_get(data);
+                    if (entry != nullptr) {
+                        entry->marked = true;
+                    }
+                    for (size_t i = 0; i < arr->len; i++) {
+                        gc_check(data[i]);
+                    }
             }
             break;
         }
