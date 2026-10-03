@@ -37,6 +37,7 @@ class ArrayOf implements BytecodeCompiler, QBECompiler {
    * - string: 2
    * - array (managed): 0 | (1 << 63) = 0x8000000000000000
    * - struct (managed): 1 | (1 << 63) = 0x8000000000000001
+   * - string (managed): 2 | (1 << 63) = 0x8000000000000002
    */
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     ArrayOf.#checkCell(cell)

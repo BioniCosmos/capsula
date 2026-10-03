@@ -125,7 +125,7 @@
 (print (size-of (alloc true))) => 8;
 (print (size-of (alloc 1209))) => 8;
 (print (size-of (alloc (cond)))) => 8;
-(print (size-of (alloc "あ"))) => 8;
+(print (size-of (alloc "あ"))) => 24;
 (print (size-of (alloc (array true 1209 (cond) "あ")))) => 24;
 (struct Foo a b c d e) (print (size-of (alloc (Foo true 1209 (cond) "あ" (array true 1209 (cond) "あ"))))) => 24;
 #endif

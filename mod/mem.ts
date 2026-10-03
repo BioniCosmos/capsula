@@ -8,6 +8,7 @@ import {
 } from '@/type'
 import type { Module } from '.'
 
+// TODO: Figure out the role of `alloc`. e.g. `(alloc (alloc (array)))`
 class Alloc implements QBECompiler {
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const x = ctx.compileExpr(cell.expr.car[1], env)!
@@ -32,15 +33,27 @@ class Alloc implements QBECompiler {
         ctx.emit(`blit ${arr}, ${p}, 8`)
 
         // Calculate `size`.
+        const unitSize = ctx.if(
+          () => ctx.defineTemp(`ceql ${type}, ${2n | (1n << 63n)}`, env),
+          () => '1',
+          () => '8',
+          env,
+        )
         const size = env.defineTemp()
         ctx.emit(`${size} =l loadl ${arr}`)
-        ctx.emit(`${size} =l mul ${size}, 8`)
+        ctx.emit(`${size} =l mul ${size}, ${unitSize}`)
 
         // Allocate and copy data.
         ctx.emit(`${arr} =l add ${arr}, 8`)
         ctx.emit(`${p} =l add ${p}, 8`)
+        const source = ctx.if(
+          () => ctx.defineTemp(`ceql ${type}, ${2n | (1n << 63n)}`, env),
+          () => ctx.defineTemp(`loadl ${arr}`, env),
+          () => arr,
+          env,
+        )
         const ptr = ctx.defineTemp(`call $gc_alloc(l ${size})`, env)
-        ctx.emit(`call $memcpy(l ${ptr}, l ${arr}, l ${size})`)
+        ctx.emit(`call $memcpy(l ${ptr}, l ${source}, l ${size})`)
         ctx.emit(`storel ${ptr}, ${p}`)
 
         return ctx.wrapArray(header, env)

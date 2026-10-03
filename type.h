@@ -25,6 +25,7 @@ typedef enum : uint64_t {
     ArrayTypeString,
     ArrayTypeArrayManaged = to_managed(ArrayTypeArray),
     ArrayTypeStructManaged = to_managed(ArrayTypeStruct),
+    ArrayTypeStringManaged = to_managed(ArrayTypeString),
 } ArrayType;
 
 typedef struct {
@@ -97,6 +98,7 @@ void var_display(const uint64_t x) {
                     printf("}");
                     return;
                 case ArrayTypeString:
+                case ArrayTypeStringManaged:
                     fwrite(array_ptr(arr), sizeof(char), arr->len, stdout);
                     fflush(stdout);
                     return;
@@ -199,6 +201,12 @@ void var_debug(const uint64_t x) {
                     printf("}");
                     return;
                 }
+                case ArrayTypeStringManaged:
+                    fwrite("(managed) \"", sizeof(char), 11, stdout);
+                    fwrite(array_ptr(arr), sizeof(char), arr->len, stdout);
+                    fwrite("\"", sizeof(char), 1, stdout);
+                    fflush(stdout);
+                    return;
             }
             break;
         }
@@ -245,6 +253,7 @@ uint64_t size_of(const uint64_t x) {
                 case ArrayTypeString:
                 case ArrayTypeArrayManaged:
                 case ArrayTypeStructManaged:
+                case ArrayTypeStringManaged:
                     return sizeof *arr + sizeof array_ptr(arr);
             }
         }

@@ -180,7 +180,7 @@ void gc_check(const uint64_t x) {
                 case ArrayTypeString:
                     break;
                 case ArrayTypeArrayManaged:
-                case ArrayTypeStructManaged:
+                case ArrayTypeStructManaged: {
                     const uint64_t* const data = array_ptr(arr);
                     const auto entry = map_get(data);
                     if (entry != nullptr) {
@@ -189,6 +189,15 @@ void gc_check(const uint64_t x) {
                     for (size_t i = 0; i < arr->len; i++) {
                         gc_check(data[i]);
                     }
+                    break;
+                }
+                case ArrayTypeStringManaged: {
+                    const auto entry = map_get(array_ptr(arr));
+                    if (entry != nullptr) {
+                        entry->marked = true;
+                    }
+                    break;
+                }
             }
             break;
         }
