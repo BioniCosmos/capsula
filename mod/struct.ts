@@ -1,10 +1,12 @@
 import type { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
-import type { BytecodeEnv, QBEEnv } from '@/env'
+import type { BytecodeEnv, Environment, QBEEnv } from '@/env'
 import {
   qbeConst,
+  type ArgumentChecker,
   type ASTNode,
   type BytecodeCompiler,
+  type CheckRule,
   type QBECompiler,
   type SExprCell,
 } from '@/type'
@@ -13,20 +15,20 @@ import type { Module } from '.'
 
 class Struct implements BytecodeCompiler, QBECompiler {
   compile(_ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    const [id, fields] = Struct.#checkArgs(cell)
-    env.defineVarUnit(id, new StructConstructor(fields.length))
-    for (const [i, field] of fields.entries()) {
-      env.defineVarUnit(`${id}-${field}`, new BytecodeStructGetter(i))
-    }
+    Struct.#compileTo(cell, env)
   }
 
   compileToQBE(_ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
+    Struct.#compileTo(cell, env)
+    return qbeConst.Unit
+  }
+
+  static #compileTo(cell: ASTNode<SExprCell>, env: Environment) {
     const [id, fields] = Struct.#checkArgs(cell)
     env.defineVarUnit(id, new StructConstructor(fields.length))
     for (const [i, field] of fields.entries()) {
-      env.defineVarUnit(`${id}-${field}`, new QBEStructGetter(i))
+      env.defineVarUnit(`${id}-${field}`, new StructGetter(i))
     }
-    return qbeConst.Unit
   }
 
   static #checkArgs({ expr }: ASTNode<SExprCell>): [string, string[]] {
@@ -98,30 +100,20 @@ class StructConstructor implements BytecodeCompiler, QBECompiler {
   }
 }
 
-class BytecodeStructGetter implements BytecodeCompiler {
+class StructGetter implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   constructor(private offset: number) {}
 
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(Instruction.ArrayGet(this.offset))
   }
-}
-
-class QBEStructGetter implements QBECompiler {
-  constructor(private offset: number) {}
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const header = ctx.unwrapArray(ctx.compileExpr(cell.expr.car[1], env), env)
-    // TODO: check type
-    const p = env.defineTemp()
-    // p = header.ptr.*
-    ctx.emit(`${p} =l add ${header}, 16`)
-    ctx.emit(`${p} =l loadl ${p}`)
-    // p = p[offset].*
-    ctx.emit(`${p} =l add ${p}, ${8 * this.offset}`)
-    ctx.emit(`${p} =l loadl ${p}`)
-    return p
+    const x = ctx.unwrapArray(ctx.compileExpr(cell.expr.car[1], env), env)
+    return ctx.defineTemp(`add ${x}, ${16 + 8 * this.offset}`, env)
   }
+
+  checkRule: CheckRule = { car: ['struct'] }
 }
 
 export default {
