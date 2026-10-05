@@ -8,7 +8,10 @@ import {
 
 export interface Environment<T extends Unit = Unit, R = unknown> {
   defineUnit(name: string, constructor: UnitConstructor<T>): void
+  defineVarUnit(name: string, unit: T): void
   lookup(name: string): R | T | null
+
+  readonly structs: { idCounter: number; names: string[] }
 }
 
 export class BytecodeEnv implements Environment<BytecodeCompiler, number> {
@@ -17,6 +20,8 @@ export class BytecodeEnv implements Environment<BytecodeCompiler, number> {
     number | UnitConstructor<BytecodeCompiler> | BytecodeCompiler
   >()
   sp: number | null
+
+  readonly structs = { idCounter: 0, names: Array.of<string>() }
 
   constructor(
     private readonly parent: BytecodeEnv | null = null,
@@ -73,6 +78,8 @@ export class QBEEnv implements Environment<QBECompiler, string> {
   >()
   #counter: number | null
   #subScopes: QBEEnv[] | null
+
+  readonly structs = { idCounter: 0, names: Array.of<string>() }
 
   constructor(
     private readonly parent: QBEEnv | null = null,

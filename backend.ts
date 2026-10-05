@@ -203,6 +203,17 @@ export class QBEBackend implements Backend<QBECompiler> {
 
     this.endFn('0')
 
+    for (const [id, name] of this.env.structs.names.entries()) {
+      this.emitGlobal(`data $struct_${id}_${name} = { b "${name}", b 0 }`)
+    }
+    this.emitGlobal(
+      `data $structs = { ${this.env.structs.names
+        .entries()
+        .map(([id, name]) => `l $struct_${id}_${name}`)
+        .toArray()
+        .join(', ')} }`,
+    )
+
     const code =
       (this.#global.length !== 0 ? this.#global.join('\n') + '\n\n' : '') +
       this.#chunks.map((chunk) => chunk.build()).join('\n\n')
@@ -250,6 +261,7 @@ export class QBEBackend implements Backend<QBECompiler> {
             return baseCheck
           case 'arr':
           case 'struct': {
+            // TODO: Do base check FIRST! Then do inner check! Do both is prohibited!
             const innerCheck = env.defineTemp()
             this.emit(`${innerCheck} =l loadl ${this.unwrapArray(x, env)}`)
             this.emit(
