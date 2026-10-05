@@ -8,58 +8,49 @@ import {
   type QBECompiler,
   type SExprCell,
 } from '@/type'
+import { error } from '@/utils'
 import type { Module } from '.'
 
 class Struct implements BytecodeCompiler, QBECompiler {
   compile(_ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    const id = cell.expr.car[1]
-    if (id.expr.type !== 'sym') {
-      throw Error(
-        `compiling \`struct\`: expecting \`symbol\`, found \`${id.expr.type}\``,
-      )
-    }
-
-    const fields = cell.expr.car.slice(2).map((x) => {
-      if (x.expr.type !== 'sym') {
-        throw Error(
-          `compiling \`struct\`: expecting \`symbol\`, found \`${x.expr.type}\``,
-        )
-      }
-      return x.expr.value
-    })
-
-    env.defineVarUnit(id.expr.value, new StructConstructor(fields))
+    const [id, fields] = Struct.#checkArgs(cell)
+    env.defineVarUnit(id, new StructConstructor(fields))
     for (const [i, field] of fields.entries()) {
-      env.defineVarUnit(
-        `${id.expr.value}-${field}`,
-        new BytecodeStructGetter(i),
-      )
+      env.defineVarUnit(`${id}-${field}`, new BytecodeStructGetter(i))
     }
   }
 
   compileToQBE(_ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const id = cell.expr.car[1]
+    const [id, fields] = Struct.#checkArgs(cell)
+    env.defineVarUnit(id, new StructConstructor(fields))
+    for (const [i, field] of fields.entries()) {
+      env.defineVarUnit(`${id}-${field}`, new QBEStructGetter(i))
+    }
+    return qbeConst.Unit
+  }
+
+  static #checkArgs({ expr }: ASTNode<SExprCell>): [string, string[]] {
+    if (expr.cdr !== null) {
+      error(expr.cdr.meta, 'compiling: unexpected `cdr`')
+    }
+    const id = expr.car[1]
     if (id.expr.type !== 'sym') {
-      throw Error(
-        `compiling \`struct\`: expecting \`symbol\`, found \`${id.expr.type}\``,
+      error(
+        id.meta,
+        `compiling: The name of the struct must be a symbol, but got \`${id.expr.type}\`.`,
       )
     }
-
-    const fields = cell.expr.car.slice(2).map((x) => {
-      if (x.expr.type !== 'sym') {
-        throw Error(
-          `compiling \`struct\`: expecting \`symbol\`, found \`${x.expr.type}\``,
+    const fields: string[] = []
+    for (const field of expr.car.slice(2)) {
+      if (field.expr.type !== 'sym') {
+        error(
+          field.meta,
+          `compiling: Every field name of the struct must be a symbol, but got \`${field.expr.type}\`.`,
         )
       }
-      return x.expr.value
-    })
-
-    env.defineVarUnit(id.expr.value, new StructConstructor(fields))
-    for (const [i, field] of fields.entries()) {
-      env.defineVarUnit(`${id.expr.value}-${field}`, new QBEStructGetter(i))
+      fields.push(field.expr.value)
     }
-
-    return qbeConst.Unit
+    return [id.expr.value, fields]
   }
 }
 
