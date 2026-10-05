@@ -14,7 +14,7 @@ import type { Module } from '.'
 class Struct implements BytecodeCompiler, QBECompiler {
   compile(_ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const [id, fields] = Struct.#checkArgs(cell)
-    env.defineVarUnit(id, new StructConstructor(fields))
+    env.defineVarUnit(id, new StructConstructor(fields.length))
     for (const [i, field] of fields.entries()) {
       env.defineVarUnit(`${id}-${field}`, new BytecodeStructGetter(i))
     }
@@ -22,7 +22,7 @@ class Struct implements BytecodeCompiler, QBECompiler {
 
   compileToQBE(_ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const [id, fields] = Struct.#checkArgs(cell)
-    env.defineVarUnit(id, new StructConstructor(fields))
+    env.defineVarUnit(id, new StructConstructor(fields.length))
     for (const [i, field] of fields.entries()) {
       env.defineVarUnit(`${id}-${field}`, new QBEStructGetter(i))
     }
@@ -55,25 +55,46 @@ class Struct implements BytecodeCompiler, QBECompiler {
 }
 
 class StructConstructor implements BytecodeCompiler, QBECompiler {
-  constructor(private fields: string[]) {}
+  constructor(private count: number) {}
 
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    // TODO: check argument count
+    this.#checkArgs(cell)
     for (const expr of cell.expr.car.slice(1).toReversed()) {
       ctx.compileExpr(expr, env)
     }
-    ctx.emit(Instruction.ArrayNew(this.fields.length))
+    ctx.compileExpr(
+      { expr: { type: 'num', value: this.count }, meta: cell.meta },
+      env,
+    )
+    ctx.compileExpr(
+      { expr: { type: 'str', value: 'array-new' }, meta: cell.meta },
+      env,
+    )
+    ctx.emit(Instruction.NativeCall)
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const structHeader = (ctx.env.lookup('array') as QBECompiler).compileToQBE(
+    this.#checkArgs(cell)
+    const x = (ctx.env.lookup('array') as QBECompiler).compileToQBE(
       ctx,
       cell,
       env,
     )
-    // structHeader.type = 1
-    ctx.emit(`storel 1, ${ctx.unwrapArray(structHeader, env)}`)
-    return structHeader
+    ctx.emit(`storel 1, ${ctx.unwrapArray(x, env)}`)
+    return x
+  }
+
+  #checkArgs({ expr, meta }: ASTNode<SExprCell>) {
+    if (expr.cdr !== null) {
+      error(expr.cdr.meta, 'compiling: unexpected `cdr`')
+    }
+    const argCount = expr.car.length - 1
+    if (argCount !== this.count) {
+      error(
+        meta,
+        `Struct \`${expr.car[0]}\` expects ${this.count} field(s), but ${argCount} were given.`,
+      )
+    }
   }
 }
 
