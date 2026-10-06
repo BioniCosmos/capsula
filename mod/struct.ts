@@ -24,13 +24,13 @@ class Struct implements BytecodeCompiler, QBECompiler {
   }
 
   static #compileTo(ctx: Backend, cell: ASTNode<SExprCell>, env: Environment) {
-    const id = ctx.env.structs.idCounter++
+    const id = ctx.env.struct.idCounter++
     const [name, fields] = Struct.#checkArgs(cell)
     env.defineVarUnit(name, new StructConstructor(id, fields.length))
-    ctx.env.structs.names.push(name)
     for (const [i, field] of fields.entries()) {
       env.defineVarUnit(`${name}-${field}`, new StructGetter(id, i))
     }
+    ctx.env.struct.meta.push({ name, fields })
   }
 
   static #checkArgs({ expr }: ASTNode<SExprCell>): [string, string[]] {
@@ -41,7 +41,7 @@ class Struct implements BytecodeCompiler, QBECompiler {
     if (id.expr.type !== 'sym') {
       error(
         id.meta,
-        `compiling: The name of the struct must be a symbol, but got \`${id.expr.type}\`.`,
+        `compiling: The name of the struct must be a symbol, but got \`${id.expr.type === 'num' ? 'i64' : id.expr.type}\`.`,
       )
     }
     const fields: string[] = []
@@ -49,7 +49,7 @@ class Struct implements BytecodeCompiler, QBECompiler {
       if (field.expr.type !== 'sym') {
         error(
           field.meta,
-          `compiling: Every field name of the struct must be a symbol, but got \`${field.expr.type}\`.`,
+          `compiling: Every field name of the struct must be a symbol, but got \`${field.expr.type === 'num' ? 'i64' : field.expr.type}\`.`,
         )
       }
       fields.push(field.expr.value)
@@ -65,7 +65,7 @@ class StructConstructor implements BytecodeCompiler, QBECompiler {
   ) {}
 
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    this.#checkArgs(cell)
+    this.#checkArgs(ctx, cell)
     for (const expr of cell.expr.car.slice(1).toReversed()) {
       ctx.compileExpr(expr, env)
     }
@@ -81,7 +81,7 @@ class StructConstructor implements BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    this.#checkArgs(cell)
+    this.#checkArgs(ctx, cell)
 
     const xs = ctx.compileArgs(cell, env)
     // struct := { id: u64; type: u64; len: u64; data: ... }
@@ -105,7 +105,7 @@ class StructConstructor implements BytecodeCompiler, QBECompiler {
     return ctx.wrapArray(ctx.defineTemp(`add ${struct}, 8`, env), env)
   }
 
-  #checkArgs({ expr, meta }: ASTNode<SExprCell>) {
+  #checkArgs(ctx: Backend, { expr, meta }: ASTNode<SExprCell>) {
     if (expr.cdr !== null) {
       error(expr.cdr.meta, 'compiling: unexpected `cdr`')
     }
@@ -113,7 +113,7 @@ class StructConstructor implements BytecodeCompiler, QBECompiler {
     if (argCount !== this.fieldCount) {
       error(
         meta,
-        `Struct \`${expr.car[0]}\` expects ${this.fieldCount} field(s), but ${argCount} were given.`,
+        `Struct \`${ctx.env.struct.meta[this.id]}\` expects ${this.fieldCount} field(s), but ${argCount} were given.`,
       )
     }
   }
@@ -139,16 +139,31 @@ class StructGetter implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     )
     ctx.if(
       () => ctx.defineTemp(`cnel ${id}, ${this.id}`, env),
-      () =>
-        ctx.panic(
-          node.meta,
-          'expecting a value of struct `%s`, but got a value of struct `%s`',
-          `l ${ctx.defineTemp(`add $structs, ${this.id * 8}`, env)}`,
-          `l ${ctx.defineTemp(
-            `add $structs, ${ctx.defineTemp(`mul ${id}, 8`, env)}`,
+      () => {
+        const expect = ctx.defineTemp(
+          `loadl ${ctx.defineTemp(
+            `loadl ${ctx.defineTemp(`add $structs, ${this.id * 8}`, env)}`,
             env,
           )}`,
-        ),
+          env,
+        )
+        const actual = ctx.defineTemp(
+          `loadl ${ctx.defineTemp(
+            `loadl ${ctx.defineTemp(
+              `add $structs, ${ctx.defineTemp(`mul ${id}, 8`, env)}`,
+              env,
+            )}`,
+            env,
+          )}`,
+          env,
+        )
+        return ctx.panic(
+          node.meta,
+          'expecting a value of struct `%s`, but got a value of struct `%s`',
+          `l ${expect}`,
+          `l ${actual}`,
+        )
+      },
       null,
       env,
     )

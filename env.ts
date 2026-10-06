@@ -11,8 +11,11 @@ export interface Environment<T extends Unit = Unit, R = unknown> {
   defineVarUnit(name: string, unit: T): void
   lookup(name: string): R | T | null
 
-  readonly structs: { idCounter: number; names: string[] }
+  readonly struct: StructState
 }
+
+export type StructState = { idCounter: number; meta: StructMeta[] }
+export type StructMeta = { name: string; fields: string[] }
 
 export class BytecodeEnv implements Environment<BytecodeCompiler, number> {
   readonly #vars = new Map<
@@ -21,7 +24,7 @@ export class BytecodeEnv implements Environment<BytecodeCompiler, number> {
   >()
   sp: number | null
 
-  readonly structs = { idCounter: 0, names: Array.of<string>() }
+  readonly struct: StructState = { idCounter: 0, meta: [] }
 
   constructor(
     private readonly parent: BytecodeEnv | null = null,
@@ -79,7 +82,7 @@ export class QBEEnv implements Environment<QBECompiler, string> {
   #counter: number | null
   #subScopes: QBEEnv[] | null
 
-  readonly structs = { idCounter: 0, names: Array.of<string>() }
+  readonly struct: StructState = { idCounter: 0, meta: [] }
 
   constructor(
     private readonly parent: QBEEnv | null = null,

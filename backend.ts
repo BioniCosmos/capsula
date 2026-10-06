@@ -203,15 +203,28 @@ export class QBEBackend implements Backend<QBECompiler> {
 
     this.endFn('0')
 
-    for (const [id, name] of this.env.structs.names.entries()) {
-      this.emitGlobal(`data $struct_${id}_${name} = { b "${name}", b 0 }`)
+    const structs: string[] = []
+    for (const [id, { name, fields }] of this.env.struct.meta.entries()) {
+      const struct: string[] = []
+
+      const structName = `$struct_${id}_${name}_name`
+      this.emitGlobal(`data ${structName} = { b "${name}", b 0 }`)
+      struct.push(structName)
+
+      for (const [i, field] of fields.entries()) {
+        const structField = `$struct_${id}_${name}_field_${i}`
+        this.emitGlobal(`data ${structField} = { b "${field}", b 0 }`)
+        struct.push(structField)
+      }
+
+      const structMeta = `$struct_${id}_${name}`
+      this.emitGlobal(
+        `data ${structMeta} = { ${struct.map((x) => `l ${x}`).join(', ')} }`,
+      )
+      structs.push(structMeta)
     }
     this.emitGlobal(
-      `data $structs = { ${this.env.structs.names
-        .entries()
-        .map(([id, name]) => `l $struct_${id}_${name}`)
-        .toArray()
-        .join(', ')} }`,
+      `export data $structs = { ${structs.map((x) => `l ${x}`).join(', ')} }`,
     )
 
     const code =
