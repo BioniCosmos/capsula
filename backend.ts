@@ -249,39 +249,37 @@ export class QBEBackend implements Backend<QBECompiler> {
     format = `expecting \`${paramType}\`, found \`%s\``,
   ) {
     const x = this.compileExpr(node, env)
+    const panic = () =>
+      this.panic(
+        node.meta,
+        format,
+        `l ${this.defineTemp(`call $type_name(l ${x})`, env)}`,
+      )
     this.if(
-      () => {
-        const baseCheck = this.defineTemp(
+      () =>
+        this.defineTemp(
           `cnel ${this.tag(x, env)}, ${typeToQBETag(paramType)}`,
           env,
-        )
-        switch (paramType) {
-          case 'bool':
-          case 'i64':
-            return baseCheck
-          case 'arr':
-          case 'struct': {
-            // TODO: Do base check FIRST! Then do inner check! Do both is prohibited!
-            const innerCheck = env.defineTemp()
-            this.emit(`${innerCheck} =l loadl ${this.unwrapArray(x, env)}`)
-            this.emit(
-              `${innerCheck} =l cnel ${innerCheck}, ${paramType === 'arr' ? 0 : 1}`,
-            )
-            return this.defineTemp(`or ${baseCheck}, ${innerCheck}`, env)
-          }
-          default:
-            throw Error('unimplemented')
-        }
-      },
-      () =>
-        this.panic(
-          node.meta,
-          format,
-          `l ${this.defineTemp(`call $type_name(l ${x})`, env)}`,
         ),
+      panic,
       null,
       env,
     )
+    if (paramType === 'arr' || paramType === 'struct') {
+      this.if(
+        () => {
+          const innerCheck = env.defineTemp()
+          this.emit(`${innerCheck} =l loadl ${this.unwrapArray(x, env)}`)
+          this.emit(
+            `${innerCheck} =l cnel ${innerCheck}, ${paramType === 'arr' ? 0 : 1}`,
+          )
+          return innerCheck
+        },
+        panic,
+        null,
+        env,
+      )
+    }
   }
 
   /**
