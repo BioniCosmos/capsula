@@ -333,14 +333,10 @@ export class QBEBackend implements Backend<QBECompiler> {
     }
   }
 
-  compileArgs(cell: ASTNode, env: QBEEnv) {
-    if (cell.expr.type != 'cell') {
-      throw Error('compileArgs: invalid AST node type')
-    }
-
+  compileArgs({ expr }: ASTNode<SExprCell>, env: QBEEnv) {
     const args: string[] = []
     let protectCount = 0
-    for (const node of cell.expr.car.slice(1)) {
+    for (const node of expr.car.slice(1)) {
       const arg = this.compileExpr(node, env)
       args.push(arg)
       if (node.expr.type === 'cell' && node.expr.car.length !== 0) {
