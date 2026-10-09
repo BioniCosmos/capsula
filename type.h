@@ -34,6 +34,13 @@ typedef struct {
     const uint64_t data[];
 } Array;
 
+typedef struct {
+    const char* const name;
+    const char* const fields[];
+} Struct;
+
+extern const Struct* const structs[];
+
 void var_display(const uint64_t x);
 void var_debug(const uint64_t x);
 const char* type_name(const uint64_t x);
@@ -52,6 +59,10 @@ static inline const Array* unwrap_array(const uint64_t x) {
 
 static inline const void* array_ptr(const Array* const arr) {
     return (void*)arr->data[0];
+}
+
+static inline uint64_t struct_id(const Array* const x) {
+    return *(uint64_t*)((char*)&x->type - 8);
 }
 
 #ifdef CAPSULA_IMPLEMENTATION
@@ -88,15 +99,18 @@ void var_display(const uint64_t x) {
                     }
                     printf("]");
                     return;
-                case ArrayTypeStruct:
-                    // TODO: Add struct type info to runtime.
-                    printf("{ ");
+                case ArrayTypeStruct: {
+                    const auto meta = structs[struct_id(arr)];
+                    printf("%s { ", meta->name);
+                    const char* sep = "";
                     for (size_t i = 0; i < arr->len; i++) {
+                        printf("%s%s = ", sep, meta->fields[i]);
                         var_display(arr->data[i]);
-                        printf(" ");
+                        sep = ", ";
                     }
-                    printf("}");
+                    printf(" }");
                     return;
+                }
                 case ArrayTypeString:
                 case ArrayTypeStringManaged:
                     fwrite(array_ptr(arr), sizeof(char), arr->len, stdout);
