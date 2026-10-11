@@ -17,6 +17,6 @@ declare module '@/backend' {
 
 QBEBackend.prototype.tag = function (x, env) {
   const result = env.defineTemp()
-  this.emit(`${result} =l and ${x}, ${0b111}`)
+  this.emit(`${result} =w and ${x}, ${0b111}`)
   return result
 }

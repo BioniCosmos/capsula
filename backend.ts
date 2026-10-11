@@ -2,7 +2,6 @@ import { encode } from '@msgpack/msgpack'
 import { $ } from 'bun'
 import { Instruction } from './bytecode'
 import { BytecodeEnv, QBEEnv, type Environment } from './env'
-import { parse } from './parser'
 import {
   BytecodeFnChunk,
   checkArgs,
@@ -10,6 +9,7 @@ import {
   isBytecodeCompiler,
   isQBECompiler,
   isUnit,
+  qbeBox,
   qbeConst,
   QBEFnChunk,
   typeToQBETag,
@@ -230,7 +230,7 @@ export class QBEBackend implements Backend<QBECompiler> {
     const code =
       (this.#global.length !== 0 ? this.#global.join('\n') + '\n\n' : '') +
       this.#chunks.map((chunk) => chunk.build()).join('\n\n')
-    let extra = ''
+    let extra: string[] = []
     if (import.meta.env.DEBUG === 'true') {
       const lines = code.split('\n')
 
@@ -246,7 +246,7 @@ export class QBEBackend implements Backend<QBECompiler> {
           .map((line, i) => `${(i + 1).toString().padStart(pad)} | ${line}`)
           .join('\n'),
       )
-      extra = '-fsanitize=address'
+      extra = ['-fsanitize=address', '-g']
     }
     await $`qbe < ${new Response(code)} | ${import.meta.env.CLANG ?? 'clang'} -std=c23 ${extra} -o ${output} core.c mem.c -x assembler -`
   }
@@ -271,26 +271,29 @@ export class QBEBackend implements Backend<QBECompiler> {
     this.if(
       () =>
         this.defineTemp(
-          `cnel ${this.tag(x, env)}, ${typeToQBETag(paramType)}`,
+          `cnew ${this.tag(x, env)}, ${typeToQBETag(paramType)}`,
           env,
+          'w',
         ),
       panic,
       null,
       env,
+      'w',
     )
     if (paramType === 'arr' || paramType === 'struct') {
       this.if(
         () => {
           const innerCheck = env.defineTemp()
-          this.emit(`${innerCheck} =l loadl ${this.unwrapArray(x, env)}`)
+          this.emit(`${innerCheck} =w loaduh ${x}`)
           this.emit(
-            `${innerCheck} =l cnel ${innerCheck}, ${paramType === 'arr' ? 0 : 1}`,
+            `${innerCheck} =w cnew ${innerCheck}, ${paramType === 'arr' ? qbeBox.arr : qbeBox.struct}`,
           )
           return innerCheck
         },
         panic,
         null,
         env,
+        'w',
       )
     }
   }
@@ -302,7 +305,6 @@ export class QBEBackend implements Backend<QBECompiler> {
    *   - true = 1001
    * - unit = 10001
    * - i64 (small): 010
-   * - array: 011
    */
   compileExpr(node: ASTNode, env: QBEEnv) {
     const { expr } = node
@@ -316,10 +318,10 @@ export class QBEBackend implements Backend<QBECompiler> {
         if (typeof x === 'string') {
           return this.defineTemp(`loadl ${x}`, env)
         }
-        return this.buildString(`unit:${expr.value}`, env)
+        return this.buildString(`unit:${expr.value}`)
       }
       case 'str':
-        return this.buildString(expr.value, env)
+        return this.buildString(expr.value)
       case 'cell': {
         const sym = expr.car[0]
         if (sym.expr.type !== 'sym') {
@@ -386,18 +388,9 @@ export class QBEBackend implements Backend<QBECompiler> {
     this.#global.push(code)
   }
 
-  capl(s: string, env: QBEEnv) {
-    const exprs = parse(s)
-    let result = qbeConst.Unit
-    for (const expr of exprs) {
-      result = this.compileExpr(expr, env)
-    }
-    return result
-  }
-
-  defineTemp(expr: string, env: QBEEnv) {
+  defineTemp(expr: string, env: QBEEnv, type = 'l') {
     const x = env.defineTemp()
-    this.emit(`${x} =l ${expr}`)
+    this.emit(`${x} =${type} ${expr}`)
     return x
   }
 }

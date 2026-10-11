@@ -2,7 +2,8 @@ import { QBEBackend, type BytecodeBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
-  qbeConst,
+  qbeBox,
+  qbeSegment,
   type ASTNode,
   type BytecodeCompiler,
   type QBECompiler,
@@ -31,25 +32,22 @@ class ArrayOf implements BytecodeCompiler, QBECompiler {
     ctx.emit(Instruction.NativeCall)
   }
 
-  /**
-   * - array: 0
-   * - struct: 1
-   * - string: 2
-   * - array (managed): 0 | (1 << 63) = 0x8000000000000000
-   * - struct (managed): 1 | (1 << 63) = 0x8000000000000001
-   * - string (managed): 2 | (1 << 63) = 0x8000000000000002
-   */
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     ArrayOf.#checkCell(cell)
-
     const xs = ctx.compileArgs(cell, env)
-    // arr := { type: u64; len: u64; data: ... }
+
     const arr = ctx.defineTemp(`alloc8 ${16 + xs.length * 8}`, env)
     const p = ctx.defineTemp(`copy ${arr}`, env)
-    // arr.type = 0
-    ctx.emit(`storel 0, ${p}`)
+    // arr.type = .arr
+    ctx.emit(`storeh ${qbeBox.arr}, ${p}`)
+    // arr.segment = .stack
+    ctx.emit(`${p} =l add ${p}, 2`)
+    ctx.emit(`storeh ${qbeSegment.stack}, ${p}`)
+    // arr.id = 0
+    ctx.emit(`${p} =l add ${p}, 2`)
+    ctx.emit(`storew 0, ${p}`)
     // arr.len = xs.len
-    ctx.emit(`${p} =l add ${p}, 8`)
+    ctx.emit(`${p} =l add ${p}, 4`)
     ctx.emit(`storel ${xs.length}, ${p}`)
     // arr.data <- xs
     for (const x of xs) {
@@ -57,8 +55,7 @@ class ArrayOf implements BytecodeCompiler, QBECompiler {
       ctx.emit(`${p} =l add ${p}, ${8}`)
       ctx.emit(`storel ${x}, ${p}`)
     }
-
-    return ctx.wrapArray(arr, env)
+    return arr
   }
 
   static #checkCell({ expr, meta }: ASTNode<SExprCell>) {
@@ -74,37 +71,3 @@ export default {
   units: { array: ArrayOf },
   prelude: '',
 } satisfies Module
-
-declare module '@/backend' {
-  interface QBEBackend {
-    wrapArray(x: string, env: QBEEnv): string
-    unwrapArray(x: string, env: QBEEnv): string
-    arrayLen(x: string, env: QBEEnv): string
-    isArray(x: string, env: QBEEnv): string
-  }
-}
-
-QBEBackend.prototype.wrapArray = function (x, env) {
-  const result = env.defineTemp()
-  this.emit(`${result} =l or ${x}, ${qbeConst.array}`)
-  return result
-}
-
-QBEBackend.prototype.unwrapArray = function (x, env) {
-  const result = env.defineTemp()
-  this.emit(`${result} =l and ${x}, ${~0b111}`)
-  return result
-}
-
-QBEBackend.prototype.arrayLen = function (x, env) {
-  const result = env.defineTemp()
-  this.emit(`${result} =l add ${this.unwrapArray(x, env)}, 8`)
-  this.emit(`${result} =l loadl ${result}`)
-  return result
-}
-
-QBEBackend.prototype.isArray = function (x, env) {
-  const result = env.defineTemp()
-  this.emit(`${result} =l ceql ${this.tag(x, env)}, ${qbeConst.array}`)
-  return result
-}

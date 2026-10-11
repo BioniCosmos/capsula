@@ -243,7 +243,7 @@ class IsI64 implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     return ctx.wrapBool(
       ctx.defineTemp(
-        `ceql ${ctx.tag(ctx.compileExpr(cell.expr.car[1], env), env)}, ${qbeConst.i64}`,
+        `ceqw ${ctx.tag(ctx.compileExpr(cell.expr.car[1], env), env)}, ${qbeConst.i64}`,
         env,
       ),
       env,

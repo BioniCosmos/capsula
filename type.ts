@@ -29,7 +29,6 @@ export const qbeConst = {
   true: 0b1001,
   unit: 0b10001,
   i64: 0b010,
-  array: 0b011,
 
   Box: `${0}`,
   Bool: `${0b001}`,
@@ -37,8 +36,10 @@ export const qbeConst = {
   True: `${0b1001}`,
   Unit: `${0b10001}`,
   I64: `${0b010}`,
-  Array: `${0b011}`,
 }
+
+export const qbeBox = { scalar: 0, arr: 1, struct: 2, str: 3 }
+export const qbeSegment = { stack: 0, heap: 1, data: 2 }
 
 export function typeToVMVarType(paramType: PrimitiveType) {
   switch (paramType) {
@@ -63,7 +64,7 @@ export function typeToQBETag(paramType: PrimitiveType) {
       return qbeConst.i64
     case 'arr':
     case 'struct':
-      return qbeConst.array
+      return qbeConst.box
     case 'any':
       throw Error('`any` is not a real type.')
     default:

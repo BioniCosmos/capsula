@@ -1,4 +1,3 @@
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -138,7 +137,7 @@ void frame_display() {
     for (size_t i = 0; i < current_frame->len; i++) {
         const auto slot = current_frame->slots[i];
         printf("{ ptr = %p, value = ", slot);
-        var_debug(*(uint64_t*)slot);
+        var_display(*(uint64_t*)slot);
         printf(" } ");
     }
     puts("] }");
@@ -156,52 +155,29 @@ const void* gc_alloc(const size_t size) {
 }
 
 void gc_check(const uint64_t x) {
-    switch (tag(x)) {
-        case TypeBox: {
-            const auto entry = map_get((void*)x);
-            if (entry != nullptr) {
-                entry->marked = true;
-                const auto inner = *(int64_t*)x;
-                if (tag(inner) == 0b000) {
-                    gc_check(inner);
-                }
-            }
-            break;
+    if (tag(x) != TypeBox) {
+        return;
+    }
+    if (is_box_scalar(x)) {
+        const auto entry = map_get((void*)x);
+        // TODO: may add assert and panic
+        if (entry != nullptr) {
+            entry->marked = true;
         }
-        case TypeArray: {
-            const auto arr = unwrap_array(x);
-            switch (arr->type) {
-                case ArrayTypeArray:
-                case ArrayTypeStruct:
-                    for (size_t i = 0; i < arr->len; i++) {
-                        gc_check(arr->data[i]);
-                    }
-                    break;
-                case ArrayTypeString:
-                    break;
-                case ArrayTypeArrayManaged:
-                case ArrayTypeStructManaged: {
-                    const uint64_t* const data = array_ptr(arr);
-                    const auto entry = map_get(data);
-                    if (entry != nullptr) {
-                        entry->marked = true;
-                    }
-                    for (size_t i = 0; i < arr->len; i++) {
-                        gc_check(data[i]);
-                    }
-                    break;
-                }
-                case ArrayTypeStringManaged: {
-                    const auto entry = map_get(array_ptr(arr));
-                    if (entry != nullptr) {
-                        entry->marked = true;
-                    }
-                    break;
-                }
-            }
-            break;
+        gc_check(((ScalarBox*)x)->value);
+        return;
+    }
+    const auto box = (const CompositeBox*)x;
+    if (box->segment == Heap) {
+        const auto entry = map_get((void*)x);
+        if (entry != nullptr) {
+            entry->marked = true;
         }
-        default:
+    }
+    if (box->type != BoxString) {
+        for (size_t i = 0; i < box->len; i++) {
+            gc_check(box->data[i]);
+        }
     }
 }
 

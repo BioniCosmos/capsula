@@ -358,6 +358,7 @@ class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   checkRule: CheckRule = { car: ['any', 'any'] }
 }
 
+// TODO: support for-loop
 class Loop implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const scope = new BytecodeEnv(env)
@@ -460,6 +461,7 @@ class SizeOf implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   checkRule: CheckRule = { car: ['any'] }
 }
 
+// TODO: bytecode backend
 class Call implements QBECompiler {
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const id = cell.expr.car[1]
@@ -504,14 +506,13 @@ class Panic implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     const fileName = ctx.env.defineTemp()
     ctx.emitGlobal(`data ${fileName} = { b "${meta.fileName}", b 0 }`)
 
-    const header = ctx.unwrapArray(ctx.compileExpr(expr.car[1], env), env)
+    const s = ctx.compileExpr(expr.car[1], env)
 
-    const size = ctx.defineTemp(`add ${header}, 8`, env)
+    const size = ctx.defineTemp(`add ${s}, 8`, env)
     ctx.emit(`${size} =l loadl ${size}`)
     const newSize = ctx.defineTemp(`add ${size}, 1`, env)
 
-    const ptr = ctx.defineTemp(`add ${header}, 16`, env)
-    ctx.emit(`${ptr} =l loadl ${ptr}`)
+    const ptr = ctx.defineTemp(`add ${s}, 16`, env)
 
     const message = ctx.defineTemp(`call $gc_alloc(l ${newSize})`, env)
     ctx.emit(`call $memset(l ${message}, w 0, l ${newSize})`)
@@ -555,6 +556,7 @@ declare module '@/backend' {
       thenBody: () => string,
       elseBody: (() => string) | null,
       env: QBEEnv,
+      type?: string,
     ): string
     panic(meta: ASTMeta, format: string, ...args: string[]): string
   }
@@ -600,7 +602,8 @@ BytecodeBackend.prototype.panic = function (meta, format, env) {
   this.emit(Instruction.NativeCall)
 }
 
-QBEBackend.prototype.if = function (pred, thenBody, elseBody, env) {
+// TODO: copy/ =? or not? This should be an option.
+QBEBackend.prototype.if = function (pred, thenBody, elseBody, env, type = 'l') {
   const thenBranch = env.defineBlock()
   const elseBranch = env.defineBlock()
   const end = env.defineBlock()
@@ -610,12 +613,12 @@ QBEBackend.prototype.if = function (pred, thenBody, elseBody, env) {
   )
 
   this.emit(thenBranch)
-  this.emit(`${result} =l copy ${thenBody()}`)
+  this.emit(`${result} =${type} copy ${thenBody()}`)
   this.emit(`jmp ${end}`)
 
   if (elseBody !== null) {
     this.emit(elseBranch)
-    this.emit(`${result} =l copy ${elseBody()}`)
+    this.emit(`${result} =${type} copy ${elseBody()}`)
   }
 
   this.emit(end)
@@ -632,5 +635,6 @@ QBEBackend.prototype.panic = function (meta, format, ...args) {
   this.emit(
     `call $panic(l ${fileName}, w ${meta.line}, w ${meta.column}, l ${message}, ..., ${args.join(', ')})`,
   )
+  // TODO: panic is noreturn. BUT it returns unit?
   return qbeConst.Unit
 }

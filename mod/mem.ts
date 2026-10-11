@@ -1,100 +1,94 @@
 import type { QBEBackend } from '@/backend'
 import type { QBEEnv } from '@/env'
 import {
+  qbeBox,
   qbeConst,
+  qbeSegment,
+  type ArgumentChecker,
   type ASTNode,
+  type CheckRule,
   type QBECompiler,
   type SExprCell,
 } from '@/type'
 import type { Module } from '.'
 
-// TODO: Figure out the role of `alloc`. e.g. `(alloc (alloc (array)))`
-class Alloc implements QBECompiler {
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const x = ctx.compileExpr(cell.expr.car[1], env)!
-    ctx.emit(`call $gc_retain(l ${x})`)
-
-    const result = ctx.if(
-      () => ctx.isArray(x, env),
-      () => {
-        const arr = ctx.unwrapArray(x, env)
-        const header = ctx.defineTemp(`alloc8 24`, env)
-        const p = ctx.defineTemp(`copy ${header}`, env)
-
-        // Convert and copy `type`.
-        const type = env.defineTemp()
-        ctx.emit(`${type} =l loadl ${arr}`)
-        ctx.emit(`${type} =l or ${type}, ${1n << 63n}`)
-        ctx.emit(`storel ${type}, ${p}`)
-
-        // Copy `len`.
-        ctx.emit(`${arr} =l add ${arr}, 8`)
-        ctx.emit(`${p} =l add ${p}, 8`)
-        ctx.emit(`blit ${arr}, ${p}, 8`)
-
-        // Calculate `size`.
-        const unitSize = ctx.if(
-          () => ctx.defineTemp(`ceql ${type}, ${2n | (1n << 63n)}`, env),
-          () => '1',
-          () => '8',
-          env,
-        )
-        const size = env.defineTemp()
-        ctx.emit(`${size} =l loadl ${arr}`)
-        ctx.emit(`${size} =l mul ${size}, ${unitSize}`)
-
-        // Allocate and copy data.
-        ctx.emit(`${arr} =l add ${arr}, 8`)
-        ctx.emit(`${p} =l add ${p}, 8`)
-        const source = ctx.if(
-          () => ctx.defineTemp(`ceql ${type}, ${2n | (1n << 63n)}`, env),
-          () => ctx.defineTemp(`loadl ${arr}`, env),
-          () => arr,
-          env,
-        )
-        const ptr = ctx.defineTemp(`call $gc_alloc(l ${size})`, env)
-        ctx.emit(`call $memcpy(l ${ptr}, l ${source}, l ${size})`)
-        ctx.emit(`storel ${ptr}, ${p}`)
-
-        return ctx.wrapArray(header, env)
-      },
-      () => {
-        const result = ctx.defineTemp(`call $gc_alloc(l 8)`, env)
-        ctx.emit(`storel ${x}, ${result}`)
-        return result
-      },
-      env,
-    )
-
-    ctx.emit(`call $gc_release(l ${x})`)
-    return result
-  }
-}
-
-class Free implements QBECompiler {
+// TODO: Do some optimization for constant?
+// TODO: nested if is bad.
+class Box implements QBECompiler, ArgumentChecker {
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const x = ctx.compileExpr(cell.expr.car[1], env)
-    return ctx.if(
-      () => ctx.isArray(x, env),
-      () => {
-        const p = env.defineTemp()
-        ctx.emit(`${p} =l add ${ctx.unwrapArray(x, env)}, 16`)
-        ctx.emit(`${p} =l loadl ${p}`)
-        ctx.emit(`call $free(l ${p})`)
-        return qbeConst.Unit
-      },
-      () => {
-        ctx.emit(`call $free(l ${x})`)
-        return qbeConst.Unit
-      },
+    ctx.emit(`call $gc_retain(l ${x})`)
+
+    const isBox = () =>
+      ctx.defineTemp(`ceqw ${ctx.tag(x, env)}, ${qbeConst.box}`, env, 'w')
+    const isNotBoxScalar = () =>
+      ctx.defineTemp(
+        `cnew ${ctx.defineTemp(`loaduh ${x}`, env)}, ${qbeBox.scalar}`,
+        env,
+        'w',
+      )
+    const isNotOnHeap = () =>
+      ctx.defineTemp(
+        `cnew ${ctx.defineTemp(`loaduh ${ctx.defineTemp(`add ${x}, 2`, env)}`, env)}, ${qbeSegment.heap}`,
+        env,
+        'w',
+      )
+
+    function boxScalar() {
+      const box = ctx.defineTemp(`call $gc_alloc(l 16)`, env)
+      ctx.emit(`storeh ${qbeBox.scalar}, ${box}`)
+      ctx.emit(`storel ${x}, ${ctx.defineTemp(`add ${box}, 8`, env)}`)
+      return box
+    }
+
+    function boxStackComposite() {
+      const unitSize = ctx.if(
+        () =>
+          ctx.defineTemp(
+            `ceqw ${ctx.defineTemp(`loaduh ${x}`, env)}, ${qbeBox.str}`,
+            env,
+            'w',
+          ),
+        () => '1',
+        () => '8',
+        env,
+      )
+      const dataSize = ctx.defineTemp(
+        `mul ${ctx.defineTemp(`loadl ${ctx.defineTemp(`add ${x}, 8`, env)}`, env)}, ${unitSize}`,
+        env,
+      )
+      const size = ctx.defineTemp(`add 16, ${dataSize}`, env)
+
+      const box = ctx.defineTemp(`call $gc_alloc(l ${size})`, env)
+      ctx.emit(`call $memcpy(l ${box}, l ${x}, l ${size})`)
+      ctx.emit(
+        `storeh ${qbeSegment.heap}, ${ctx.defineTemp(`add ${box}, 2`, env)}`,
+      )
+      return box
+    }
+
+    const box = ctx.if(
+      isBox,
+      () =>
+        ctx.if(
+          isNotBoxScalar,
+          () => ctx.if(isNotOnHeap, boxStackComposite, boxScalar, env),
+          boxScalar,
+          env,
+        ),
+      boxScalar,
       env,
     )
+    ctx.emit(`call $gc_release(l ${x})`)
+    return box
   }
+
+  checkRule: CheckRule = { car: ['any'] }
 }
 
 export default {
   name: 'mem',
   dependencies: [],
-  units: { alloc: Alloc, free: Free },
+  units: { box: Box },
   prelude: '',
 } satisfies Module

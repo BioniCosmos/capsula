@@ -2,7 +2,9 @@ import type { Backend, BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { BytecodeEnv, Environment, QBEEnv } from '@/env'
 import {
+  qbeBox,
   qbeConst,
+  qbeSegment,
   type ArgumentChecker,
   type ASTNode,
   type BytecodeCompiler,
@@ -82,18 +84,20 @@ class StructConstructor implements BytecodeCompiler, QBECompiler {
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     this.#checkArgs(ctx, cell)
-
     const xs = ctx.compileArgs(cell, env)
-    // struct := { id: u64; type: u64; len: u64; data: ... }
-    const struct = ctx.defineTemp(`alloc8 ${24 + xs.length * 8}`, env)
+
+    const struct = ctx.defineTemp(`alloc8 ${16 + xs.length * 8}`, env)
     const p = ctx.defineTemp(`copy ${struct}`, env)
+    // struct.type = .struct
+    ctx.emit(`storeh ${qbeBox.struct}, ${p}`)
+    // struct.segment = .stack
+    ctx.emit(`${p} =l add ${p}, 2`)
+    ctx.emit(`storeh ${qbeSegment.stack}, ${p}`)
     // struct.id = id
-    ctx.emit(`storel ${this.id}, ${p}`)
-    // struct.type = 1
-    ctx.emit(`${p} =l add ${p}, 8`)
-    ctx.emit(`storel 1, ${p}`)
+    ctx.emit(`${p} =l add ${p}, 2`)
+    ctx.emit(`storew ${this.id}, ${p}`)
     // struct.len = xs.len
-    ctx.emit(`${p} =l add ${p}, 8`)
+    ctx.emit(`${p} =l add ${p}, 4`)
     ctx.emit(`storel ${xs.length}, ${p}`)
     // struct.data <- xs
     for (const x of xs) {
@@ -101,8 +105,7 @@ class StructConstructor implements BytecodeCompiler, QBECompiler {
       ctx.emit(`${p} =l add ${p}, ${8}`)
       ctx.emit(`storel ${x}, ${p}`)
     }
-
-    return ctx.wrapArray(ctx.defineTemp(`add ${struct}, 8`, env), env)
+    return struct
   }
 
   #checkArgs(ctx: Backend, { expr, meta }: ASTNode<SExprCell>) {
@@ -132,9 +135,9 @@ class StructGetter implements BytecodeCompiler, QBECompiler, ArgumentChecker {
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const node = cell.expr.car[1]
-    const x = ctx.unwrapArray(ctx.compileExpr(node, env), env)
+    const x = ctx.compileExpr(node, env)
     const id = ctx.defineTemp(
-      `loadl ${ctx.defineTemp(`sub ${x}, 8`, env)}`,
+      `loaduw ${ctx.defineTemp(`add ${x}, 4`, env)}`,
       env,
     )
     ctx.if(
@@ -167,7 +170,10 @@ class StructGetter implements BytecodeCompiler, QBECompiler, ArgumentChecker {
       null,
       env,
     )
-    return ctx.defineTemp(`add ${x}, ${16 + 8 * this.offset}`, env)
+    return ctx.defineTemp(
+      `loadl ${ctx.defineTemp(`add ${x}, ${16 + 8 * this.offset}`, env)}`,
+      env,
+    )
   }
 
   checkRule: CheckRule = { car: ['struct'] }
