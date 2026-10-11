@@ -154,25 +154,25 @@ const void* gc_alloc(const size_t size) {
     return ptr;
 }
 
+#define must_mark                           \
+    const auto entry = map_get((void*)x);   \
+    if (entry == nullptr) {                 \
+        error("invalid pointer: %#llx", x); \
+    }                                       \
+    entry->marked = true;
+
 void gc_check(const uint64_t x) {
     if (tag(x) != TypeBox) {
         return;
     }
     if (is_box_scalar(x)) {
-        const auto entry = map_get((void*)x);
-        // TODO: may add assert and panic
-        if (entry != nullptr) {
-            entry->marked = true;
-        }
+        must_mark;
         gc_check(((ScalarBox*)x)->value);
         return;
     }
     const auto box = (const CompositeBox*)x;
     if (box->segment == Heap) {
-        const auto entry = map_get((void*)x);
-        if (entry != nullptr) {
-            entry->marked = true;
-        }
+        must_mark;
     }
     if (box->type != BoxString) {
         for (size_t i = 0; i < box->len; i++) {
