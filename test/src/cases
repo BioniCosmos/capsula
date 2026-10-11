@@ -33,6 +33,7 @@
 (print (i64? -100)) => true;
 (print (i64? true)) => false;
 
+// TODO: add test of arg type check
 (panic "YOU ARE DEAD! 🫨") !> -:1:1 panic: YOU ARE DEAD! 🫨;
 
 (print (cond (false 999) (true 2) (false 3))) => 2;
@@ -119,15 +120,15 @@
 (print (size-of true)) => 8;
 (print (size-of 1209)) => 8;
 (print (size-of (cond))) => 8;
-(print (size-of "あ")) => 24;
-(print (size-of (array true 1209 (cond) "あ"))) => 64;
-(struct Foo a b c d e) (print (size-of (Foo true 1209 (cond) "あ" (array true 1209 (cond) "あ")))) => 128;
-(print (size-of (alloc true))) => 8;
-(print (size-of (alloc 1209))) => 8;
-(print (size-of (alloc (cond)))) => 8;
-(print (size-of (alloc "あ"))) => 24;
-(print (size-of (alloc (array true 1209 (cond) "あ")))) => 24;
-(struct Foo a b c d e) (print (size-of (alloc (Foo true 1209 (cond) "あ" (array true 1209 (cond) "あ"))))) => 24;
+(print (size-of "あ")) => 8;
+(print (size-of (array true 1209 (cond) "あ"))) => 48;
+(struct Foo a b c d e) (print (size-of (Foo true 1209 (cond) "あ" (array true 1209 (cond) "あ")))) => 96;
+(print (size-of (box true))) => 8;
+(print (size-of (box 1209))) => 8;
+(print (size-of (box (cond)))) => 8;
+(print (size-of (box "あ"))) => 8;
+(print (size-of (box (array true 1209 (cond) "あ")))) => 8;
+(struct Foo a b c d e) (print (size-of (box (Foo true 1209 (cond) "あ" (array true 1209 (cond) "あ"))))) => 8;
 #endif
 
 #if bytecode
@@ -140,7 +141,21 @@
 (print (array (array 1 2) (array 3))) => [ [ 1 2 ] [ 3 ] ];
 (def xs (array 1 2 3 10 -1 512)) (print xs) => [ 1 2 3 10 -1 512 ];
 #if qbe
-(print (array 1 2 3 (alloc 0))) => [ 1 2 3 0 ];
-(print (array 1 2 3 (alloc (array 2 1)))) => [ 1 2 3 [ 2 1 ] ];
-(print (alloc (array 1 2 3 (alloc (array 2 1))))) => [ 1 2 3 [ 2 1 ] ];
+(print (array 1 2 3 (box 0))) => [ 1 2 3 0 ];
+(print (array 1 2 3 (box (array 2 1)))) => [ 1 2 3 [ 2 1 ] ];
+(print (box (array 1 2 3 (box (array 2 1))))) => [ 1 2 3 [ 2 1 ] ];
 #endif
+
+(struct Person id name age) (print (Person 1 "bug" 333)) => Person { id = 1, name = bug, age = 333 };
+
+(struct Person id name age)
+(def p (Person 4 5 6))
+(print (Person-id p))
+(print (Person-name p))
+(print (Person-age p)) => 456;
+
+(struct 10) !> -:1:9 compiling: The name of the struct must be a symbol, but got `i64`.;
+(struct Foo 10) !> -:1:13 compiling: Every field name of the struct must be a symbol, but got `i64`.;
+(struct Foo a) (Foo) !> -:1:16 Struct `Foo` expects 1 field(s), but 0 were given.;
+(struct Foo a) (Foo-a false) !> -:1:23 compiling: expecting `struct`, found `bool`;
+(struct Foo a) (struct Bar) (Foo-a (Bar)) !> -:1:36 panic: expecting a value of struct `Foo`, but got a value of struct `Bar`;
