@@ -28,9 +28,8 @@ Frame* current_frame;
 const void* anchors[1024];
 size_t anchors_top;
 
-// TODO: allocation error
 void map_init() {
-    map.entries = calloc(256, sizeof(GCEntry));
+    map.entries = alloc(256, sizeof(GCEntry));
     map.cap = 256;
 }
 
@@ -77,7 +76,7 @@ void map_insert(const GCEntry entry) {
 
 void map_grow() {
     const auto old = map;
-    map = (GCMap){.entries = calloc(old.cap * 2, sizeof(GCEntry)), .cap = old.cap * 2};
+    map = (GCMap){.entries = alloc(old.cap * 2, sizeof(GCEntry)), .cap = old.cap * 2};
     for (size_t i = 0; i < old.cap; i++) {
         if (!map_is_empty_entry(old.entries + i)) {
             map_insert(old.entries[i]);
@@ -149,7 +148,7 @@ const void* gc_alloc(const size_t size) {
     if ((float)map.len / map.cap > 0.75) {
         gc_collect();
     }
-    const auto ptr = calloc(size, 1);
+    const auto ptr = alloc(size, 1);
     map_insert((GCEntry){.ptr = ptr});
     return ptr;
 }

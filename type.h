@@ -52,6 +52,14 @@ static inline bool is_box_scalar(const uint64_t x) {
     return ((Box*)x)->type == BoxScalar;
 }
 
+static inline void* alloc(const size_t count, const size_t size) {
+    const auto ptr = calloc(count, size);
+    if (ptr == nullptr) {
+        error("failed to allocate memory");
+    }
+    return ptr;
+}
+
 #ifdef CAPSULA_IMPLEMENTATION
 
 void var_display(const uint64_t x) {
