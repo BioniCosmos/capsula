@@ -414,6 +414,7 @@ class For implements BytecodeCompiler, QBECompiler {
     if (expr.car.length < 2) {
       error(meta, 'compiling: missing clause')
     }
+
     const clause = expr.car[1]
     const body = expr.car.slice(2)
     // a very strict match for `:in` pattern. May switch to more flexible rules
@@ -432,20 +433,40 @@ class For implements BytecodeCompiler, QBECompiler {
           `compiling: expecting a symbol for variable binding, found \`${x.expr.type}\``,
         )
       }
-      const xs = clause.expr.car[2]
-      if (xs.expr.type === 'num') {
+      const xsNode = clause.expr.car[2]
+
+      function forInNum() {
         ctx.compileExpr(consCAR([sym('def'), x, num(0)]), env)
         ctx.compileExpr(
           consCAR([
             sym('loop'),
             consCAR([
               sym('if'),
-              consCAR([sym('>='), x, xs]),
+              consCAR([sym('>='), x, xsNode]),
               consCAR([sym('break')]),
             ]),
             ...body,
             consCAR([sym('set!'), x, consCAR([sym('+'), x, num(1)])]),
           ]),
+          env,
+        )
+      }
+
+      if (xsNode.expr.type === 'num') {
+        forInNum()
+        return qbeConst.Unit
+      }
+
+      if (xsNode.expr.type === 'sym' || xsNode.expr.type === 'cell') {
+        const xs = ctx.compileExpr(xsNode, env)
+        ctx.if(
+          () =>
+            ctx.defineTemp(`ceqw ${ctx.tag(xs, env)}, ${qbeConst.i64}`, env),
+          () => {
+            forInNum()
+            return qbeConst.Unit
+          },
+          null,
           env,
         )
         return qbeConst.Unit

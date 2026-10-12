@@ -117,6 +117,7 @@
 (loop (def x 0) (break)) (print x) !> -:1:33 compiling: unbound identifier;
 
 (for (i :in 5) (print i)) => 01234;
+(def x 5) (for (i :in x) (print i)) => 01234;
 
 #if qbe
 (print (size-of true)) => 8;
