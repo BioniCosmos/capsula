@@ -2,6 +2,7 @@ import { BytecodeBackend, QBEBackend, type Backend } from '@/backend'
 import { Instruction, Label } from '@/bytecode'
 import { BytecodeEnv, QBEEnv, type Environment } from '@/env'
 import {
+  consWith,
   qbeConst,
   type ArgumentChecker,
   type ASTMeta,
@@ -358,7 +359,6 @@ class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   checkRule: CheckRule = { car: ['any', 'any'] }
 }
 
-// TODO: support for-loop
 class Loop implements BytecodeCompiler, QBECompiler {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const scope = new BytecodeEnv(env)
@@ -393,6 +393,64 @@ class Loop implements BytecodeCompiler, QBECompiler {
 
     ctx.emit(end)
     return qbeConst.Unit
+  }
+}
+
+class For implements BytecodeCompiler, QBECompiler {
+  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
+    throw new Error('Method not implemented.')
+  }
+
+  compileToQBE(
+    ctx: QBEBackend,
+    { expr, meta }: ASTNode<SExprCell>,
+    env: QBEEnv,
+  ) {
+    const { bool, num, str, sym, consCAR } = consWith(meta)
+
+    if (expr.cdr !== null) {
+      error(expr.cdr.meta, 'compiling: unexpected `cdr`')
+    }
+    if (expr.car.length < 2) {
+      error(meta, 'compiling: missing clause')
+    }
+    const clause = expr.car[1]
+    const body = expr.car.slice(2)
+    // a very strict match for `:in` pattern. May switch to more flexible rules
+    // in the future if there are more forms.
+    if (
+      clause.expr.type === 'cell' &&
+      clause.expr.cdr === null &&
+      clause.expr.car.length === 3 &&
+      clause.expr.car[1].expr.type === 'sym' &&
+      clause.expr.car[1].expr.value === ':in'
+    ) {
+      const x = clause.expr.car[0]
+      if (x.expr.type !== 'sym') {
+        error(
+          x.meta,
+          `compiling: expecting a symbol for variable binding, found \`${x.expr.type}\``,
+        )
+      }
+      const xs = clause.expr.car[2]
+      if (xs.expr.type === 'num') {
+        ctx.compileExpr(consCAR([sym('def'), x, num(0)]), env)
+        ctx.compileExpr(
+          consCAR([
+            sym('loop'),
+            consCAR([
+              sym('if'),
+              consCAR([sym('>='), x, xs]),
+              consCAR([sym('break')]),
+            ]),
+            ...body,
+            consCAR([sym('set!'), x, consCAR([sym('+'), x, num(1)])]),
+          ]),
+          env,
+        )
+        return qbeConst.Unit
+      }
+    }
   }
 }
 
@@ -537,6 +595,7 @@ export default {
     def: Def,
     'set!': Set,
     loop: Loop,
+    for: For,
     'size-of': SizeOf,
     call: Call,
     panic: Panic,
