@@ -12,6 +12,36 @@ export type SExpr = SExprBool | SExprNum | SExprStr | SExprSym | SExprCell
 export type ASTMeta = { fileName: string; line: number; column: number }
 export type ASTNode<T extends SExpr = SExpr> = { expr: T; meta: ASTMeta }
 
+export function bool(value: boolean, meta: ASTMeta): ASTNode<SExprBool> {
+  return { expr: { type: 'bool', value }, meta }
+}
+
+export function num(value: number, meta: ASTMeta): ASTNode<SExprNum> {
+  return { expr: { type: 'num', value }, meta }
+}
+
+export function str(value: string, meta: ASTMeta): ASTNode<SExprStr> {
+  return { expr: { type: 'str', value }, meta }
+}
+
+export function sym(value: string, meta: ASTMeta): ASTNode<SExprSym> {
+  return { expr: { type: 'sym', value }, meta }
+}
+
+export function consCAR(car: ASTNode[], meta: ASTMeta): ASTNode<SExprCell> {
+  return { expr: { type: 'cell', car, cdr: null }, meta }
+}
+
+export function consWith(meta: ASTMeta) {
+  return {
+    bool: (x: boolean) => bool(x, meta),
+    num: (x: number) => num(x, meta),
+    str: (x: string) => str(x, meta),
+    sym: (x: string) => sym(x, meta),
+    consCAR: (x: ASTNode[]) => consCAR(x, meta),
+  }
+}
+
 export type PrimitiveType =
   'bool' | 'i64' | 'sym' | 'str' | 'arr' | 'struct' | 'any'
 
