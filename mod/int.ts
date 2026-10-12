@@ -2,6 +2,7 @@ import { QBEBackend, type BytecodeBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
+  num,
   qbeConst,
   type ArgumentChecker,
   type ASTNode,
@@ -106,13 +107,9 @@ function qbeCheckZero(ctx: QBEBackend, env: QBEEnv, node: ASTNode) {
   const { meta } = node
   ctx.if(
     () =>
-      ctx.defineTemp(
-        `ceql ${ctx.compileExpr(node, env)}, ${ctx.compileExpr({ expr: { type: 'num', value: 0 }, meta }, env)}`,
-        env,
-      ),
+      `ceqw ${ctx.compileExpr(node, env)}, ${ctx.compileExpr(num(0, meta), env)}`,
     () => ctx.panic(meta, 'The divisor cannot be zero.'),
-    null,
-    env,
+    { env },
   )
 }
 

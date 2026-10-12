@@ -19,39 +19,24 @@ class Box implements QBECompiler, ArgumentChecker {
     const x = ctx.compileExpr(cell.expr.car[1], env)
     ctx.emit(`call $gc_retain(l ${x})`)
 
-    const isBox = () =>
-      ctx.defineTemp(`ceqw ${ctx.tag(x, env)}, ${qbeConst.box}`, env, 'w')
+    const isBox = () => `ceqw ${ctx.tag(x, env)}, ${qbeConst.box}`
     const isNotBoxScalar = () =>
-      ctx.defineTemp(
-        `cnew ${ctx.defineTemp(`loaduh ${x}`, env)}, ${qbeBox.scalar}`,
-        env,
-        'w',
-      )
+      `cnew ${ctx.defineTemp(`loaduh ${x}`, env, 'w')}, ${qbeBox.scalar}`
     const isNotOnHeap = () =>
-      ctx.defineTemp(
-        `cnew ${ctx.defineTemp(`loaduh ${ctx.defineTemp(`add ${x}, 2`, env)}`, env)}, ${qbeSegment.heap}`,
-        env,
-        'w',
-      )
+      `cnew ${ctx.defineTemp(`loaduh ${ctx.defineTemp(`add ${x}, 2`, env)}`, env, 'w')}, ${qbeSegment.heap}`
 
-    function boxScalar() {
-      const box = ctx.defineTemp(`call $gc_alloc(l 16)`, env)
+    function boxScalar(box: string) {
+      ctx.emit(`${box} =l call $gc_alloc(l 16)`)
       ctx.emit(`storeh ${qbeBox.scalar}, ${box}`)
       ctx.emit(`storel ${x}, ${ctx.defineTemp(`add ${box}, 8`, env)}`)
-      return box
     }
 
-    function boxStackComposite() {
-      const unitSize = ctx.if(
-        () =>
-          ctx.defineTemp(
-            `ceqw ${ctx.defineTemp(`loaduh ${x}`, env)}, ${qbeBox.str}`,
-            env,
-            'w',
-          ),
+    function boxStackComposite(box: string) {
+      const unitSize = ctx.ifExpr(
+        () => `ceqw ${ctx.defineTemp(`loaduh ${x}`, env, 'w')}, ${qbeBox.str}`,
         () => '1',
         () => '8',
-        env,
+        { env },
       )
       const dataSize = ctx.defineTemp(
         `mul ${ctx.defineTemp(`loadl ${ctx.defineTemp(`add ${x}, 8`, env)}`, env)}, ${unitSize}`,
@@ -59,25 +44,24 @@ class Box implements QBECompiler, ArgumentChecker {
       )
       const size = ctx.defineTemp(`add 16, ${dataSize}`, env)
 
-      const box = ctx.defineTemp(`call $gc_alloc(l ${size})`, env)
+      ctx.emit(`${box} =l call $gc_alloc(l ${size})`)
       ctx.emit(`call $memcpy(l ${box}, l ${x}, l ${size})`)
       ctx.emit(
         `storeh ${qbeSegment.heap}, ${ctx.defineTemp(`add ${box}, 2`, env)}`,
       )
-      return box
     }
 
-    const box = ctx.if(
+    const box = ctx.ifExpr(
       isBox,
       () =>
-        ctx.if(
+        ctx.ifExpr(
           isNotBoxScalar,
-          () => ctx.if(isNotOnHeap, boxStackComposite, boxScalar, env),
+          () => ctx.ifExpr(isNotOnHeap, boxStackComposite, boxScalar, { env }),
           boxScalar,
-          env,
+          { env },
         ),
       boxScalar,
-      env,
+      { env },
     )
     ctx.emit(`call $gc_release(l ${x})`)
     return box

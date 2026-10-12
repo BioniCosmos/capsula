@@ -141,7 +141,7 @@ class StructGetter implements BytecodeCompiler, QBECompiler, ArgumentChecker {
       env,
     )
     ctx.if(
-      () => ctx.defineTemp(`cnel ${id}, ${this.id}`, env),
+      () => `cnel ${id}, ${this.id}`,
       () => {
         const expect = ctx.defineTemp(
           `loadl ${ctx.defineTemp(
@@ -160,15 +160,14 @@ class StructGetter implements BytecodeCompiler, QBECompiler, ArgumentChecker {
           )}`,
           env,
         )
-        return ctx.panic(
+        ctx.panic(
           node.meta,
           'expecting a value of struct `%s`, but got a value of struct `%s`',
           `l ${expect}`,
           `l ${actual}`,
         )
       },
-      null,
-      env,
+      { env },
     )
     return ctx.defineTemp(
       `loadl ${ctx.defineTemp(`add ${x}, ${16 + 8 * this.offset}`, env)}`,

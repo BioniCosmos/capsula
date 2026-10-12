@@ -459,16 +459,9 @@ class For implements BytecodeCompiler, QBECompiler {
 
       if (xsNode.expr.type === 'sym' || xsNode.expr.type === 'cell') {
         const xs = ctx.compileExpr(xsNode, env)
-        ctx.if(
-          () =>
-            ctx.defineTemp(`ceqw ${ctx.tag(xs, env)}, ${qbeConst.i64}`, env),
-          () => {
-            forInNum()
-            return qbeConst.Unit
-          },
-          null,
+        ctx.if(() => `ceqw ${ctx.tag(xs, env)}, ${qbeConst.i64}`, forInNum, {
           env,
-        )
+        })
         return qbeConst.Unit
       }
     }
@@ -632,13 +625,24 @@ declare module '@/backend' {
     panic(meta: ASTMeta, format: string, env: BytecodeEnv): void
   }
 
+  type QBEIfOptions = {
+    elseBody?: () => void
+    env: QBEEnv
+    predIsValue?: boolean
+    resultType?: string
+  }
+
   interface QBEBackend {
     if(
-      pred: () => string,
-      thenBody: () => string,
-      elseBody: (() => string) | null,
-      env: QBEEnv,
-      type?: string,
+      pred: (() => string) | (() => string)[],
+      thenBody: () => void,
+      options: QBEIfOptions,
+    ): void
+    ifExpr(
+      pred: (() => string) | (() => string)[],
+      thenBody: (result: string) => string | void,
+      elseBody: (result: string) => string | void,
+      options: Omit<QBEIfOptions, 'elseBody'>,
     ): string
     panic(meta: ASTMeta, format: string, ...args: string[]): string
   }
@@ -684,24 +688,71 @@ BytecodeBackend.prototype.panic = function (meta, format, env) {
   this.emit(Instruction.NativeCall)
 }
 
-// TODO: copy/ =? or not? This should be an option.
-QBEBackend.prototype.if = function (pred, thenBody, elseBody, env, type = 'l') {
+QBEBackend.prototype.if = function (
+  pred,
+  thenBody,
+  { elseBody, env, predIsValue = false },
+) {
   const thenBranch = env.defineBlock()
-  const elseBranch = env.defineBlock()
+  const end = env.defineBlock()
+
+  if (Array.isArray(pred)) {
+    throw Error('unimplemented')
+  }
+
+  const testResult = predIsValue ? pred() : this.defineTemp(pred(), env, 'w')
+  if (elseBody === undefined) {
+    this.emit(`jnz ${testResult}, ${thenBranch}, ${end}`)
+
+    this.emit(thenBranch)
+    thenBody()
+  } else {
+    const elseBranch = env.defineBlock()
+    this.emit(`jnz ${testResult}, ${thenBranch}, ${elseBranch}`)
+
+    this.emit(thenBranch)
+    thenBody()
+    this.emit(`jmp ${end}`)
+
+    this.emit(elseBranch)
+    elseBody()
+  }
+  this.emit(end)
+}
+
+QBEBackend.prototype.ifExpr = function (
+  pred,
+  thenBody,
+  elseBody,
+  { env, predIsValue: predicateIsValue = true, resultType = 'l' },
+) {
+  const thenBranch = env.defineBlock()
   const end = env.defineBlock()
   const result = env.defineTemp()
-  this.emit(
-    `jnz ${pred()}, ${thenBranch}, ${elseBody !== null ? elseBranch : end}`,
-  )
+
+  const evalBranch = (body: (result: string) => string | void) => {
+    const branchResult = body(result)
+    if (branchResult) {
+      this.emit(`${result} =${resultType} copy ${branchResult}`)
+    }
+  }
+
+  if (Array.isArray(pred)) {
+    throw Error('unimplemented')
+  }
+
+  const testResult = predicateIsValue
+    ? this.defineTemp(pred(), env, 'w')
+    : pred()
+  const elseBranch = env.defineBlock()
+  this.emit(`jnz ${testResult}, ${thenBranch}, ${elseBranch}`)
 
   this.emit(thenBranch)
-  this.emit(`${result} =${type} copy ${thenBody()}`)
+  evalBranch(thenBody)
   this.emit(`jmp ${end}`)
 
-  if (elseBody !== null) {
-    this.emit(elseBranch)
-    this.emit(`${result} =${type} copy ${elseBody()}`)
-  }
+  this.emit(elseBranch)
+  evalBranch(elseBody)
 
   this.emit(end)
   return result

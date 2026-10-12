@@ -269,16 +269,9 @@ export class QBEBackend implements Backend<QBECompiler> {
         `l ${this.defineTemp(`call $type_name(l ${x})`, env)}`,
       )
     this.if(
-      () =>
-        this.defineTemp(
-          `cnew ${this.tag(x, env)}, ${typeToQBETag(paramType)}`,
-          env,
-          'w',
-        ),
+      () => `cnew ${this.tag(x, env)}, ${typeToQBETag(paramType)}`,
       panic,
-      null,
-      env,
-      'w',
+      { env },
     )
     if (paramType === 'arr' || paramType === 'struct') {
       this.if(
@@ -291,9 +284,7 @@ export class QBEBackend implements Backend<QBECompiler> {
           return innerCheck
         },
         panic,
-        null,
-        env,
-        'w',
+        { env, predIsValue: true },
       )
     }
   }
