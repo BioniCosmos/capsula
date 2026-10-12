@@ -472,6 +472,8 @@ class For implements BytecodeCompiler, QBECompiler {
         return qbeConst.Unit
       }
     }
+
+    throw new Error('Method not implemented.')
   }
 }
 

@@ -159,6 +159,6 @@
 
 (struct 10) !> -:1:9 compiling: The name of the struct must be a symbol, but got `i64`.;
 (struct Foo 10) !> -:1:13 compiling: Every field name of the struct must be a symbol, but got `i64`.;
-(struct Foo a) (Foo) !> -:1:16 Struct `Foo` expects 1 field(s), but 0 were given.;
+(struct Foo a) (Foo) !> -:1:16 compiling: Struct `Foo` expects 1 field(s), but 0 were given.;
 (struct Foo a) (Foo-a false) !> -:1:23 compiling: expecting `struct`, found `bool`;
 (struct Foo a) (struct Bar) (Foo-a (Bar)) !> -:1:36 panic: expecting a value of struct `Foo`, but got a value of struct `Bar`;

@@ -116,7 +116,7 @@ class StructConstructor implements BytecodeCompiler, QBECompiler {
     if (argCount !== this.fieldCount) {
       error(
         meta,
-        `Struct \`${ctx.env.struct.meta[this.id].name}\` expects ${this.fieldCount} field(s), but ${argCount} were given.`,
+        `compiling: Struct \`${ctx.env.struct.meta[this.id].name}\` expects ${this.fieldCount} field(s), but ${argCount} were given.`,
       )
     }
   }
