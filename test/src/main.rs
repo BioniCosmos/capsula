@@ -88,14 +88,15 @@ fn parse_cases<'a>(raw: &'a str, defined_identifiers: &[&str]) -> Option<Vec<Cas
             }
         };
 
-        ($c:expr) => {
+        ($c:expr) => {{
+            #[allow(clippy::char_lit_as_u8)]
             while i < raw.len() && raw[i] != $c as u8 {
                 if raw[i] == b'\n' {
                     line += 1;
                 }
                 i += 1;
             }
-        };
+        }};
     }
 
     while i < raw.len() {
