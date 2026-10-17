@@ -1,6 +1,5 @@
 #pragma once
 
-#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -48,10 +47,6 @@ static inline Type tag(const uint64_t x) {
     return x & UINT64_C(0b111);
 }
 
-static inline bool is_box_scalar(const uint64_t x) {
-    return ((Box*)x)->type == BoxScalar;
-}
-
 static inline void* alloc(const size_t count, const size_t size) {
     const auto ptr = calloc(count, size);
     if (ptr == nullptr) {
@@ -65,12 +60,11 @@ static inline void* alloc(const size_t count, const size_t size) {
 void var_display(const uint64_t x) {
     switch (tag(x)) {
         case TypeBox: {
-            if (is_box_scalar(x)) {
-                var_display(((ScalarBox*)x)->value);
-                return;
-            }
             const auto box = (const CompositeBox*)x;
             switch (box->type) {
+                case BoxScalar:
+                    var_display(((ScalarBox*)x)->value);
+                    return;
                 case BoxArray:
                     printf("[ ");
                     for (size_t i = 0; i < box->len; i++) {
@@ -95,8 +89,6 @@ void var_display(const uint64_t x) {
                     fwrite(box->data, sizeof(char), box->len, stdout);
                     fflush(stdout);
                     return;
-                case BoxScalar:
-                    unreachable();
             }
             break;
         }
@@ -120,41 +112,44 @@ void var_display(const uint64_t x) {
     error("invalid var: %#llx", x);
 }
 
-// TODO: Returning when no tag matched seems to be not a good idea.
 const char* type_name(const uint64_t x) {
     switch (tag(x)) {
         case TypeBox:
-            if (is_box_scalar(x)) {
-                return "box";
-            }
-            switch (((CompositeBox*)x)->type) {
+            switch (((Box*)x)->type) {
+                case BoxScalar:
+                    return "box";
                 case BoxArray:
                     return "array";
                 case BoxStruct:
                     return "struct";
                 case BoxString:
                     return "string";
-                case BoxScalar:
-                    unreachable();
             }
-            unreachable();
+            break;
         case TypeNarrow:
-            if (x == unit) {
-                return "unit";
+            switch (x) {
+                case unit:
+                    return "unit";
+                case bool_false:
+                case bool_true:
+                    return "bool";
             }
-            return "bool";
+            break;
         case TypeI64:
             return "i64";
-        default:
-            return nullptr;
     }
+    error("invalid var: %#llx", x);
 }
 
-// TODO: check value validity or not?
 uint64_t size_of(const uint64_t x) {
     switch (tag(x)) {
         case TypeBox: {
             const auto box = (const CompositeBox*)x;
+            if (box->type == BoxScalar ||
+                ((box->type == BoxArray || box->type == BoxStruct || box->type == BoxString) &&
+                 (box->segment == Heap || box->segment == Data))) {
+                return sizeof x;
+            }
             if ((box->type == BoxArray || box->type == BoxStruct) && box->segment == Stack) {
                 uint64_t size = sizeof *box;
                 for (size_t i = 0; i < box->len; i++) {
@@ -162,7 +157,10 @@ uint64_t size_of(const uint64_t x) {
                 }
                 return size;
             }
-            return sizeof x;
+            if (box->type == BoxString && box->segment == Stack) {
+                return sizeof *box + box->len;
+            }
+            break;
         }
         case TypeNarrow:
         case TypeI64:
