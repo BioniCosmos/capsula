@@ -164,12 +164,12 @@ void gc_check(const uint64_t x) {
     if (tag(x) != TypeBox) {
         return;
     }
-    if (is_box_scalar(x)) {
+    const auto box = (const CompositeBox*)x;
+    if (box->type == BoxScalar) {
         must_mark;
         gc_check(((ScalarBox*)x)->value);
         return;
     }
-    const auto box = (const CompositeBox*)x;
     if (box->segment == Heap) {
         must_mark;
     }
