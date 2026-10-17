@@ -114,6 +114,14 @@
   (def break false)
   (print break)) => 0false1false2false3false4false;
 
+(loop (break)) => ;
+
+(def i 0)
+(loop
+  (cond ((> i 4) (break) (+ 1 1)))
+  (print i)
+  (set! i (+ i 1))) => 01234;
+
 (loop (def x 0) (break)) (print x) !> -:1:33 compiling: unbound identifier;
 
 (for (i :in 5) (print i)) => 01234;

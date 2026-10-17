@@ -130,9 +130,13 @@ class Cond implements BytecodeCompiler, QBECompiler, ArgumentChecker {
       ctx.emit(body)
 
       const scope = new QBEEnv(env)
-      const evaluated = clause.expr.car
-        .slice(1)
-        .reduce((_, x) => ctx.compileExpr(x, scope), qbeConst.Unit)
+      let evaluated = qbeConst.Unit
+      for (const x of clause.expr.car.slice(1)) {
+        evaluated = ctx.compileExpr(x, scope)
+        if (evaluated === '') {
+          break
+        }
+      }
       if (evaluated !== '') {
         ctx.emit(`${result} =l copy ${evaluated}`)
         ctx.emit(`jmp ${end}`)
@@ -345,8 +349,6 @@ class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   checkRule: CheckRule = { car: ['any', 'any'] }
 }
 
-// TODO: fix: QBE: (loop (continue))
-// TODO: fix: QBE: (loop (break))
 class Loop implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const scope = new BytecodeEnv(env)
@@ -373,11 +375,17 @@ class Loop implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     scope.defineVarUnit('break', new QBEBreak(end))
     scope.defineVarUnit('continue', new QBEContinue(start))
 
+    let terminated = false
     ctx.emit(start)
     for (const expr of cell.expr.car.slice(1)) {
-      ctx.compileExpr(expr, scope)
+      if (ctx.compileExpr(expr, scope) === '') {
+        terminated = true
+        break
+      }
     }
-    ctx.emit(`jmp ${start}`)
+    if (!terminated) {
+      ctx.emit(`jmp ${start}`)
+    }
 
     ctx.emit(end)
     return qbeConst.Unit
