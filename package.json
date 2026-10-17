@@ -4,8 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test:bytecode": "cd test && BACKEND=bytecode cargo run",
-    "test:qbe": "cd test && BACKEND=qbe cargo run",
+    "test:bytecode": "cd test && BACKEND=bytecode cargo run -r",
+    "test:qbe": "cd test && BACKEND=qbe cargo run -r",
     "test": "bun test:bytecode && bun test:qbe"
   },
   "dependencies": {
