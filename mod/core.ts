@@ -644,7 +644,7 @@ declare module '@/backend' {
       elseBody: (result: string) => string | void,
       options: Omit<QBEIfOptions, 'elseBody'>,
     ): string
-    panic(meta: ASTMeta, format: string, ...args: string[]): string
+    panic(meta: ASTMeta, format: string, ...args: string[]): void
   }
 }
 
@@ -768,6 +768,4 @@ QBEBackend.prototype.panic = function (meta, format, ...args) {
   this.emit(
     `call $panic(l ${fileName}, w ${meta.line}, w ${meta.column}, l ${message}, ..., ${args.join(', ')})`,
   )
-  // TODO: panic is noreturn. BUT it returns unit?
-  return qbeConst.Unit
 }
