@@ -15,7 +15,7 @@ import {
 import { error } from '@/utils'
 import type { Module } from '.'
 
-class Struct implements BytecodeCompiler, QBECompiler {
+class Struct implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     Struct.#compileTo(ctx, cell, env)
   }
@@ -24,6 +24,8 @@ class Struct implements BytecodeCompiler, QBECompiler {
     Struct.#compileTo(ctx, cell, env)
     return qbeConst.Unit
   }
+
+  checkRule: CheckRule = {}
 
   static #compileTo(ctx: Backend, cell: ASTNode<SExprCell>, env: Environment) {
     const id = ctx.env.struct.idCounter++
@@ -36,9 +38,6 @@ class Struct implements BytecodeCompiler, QBECompiler {
   }
 
   static #checkArgs({ expr }: ASTNode<SExprCell>): [string, string[]] {
-    if (expr.cdr !== null) {
-      error(expr.cdr.meta, 'compiling: unexpected `cdr`')
-    }
     const id = expr.car[1]
     if (id.expr.type !== 'sym') {
       error(
@@ -60,7 +59,9 @@ class Struct implements BytecodeCompiler, QBECompiler {
   }
 }
 
-class StructConstructor implements BytecodeCompiler, QBECompiler {
+class StructConstructor
+  implements BytecodeCompiler, QBECompiler, ArgumentChecker
+{
   constructor(
     private id: number,
     private fieldCount: number,
@@ -108,10 +109,9 @@ class StructConstructor implements BytecodeCompiler, QBECompiler {
     return struct
   }
 
+  checkRule: CheckRule = {}
+
   #checkArgs(ctx: Backend, { expr, meta }: ASTNode<SExprCell>) {
-    if (expr.cdr !== null) {
-      error(expr.cdr.meta, 'compiling: unexpected `cdr`')
-    }
     const argCount = expr.car.length - 1
     if (argCount !== this.fieldCount) {
       error(
@@ -180,7 +180,7 @@ class StructGetter implements BytecodeCompiler, QBECompiler, ArgumentChecker {
 
 export default {
   name: 'struct',
-  dependencies: ['array'],
+  dependencies: [],
   units: { struct: Struct },
   prelude: '',
 } satisfies Module

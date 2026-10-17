@@ -131,7 +131,7 @@ export function isUnitConstructor<T extends Unit>(
   return typeof target === 'function' && target[unitConstructorSymbol] === true
 }
 
-export type CheckRule = { car: PrimitiveType[]; cdr?: boolean }
+export type CheckRule = { car?: PrimitiveType[]; cdr?: boolean }
 export interface ArgumentChecker {
   checkRule: CheckRule
 }
@@ -148,6 +148,10 @@ export function checkArgs(
 ) {
   if (expr.cdr !== null) {
     error(expr.cdr.meta, 'compiling: unexpected `cdr`')
+  }
+
+  if (rule.car === undefined) {
+    return
   }
 
   const { car } = expr

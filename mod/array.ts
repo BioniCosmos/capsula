@@ -4,18 +4,17 @@ import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
   qbeBox,
   qbeSegment,
+  type ArgumentChecker,
   type ASTNode,
   type BytecodeCompiler,
+  type CheckRule,
   type QBECompiler,
   type SExprCell,
 } from '@/type'
-import { error } from '@/utils'
 import type { Module } from '.'
 
-class ArrayOf implements BytecodeCompiler, QBECompiler {
+class ArrayOf implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    ArrayOf.#checkCell(cell)
-
     const xs = cell.expr.car.slice(1).toReversed()
     for (const x of xs) {
       ctx.compileExpr(x, env)
@@ -33,7 +32,6 @@ class ArrayOf implements BytecodeCompiler, QBECompiler {
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    ArrayOf.#checkCell(cell)
     const xs = ctx.compileArgs(cell, env)
 
     const arr = ctx.defineTemp(`alloc8 ${16 + xs.length * 8}`, env)
@@ -58,11 +56,7 @@ class ArrayOf implements BytecodeCompiler, QBECompiler {
     return arr
   }
 
-  static #checkCell({ expr, meta }: ASTNode<SExprCell>) {
-    if (expr.cdr !== null) {
-      error(meta, 'compiling: unexpected `cdr`')
-    }
-  }
+  checkRule: CheckRule = {}
 }
 
 export default {

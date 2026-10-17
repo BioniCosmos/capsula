@@ -31,10 +31,8 @@ class Eq implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   checkRule: CheckRule = { car: ['any', 'any'] }
 }
 
-class Cond implements BytecodeCompiler, QBECompiler {
+class Cond implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    this.#validateCell(cell)
-
     const end = new Label()
 
     let nextClause = new Label()
@@ -89,18 +87,16 @@ class Cond implements BytecodeCompiler, QBECompiler {
     // It is expected that the following `unit` pushing instruction is before
     // the end label. This one should be only evaluated when no clauses are
     // evaluated (all test results are `false` or no clauses at all) at runtime.
-    // If one clauses runs, the body result or the preview `unit` will be pushed
-    // to the evaluation stack. Then the `jump` to end instruction will skip
-    // this instruction. It turns out that no excess value will be stored to the
-    // evaluation stack.
+    // If one clauses runs, the body result or the previous `unit` (in the
+    // `else` above) will be pushed to the evaluation stack. Then the `jump` to
+    // end instruction will skip this instruction. It turns out that no excess
+    // value will be stored to the evaluation stack.
     ctx.emit(Instruction.Unit)
 
     end.fillOffset(ctx.code.len)
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    this.#validateCell(cell)
-
     const result = env.defineTemp()
     ctx.emit(`${result} =l copy ${qbeConst.unit}`)
     const end = env.defineBlock()
@@ -149,6 +145,8 @@ class Cond implements BytecodeCompiler, QBECompiler {
     return result
   }
 
+  checkRule: CheckRule = {}
+
   #replaceElse(predicate: ASTNode, isLastClause: boolean) {
     if (predicate.expr.type === 'sym' && predicate.expr.value === 'else') {
       if (isLastClause) {
@@ -169,10 +167,6 @@ class Cond implements BytecodeCompiler, QBECompiler {
     { expr, meta }: ASTNode<SExprCell>,
     runtimeFormat: string,
   ) {
-    if (expr.cdr !== null) {
-      error(expr.cdr.meta, 'compiling: unexpected `cdr`')
-    }
-
     if (expr.car.length === 0) {
       error(meta, `compiling: Clause must at least have a predicate.`)
     }
@@ -214,15 +208,9 @@ class Cond implements BytecodeCompiler, QBECompiler {
       error(expr.cdr.meta, 'compiling: unexpected `cdr`')
     }
   }
-
-  #validateCell({ expr }: ASTNode<SExprCell>) {
-    if (expr.cdr !== null) {
-      error(expr.cdr.meta, 'compiling: unexpected `cdr`')
-    }
-  }
 }
 
-class If implements BytecodeCompiler, QBECompiler {
+class If implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     ctx.compileExpr(If.#cond(cell), env)
   }
@@ -231,11 +219,9 @@ class If implements BytecodeCompiler, QBECompiler {
     return ctx.compileExpr(If.#cond(cell), env)
   }
 
-  static #cond({ expr, meta }: ASTNode<SExprCell>): ASTNode<SExprCell> {
-    if (expr.cdr !== null) {
-      error(expr.cdr.meta, 'compiling: unexpected `cdr`')
-    }
+  checkRule: CheckRule = {}
 
+  static #cond({ expr, meta }: ASTNode<SExprCell>): ASTNode<SExprCell> {
     const { car } = expr
     const unit = car[0]
     if (car.length === 1) {
@@ -359,7 +345,9 @@ class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   checkRule: CheckRule = { car: ['any', 'any'] }
 }
 
-class Loop implements BytecodeCompiler, QBECompiler {
+// TODO: fix: QBE: (loop (continue))
+// TODO: fix: QBE: (loop (break))
+class Loop implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const scope = new BytecodeEnv(env)
 
@@ -394,9 +382,12 @@ class Loop implements BytecodeCompiler, QBECompiler {
     ctx.emit(end)
     return qbeConst.Unit
   }
+
+  checkRule: CheckRule = {}
 }
 
-class For implements BytecodeCompiler, QBECompiler {
+// Add error branch test cases
+class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     throw new Error('Method not implemented.')
   }
@@ -468,6 +459,8 @@ class For implements BytecodeCompiler, QBECompiler {
 
     throw new Error('Method not implemented.')
   }
+
+  checkRule: CheckRule = {}
 }
 
 class BytecodeBreak implements BytecodeCompiler, ArgumentChecker {
@@ -724,7 +717,7 @@ QBEBackend.prototype.ifExpr = function (
   pred,
   thenBody,
   elseBody,
-  { env, predIsValue: predicateIsValue = true, resultType = 'l' },
+  { env, predIsValue = true, resultType = 'l' },
 ) {
   const thenBranch = env.defineBlock()
   const end = env.defineBlock()
@@ -741,9 +734,7 @@ QBEBackend.prototype.ifExpr = function (
     throw Error('unimplemented')
   }
 
-  const testResult = predicateIsValue
-    ? this.defineTemp(pred(), env, 'w')
-    : pred()
+  const testResult = predIsValue ? this.defineTemp(pred(), env, 'w') : pred()
   const elseBranch = env.defineBlock()
   this.emit(`jnz ${testResult}, ${thenBranch}, ${elseBranch}`)
 
