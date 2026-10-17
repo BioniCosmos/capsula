@@ -173,29 +173,38 @@ fn parse_cases<'a>(raw: &'a str, defined_identifiers: &[&str]) -> Option<Vec<Cas
                 i += 1;
             }
             (b';', _) => {
-                if let State::Expect {
-                    start_line,
-                    source,
-                    is_error,
-                    start,
-                } = state
-                {
-                    let expect = unsafe { str::from_utf8_unchecked(&raw[start..i]) };
-                    cases.push(Case {
+                let (source, expect, is_error, line) = match state {
+                    State::Expect {
+                        start_line,
                         source,
-                        expect: if is_error {
-                            Expect::Error(expect)
-                        } else {
-                            Expect::Output(expect)
-                        },
-                        line: start_line,
-                    });
+                        is_error,
+                        start,
+                    } => (
+                        source,
+                        unsafe { str::from_utf8_unchecked(&raw[start..i]) },
+                        is_error,
+                        start_line,
+                    ),
+                    State::BeforeExpect {
+                        start_line,
+                        source,
+                        is_error,
+                    } => (source, "", is_error, start_line),
+                    _ => panic!("invalid state: {state:?}"),
+                };
 
-                    state = State::Init;
-                    i += 1;
-                } else {
-                    panic!("invalid state: {state:?}");
-                }
+                cases.push(Case {
+                    source,
+                    expect: if is_error {
+                        Expect::Error(expect)
+                    } else {
+                        Expect::Output(expect)
+                    },
+                    line,
+                });
+
+                state = State::Init;
+                i += 1;
             }
             _ => match state {
                 State::Init => {
