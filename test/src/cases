@@ -155,6 +155,7 @@
 (print (array 1 2 3 (box 0))) => [ 1 2 3 0 ];
 (print (array 1 2 3 (box (array 2 1)))) => [ 1 2 3 [ 2 1 ] ];
 (print (box (array 1 2 3 (box (array 2 1))))) => [ 1 2 3 [ 2 1 ] ];
+(print (box (box (array 1 2 3 (box (array 2 1)))))) => [ 1 2 3 [ 2 1 ] ];
 #endif
 
 (struct Person id name age) (print (Person 1 "bug" 333)) => Person { id = 1, name = bug, age = 333 };
@@ -177,3 +178,10 @@
 (struct Foo a) (Foo) !> -:1:16 compiling: Struct `Foo` expects 1 field(s), but 0 were given.;
 (struct Foo a) (Foo-a false) !> -:1:23 compiling: expecting `struct`, found `bool`;
 (struct Foo a) (struct Bar) (Foo-a (Bar)) !> -:1:36 panic: expecting a value of struct `Foo`, but got a value of struct `Bar`;
+
+(print (box false)) => false;
+(print (box 10462)) => 10462;
+(print (box "we are era")) => "we are era";
+(print (box (box false))) => false;
+(print (box (box 10462))) => 10462;
+(print (box (box "we are era"))) => "we are era";
