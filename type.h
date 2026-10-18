@@ -127,11 +127,11 @@ const char* type_name(const uint64_t x) {
                 case BoxScalar:
                     return "box";
                 case BoxArray:
-                    return "array";
+                    return "arr";
                 case BoxStruct:
                     return "struct";
                 case BoxString:
-                    return "string";
+                    return "str";
             }
             break;
         case TypeNarrow:
