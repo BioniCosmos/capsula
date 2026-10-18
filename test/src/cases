@@ -158,6 +158,8 @@
 (print (box (box (array 1 2 3 (box (array 2 1)))))) => [ 1 2 3 [ 2 1 ] ];
 #endif
 
+(print (array-len (array 3 62 134))) => 3;
+
 (struct Person id name age) (print (Person 1 "bug" 333)) => Person { id = 1, name = bug, age = 333 };
 (struct Foo) (print (Foo)) => Foo {};
 (struct Foo a) (print (box (Foo 12))) => Foo { a = 12 };

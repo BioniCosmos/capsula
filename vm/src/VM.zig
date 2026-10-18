@@ -255,6 +255,7 @@ var native_functions = std.StaticStringMap(*const fn (vm: *Self) NativeFnError!v
     .{ "type-name", &typeName },
     .{ "size-of", &sizeOf },
     .{ "array-new", &arrayNew },
+    .{ "array-len", &arrayLen },
 });
 
 fn panic(vm: *Self) !void {
@@ -297,4 +298,8 @@ fn arrayNew(vm: *Self) !void {
         xs[i] = vm.pop();
     }
     try vm.pushToList(.{ .array = xs }, &vm.stack);
+}
+
+fn arrayLen(vm: *Self) !void {
+    try vm.pushToList(.{ .i64 = @intCast(vm.pop().array.len) }, &vm.stack);
 }

@@ -4,6 +4,7 @@ import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
   qbeBox,
   qbeSegment,
+  str,
   type ArgumentChecker,
   type ASTNode,
   type BytecodeCompiler,
@@ -13,7 +14,7 @@ import {
 } from '@/type'
 import type { Module } from '.'
 
-class ArrayOf implements BytecodeCompiler, QBECompiler, ArgumentChecker {
+class Array implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
     const xs = cell.expr.car.slice(1).toReversed()
     for (const x of xs) {
@@ -59,9 +60,31 @@ class ArrayOf implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   checkRule: CheckRule = {}
 }
 
+class ArrayLen implements BytecodeCompiler, QBECompiler, ArgumentChecker {
+  compile(
+    ctx: BytecodeBackend,
+    { expr, meta }: ASTNode<SExprCell>,
+    env: BytecodeEnv,
+  ) {
+    ctx.compileExpr(expr.car[1], env)
+    ctx.compileExpr(str('array-len', meta), env)
+    ctx.emit(Instruction.NativeCall)
+  }
+
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
+    const arr = ctx.compileExpr(cell.expr.car[1], env)
+    return ctx.wrapI64(
+      ctx.defineTemp(`loadl ${ctx.defineTemp(`add ${arr}, 8`, env)}`, env),
+      env,
+    )
+  }
+
+  checkRule: CheckRule = { car: ['arr'] }
+}
+
 export default {
   name: 'array',
   dependencies: [],
-  units: { array: ArrayOf },
+  units: { array: Array, 'array-len': ArrayLen },
   prelude: '',
 } satisfies Module
