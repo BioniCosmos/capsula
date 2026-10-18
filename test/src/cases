@@ -7,8 +7,6 @@
 
 (print (+ 1 2)) => 3;
 (print (+ 10 -9)) => 1;
-(print (+ 1 2 3)) !> -:1:15 compiling: `+` expects exactly 2 arguments, but found 3.;
-(print (+ true 2)) !> -:1:11 compiling: expecting `i64`, found `bool`;
 (print (+ 10 (- 82 -32))) => 124;
 (print (- 10 3)) => 7;
 (print (* 512 512)) => 262144;
@@ -33,8 +31,38 @@
 (print (i64? -100)) => true;
 (print (i64? true)) => false;
 
-// TODO: add test of arg type check
 (panic "YOU ARE DEAD! 🫨") !> -:1:1 panic: YOU ARE DEAD! 🫨;
+
+(+ 1 . 1) !> -:1:8 compiling: unexpected `cdr`;
+(+ . 1) !> -:1:6 compiling: unexpected `cdr`;
+(. + 1) !> -:1:2 parsing: missing `car` in cell;
+(+ 1 .) !> -:1:7 parsing: missing `cdr` in cell;
+(+ 1 1 .) !> -:1:9 parsing: missing `cdr` in cell;
+(+ 1 . 1 1) !> -:1:10 parsing: Too many expressions after `.`. Only one expression is allowed on `cdr`.;
+(+ 1 1 . 1) !> -:1:10 compiling: unexpected `cdr`;
+(+ 1) !> -:1:2 compiling: `+` expects 2 arguments, but found 1.;
+(+ 1 1 1) !> -:1:8 compiling: `+` expects exactly 2 arguments, but found 3.;
+(defn f (a . xs)) (f) !> -:1:20 compiling: The function expects at least 1 arguments, but found 0.;
+(+ 1 true) !> -:1:6 compiling: expecting `i64`, found `bool`;
+(def a true) (+ 1 a) !> -:1:19 panic: expecting `i64`, found `bool`;
+// (+ 1 1.1)
+// (def a 1.1) (+ 1 a)
+(and true 1) !> -:1:11 compiling: expecting `bool`, found `i64`;
+(def a 1) (and true a) !> -:1:21 panic: expecting `bool`, found `i64`;
+(array-len false) !> -:1:12 compiling: expecting `arr`, found `bool`;
+(def x 123) (array-len x) !> -:1:24 panic: expecting `arr`, found `i64`;
+(struct Foo) (array-len (Foo)) !> -:1:25 panic: expecting `arr`, found `struct`;
+(array-len "HEY") !> -:1:12 compiling: expecting `arr`, found `str`;
+(def x "numerous") (array-len x) !> -:1:31 panic: expecting `arr`, found `str`;
+(struct Time sec) (Time-sec true) !> -:1:29 compiling: expecting `struct`, found `bool`;
+(struct Time sec) (def x -293) (Time-sec x) !> -:1:42 panic: expecting `struct`, found `i64`;
+(struct Time sec) (def x (array "9" "hours")) (Time-sec x) !> -:1:57 panic: expecting `struct`, found `arr`;
+(struct Time sec) (Time-sec "9 hours") !> -:1:29 compiling: expecting `struct`, found `str`;
+(panic 114514) !> -:1:8 compiling: expecting `str`, found `i64`;
+(def x true) (panic x) !> -:1:21 panic: expecting `str`, found `bool`;
+(def 冥 "HUMAN SEQUENCER") (panic 冥) !> -:1:27 panic: HUMAN SEQUENCER;
+(panic (array)) !> -:1:8 panic: expecting `str`, found `arr`;
+(struct IIDX) (panic (IIDX)) !> -:1:22 panic: expecting `str`, found `struct`;
 
 (print (cond (false 999) (true 2) (false 3))) => 2;
 (print (cond (true 1 2 3))) => 3;
@@ -183,7 +211,7 @@
 
 (print (box false)) => false;
 (print (box 10462)) => 10462;
-(print (box "we are era")) => "we are era";
+(print (box "we are era")) => we are era;
 (print (box (box false))) => false;
 (print (box (box 10462))) => 10462;
-(print (box (box "we are era"))) => "we are era";
+(print (box (box "we are era"))) => we are era;
