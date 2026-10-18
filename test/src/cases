@@ -158,12 +158,19 @@
 #endif
 
 (struct Person id name age) (print (Person 1 "bug" 333)) => Person { id = 1, name = bug, age = 333 };
+(struct Foo) (print (Foo)) => Foo {};
+(struct Foo a) (print (box (Foo 12))) => Foo { a = 12 };
+(struct Foo a) (print (box (box (Foo 12)))) => Foo { a = 12 };
 
 (struct Person id name age)
 (def p (Person 4 5 6))
 (print (Person-id p))
 (print (Person-name p))
 (print (Person-age p)) => 456;
+
+(struct Foo a) (print (Foo-a (Foo 12))) => 12;
+(struct Foo a) (print (Foo-a (box (Foo 12)))) => 12;
+(struct Foo a) (print (Foo-a (box (box (Foo 12))))) !> -:1:30 panic: expecting `struct`, found `box`;
 
 (struct 10) !> -:1:9 compiling: The name of the struct must be a symbol, but got `i64`.;
 (struct Foo 10) !> -:1:13 compiling: Every field name of the struct must be a symbol, but got `i64`.;
