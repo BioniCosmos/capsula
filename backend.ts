@@ -9,9 +9,9 @@ import {
   isBytecodeCompiler,
   isQBECompiler,
   isUnit,
-  qbeBox,
   qbeConst,
   QBEFnChunk,
+  typeToQBEBox,
   typeToQBETag,
   typeToVMVarType,
   type ASTNode,
@@ -273,13 +273,13 @@ export class QBEBackend implements Backend<QBECompiler> {
       panic,
       { env },
     )
-    if (paramType === 'arr' || paramType === 'struct') {
+    if (paramType === 'arr' || paramType === 'struct' || paramType === 'str') {
       this.if(
         () => {
           const innerCheck = env.defineTemp()
           this.emit(`${innerCheck} =w loaduh ${x}`)
           this.emit(
-            `${innerCheck} =w cnew ${innerCheck}, ${paramType === 'arr' ? qbeBox.arr : qbeBox.struct}`,
+            `${innerCheck} =w cnew ${innerCheck}, ${typeToQBEBox(paramType)}`,
           )
           return innerCheck
         },

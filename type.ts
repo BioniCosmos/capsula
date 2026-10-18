@@ -94,12 +94,20 @@ export function typeToQBETag(paramType: PrimitiveType) {
       return qbeConst.i64
     case 'arr':
     case 'struct':
+    case 'str':
       return qbeConst.box
     case 'any':
       throw Error('`any` is not a real type.')
     default:
       throw Error('unimplemented')
   }
+}
+
+export function typeToQBEBox(paramType: PrimitiveType) {
+  if (paramType in qbeBox) {
+    return qbeBox[paramType as keyof typeof qbeBox]
+  }
+  throw Error(`\`${paramType}\` is not a box type.`)
 }
 
 export type Unit = BytecodeCompiler | QBECompiler
@@ -140,6 +148,10 @@ export function hasArgumentChecker(x: any): x is ArgumentChecker {
   return 'checkRule' in x
 }
 
+// all unit changes env should be blocked
+// def defn struct...
+// also break continue
+// they are all statements
 export function checkArgs(
   rule: CheckRule,
   ctx: Backend,
