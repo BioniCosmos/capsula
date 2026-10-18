@@ -66,17 +66,25 @@ void var_display(const uint64_t x) {
                     var_display(((ScalarBox*)x)->value);
                     return;
                 case BoxArray:
-                    printf("[ ");
-                    for (size_t i = 0; i < box->len; i++) {
-                        var_display(box->data[i]);
-                        printf(" ");
+                    if (box->len == 0) {
+                        printf("[]");
+                        return;
                     }
-                    printf("]");
+                    printf("[");
+                    for (size_t i = 0; i < box->len; i++) {
+                        printf(" ");
+                        var_display(box->data[i]);
+                    }
+                    printf(" ]");
                     return;
                 case BoxStruct: {
                     const auto meta = structs[box->id];
-                    printf("%s { ", meta->name);
-                    const char* sep = "";
+                    if (box->len == 0) {
+                        printf("%s {}", meta->name);
+                        return;
+                    }
+                    printf("%s {", meta->name);
+                    const char* sep = " ";
                     for (size_t i = 0; i < box->len; i++) {
                         printf("%s%s = ", sep, meta->fields[i]);
                         var_display(box->data[i]);
