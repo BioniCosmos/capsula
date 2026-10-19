@@ -154,6 +154,7 @@
 
 (for (i :in 5) (print i)) => 01234;
 (def x 5) (for (i :in x) (print i)) => 01234;
+(for (i :in (array 6 7 2 4 5)) (print i)) => 67245;
 
 #if qbe
 (print (size-of true)) => 8;

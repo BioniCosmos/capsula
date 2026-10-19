@@ -305,6 +305,9 @@ export class QBEBackend implements Backend<QBECompiler> {
       case 'num':
         return ((expr.value << 3) | qbeConst.i64).toString()
       case 'sym': {
+        if (expr.internal) {
+          return expr.value
+        }
         const x = mustLookup(node as ASTNode<SExprSym>, env)
         if (typeof x === 'string') {
           return this.defineTemp(`loadl ${x}`, env)

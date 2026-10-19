@@ -6,7 +6,7 @@ import { error } from './utils'
 export type SExprBool = { type: 'bool'; value: boolean }
 export type SExprNum = { type: 'num'; value: number }
 export type SExprStr = { type: 'str'; value: string }
-export type SExprSym = { type: 'sym'; value: string }
+export type SExprSym = { type: 'sym'; value: string; internal?: boolean }
 export type SExprCell = { type: 'cell'; car: ASTNode[]; cdr: ASTNode | null }
 export type SExpr = SExprBool | SExprNum | SExprStr | SExprSym | SExprCell
 export type ASTMeta = { fileName: string; line: number; column: number }
@@ -24,8 +24,12 @@ export function str(value: string, meta: ASTMeta): ASTNode<SExprStr> {
   return { expr: { type: 'str', value }, meta }
 }
 
-export function sym(value: string, meta: ASTMeta): ASTNode<SExprSym> {
-  return { expr: { type: 'sym', value }, meta }
+export function sym(
+  value: string,
+  meta: ASTMeta,
+  internal?: boolean,
+): ASTNode<SExprSym> {
+  return { expr: { type: 'sym', value, internal }, meta }
 }
 
 export function consCAR(car: ASTNode[], meta: ASTMeta): ASTNode<SExprCell> {
@@ -37,7 +41,7 @@ export function consWith(meta: ASTMeta) {
     bool: (x: boolean) => bool(x, meta),
     num: (x: number) => num(x, meta),
     str: (x: string) => str(x, meta),
-    sym: (x: string) => sym(x, meta),
+    sym: (x: string, internal?: boolean) => sym(x, meta, internal),
     consCAR: (x: ASTNode[]) => consCAR(x, meta),
   }
 }
@@ -196,6 +200,10 @@ export function checkArgs(
     const argType = arg.expr.type
     switch (argType) {
       case 'sym':
+        if (!arg.expr.internal) {
+          ctx.runtimeCheckArg(paramType, env, arg)
+        }
+        break
       case 'cell':
         ctx.runtimeCheckArg(paramType, env, arg)
         break

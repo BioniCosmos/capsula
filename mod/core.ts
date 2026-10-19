@@ -3,6 +3,7 @@ import { Instruction, Label } from '@/bytecode'
 import { BytecodeEnv, QBEEnv, type Environment } from '@/env'
 import {
   consWith,
+  qbeBox,
   qbeConst,
   type ArgumentChecker,
   type ASTMeta,
@@ -338,11 +339,15 @@ class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     checkId(id, 'set!')
 
     const x = ctx.compileExpr(cell.expr.car[2], env)
-    const innerId = mustLookup(id, env)
-    if (typeof innerId !== 'string') {
-      error(id.meta, 'compiling: cannot mutate built-in unit')
+    if (id.expr.internal) {
+      ctx.emit(`${id.expr.value} =l copy ${x}`)
+    } else {
+      const innerId = mustLookup(id, env)
+      if (typeof innerId !== 'string') {
+        error(id.meta, 'compiling: cannot mutate built-in unit')
+      }
+      ctx.emit(`storel ${x}, ${innerId}`)
     }
-    ctx.emit(`storel ${x}, ${innerId}`)
     return qbeConst.Unit
   }
 
@@ -432,7 +437,10 @@ class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
           `compiling: expecting a symbol for variable binding, found \`${x.expr.type}\``,
         )
       }
+
       const xsNode = clause.expr.car[2]
+      const xs = ctx.compileExpr(xsNode, env)
+      const xsInternal = sym(xs, true)
 
       function forInNum() {
         ctx.compileExpr(consCAR([sym('def'), x, num(0)]), env)
@@ -441,11 +449,33 @@ class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
             sym('loop'),
             consCAR([
               sym('if'),
-              consCAR([sym('>='), x, xsNode]),
+              consCAR([sym('>='), x, xsInternal]),
               consCAR([sym('break')]),
             ]),
             ...body,
             consCAR([sym('set!'), x, consCAR([sym('+'), x, num(1)])]),
+          ]),
+          env,
+        )
+      }
+
+      function forInArray() {
+        const i = sym(ctx.wrapI64('0', env), true)
+        const len = sym(
+          ctx.compileExpr(consCAR([sym('array-len'), xsInternal]), env),
+          true,
+        )
+        ctx.compileExpr(
+          consCAR([
+            sym('loop'),
+            consCAR([
+              sym('if'),
+              consCAR([sym('>='), i, len]),
+              consCAR([sym('break')]),
+            ]),
+            consCAR([sym('def'), x, consCAR([sym('array-at'), xsInternal, i])]),
+            ...body,
+            consCAR([sym('set!'), i, consCAR([sym('+'), i, num(1)])]),
           ]),
           env,
         )
@@ -457,10 +487,19 @@ class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
       }
 
       if (xsNode.expr.type === 'sym' || xsNode.expr.type === 'cell') {
-        const xs = ctx.compileExpr(xsNode, env)
-        ctx.if(() => `ceqw ${ctx.tag(xs, env)}, ${qbeConst.i64}`, forInNum, {
-          env,
-        })
+        const tag = ctx.tag(xs, env)
+        ctx.if(() => `ceqw ${tag}, ${qbeConst.i64}`, forInNum, { env })
+        ctx.if(
+          () => `ceqw ${tag}, ${qbeConst.box}`,
+          () =>
+            ctx.if(
+              () =>
+                `ceqw ${ctx.defineTemp(`loaduh ${xs}`, env)}, ${qbeBox.arr}`,
+              forInArray,
+              { env },
+            ),
+          { env },
+        )
         return qbeConst.Unit
       }
     }
