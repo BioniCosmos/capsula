@@ -22,7 +22,6 @@ export const Instruction = {
   Unit: { type: 'Unit' },
   IsI64: { type: 'IsI64' },
   Print: { type: 'Print' },
-  ArrayGet: (addr: number) => ({ type: 'ArrayGet', addr }) as const,
 } as const
 
 type GetValueOrReturnValue<T> = T extends (...args: any[]) => infer R ? R : T
@@ -61,7 +60,6 @@ export class CodeBuffer {
       case 'Load':
       case 'Save':
       case 'Call':
-      case 'ArrayGet':
         this.#view.setUint16(this.len, code.addr, true)
         this.len += 2
         break
@@ -91,7 +89,6 @@ export class CodeBuffer {
         case 'Load':
         case 'Save':
         case 'Call':
-        case 'ArrayGet':
           code += `: addr=${this.#view.getUint16(i + 1, true)}`
           i += 2
           break

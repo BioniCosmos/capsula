@@ -82,9 +82,35 @@ class ArrayLen implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   checkRule: CheckRule = { car: ['arr'] }
 }
 
+class ArrayAt implements BytecodeCompiler, QBECompiler, ArgumentChecker {
+  compile(
+    ctx: BytecodeBackend,
+    { expr, meta }: ASTNode<SExprCell>,
+    env: BytecodeEnv,
+  ) {
+    const { car } = expr
+    ctx.compileExpr(car[2], env)
+    ctx.compileExpr(car[1], env)
+    ctx.compileExpr(str('array-at', meta), env)
+    ctx.emit(Instruction.NativeCall)
+  }
+
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
+    const [arr, i] = ctx.compileArgs(cell, env)
+    const offset = ctx.defineTemp(`mul ${ctx.unwrapI64(i, env)}, 8`, env)
+    const addr = ctx.defineTemp(
+      `add ${ctx.defineTemp(`add ${arr}, 16`, env)}, ${offset}`,
+      env,
+    )
+    return ctx.defineTemp(`loadl ${addr}`, env)
+  }
+
+  checkRule: CheckRule = { car: ['arr', 'i64'] }
+}
+
 export default {
   name: 'array',
   dependencies: [],
-  units: { array: Array, 'array-len': ArrayLen },
+  units: { array: Array, 'array-len': ArrayLen, 'array-at': ArrayAt },
   prelude: '',
 } satisfies Module

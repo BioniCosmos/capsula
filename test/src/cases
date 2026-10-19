@@ -187,6 +187,7 @@
 #endif
 
 (print (array-len (array 3 62 134))) => 3;
+(print (array-at (array 0 2 4 8 16 32) 3)) => 8;
 
 (struct Person id name age) (print (Person 1 "bug" 333)) => Person { id = 1, name = bug, age = 333 };
 (struct Foo) (print (Foo)) => Foo {};

@@ -90,7 +90,6 @@ pub const Instruction = enum(u8) {
     unit,
     is_i64,
     print,
-    array_get,
 };
 
 const Error = error{MaxVariableNumberExceeded} || mem.Allocator.Error || Io.Writer.Error;
@@ -218,7 +217,6 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
                     return err;
                 };
             },
-            .array_get => try self.pushToList(self.pop().array[self.read(u16, func.code)], &self.stack),
         }
     }
 
@@ -256,6 +254,7 @@ var native_functions = std.StaticStringMap(*const fn (vm: *Self) NativeFnError!v
     .{ "size-of", &sizeOf },
     .{ "array-new", &arrayNew },
     .{ "array-len", &arrayLen },
+    .{ "array-at", &arrayAt },
 });
 
 fn panic(vm: *Self) !void {
@@ -302,4 +301,10 @@ fn arrayNew(vm: *Self) !void {
 
 fn arrayLen(vm: *Self) !void {
     try vm.pushToList(.{ .i64 = @intCast(vm.pop().array.len) }, &vm.stack);
+}
+
+fn arrayAt(vm: *Self) !void {
+    const arr = vm.pop().array;
+    const i = vm.pop().i64;
+    try vm.pushToList(arr[@intCast(i)], &vm.stack);
 }
