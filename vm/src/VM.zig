@@ -152,7 +152,7 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
         }
     }) {
         const func = functions[fn_idx];
-        const instruction: Instruction = @enumFromInt(func.code[self.pc]);
+        const instruction: Instruction = @fromBackingInt(func.code[self.pc]);
 
         switch (instruction) {
             .add => try self.pushToList(.{ .i64 = self.pop().i64 + self.pop().i64 }, &self.stack),
@@ -276,7 +276,7 @@ fn panic(vm: *Self) !void {
 }
 
 fn typeOf(vm: *Self) !void {
-    try vm.pushToList(.{ .i64 = @intFromEnum(vm.pop()) }, &vm.stack);
+    try vm.pushToList(.{ .i64 = @backingInt(vm.pop()) }, &vm.stack);
 }
 
 fn typeName(vm: *Self) !void {
