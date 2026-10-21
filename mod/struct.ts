@@ -2,9 +2,12 @@ import type { Backend, BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { BytecodeEnv, Environment, QBEEnv } from '@/env'
 import {
+  consWith,
+  num,
   qbeBox,
   qbeConst,
   qbeSegment,
+  str,
   type ArgumentChecker,
   type ASTNode,
   type BytecodeCompiler,
@@ -68,18 +71,15 @@ class StructConstructor
   ) {}
 
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
+    const { num, str } = consWith(cell.meta)
     this.#checkArgs(ctx, cell)
+
     for (const expr of cell.expr.car.slice(1).toReversed()) {
       ctx.compileExpr(expr, env)
     }
-    ctx.compileExpr(
-      { expr: { type: 'num', value: this.fieldCount }, meta: cell.meta },
-      env,
-    )
-    ctx.compileExpr(
-      { expr: { type: 'str', value: 'array-new' }, meta: cell.meta },
-      env,
-    )
+    ctx.compileExpr(num(this.fieldCount), env)
+    ctx.compileExpr(num(1), env)
+    ctx.compileExpr(str('array-new'), env)
     ctx.emit(Instruction.NativeCall)
   }
 
@@ -129,8 +129,10 @@ class StructGetter implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   ) {}
 
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
+    ctx.compileExpr(num(this.offset, cell.meta), env)
     ctx.compileExpr(cell.expr.car[1], env)
-    ctx.emit(Instruction.ArrayGet(this.offset))
+    ctx.compileExpr(str('array-at', cell.meta), env)
+    ctx.emit(Instruction.NativeCall)
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {

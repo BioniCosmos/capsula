@@ -2,6 +2,7 @@ import { QBEBackend, type BytecodeBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { BytecodeEnv, QBEEnv } from '@/env'
 import {
+  num,
   qbeBox,
   qbeSegment,
   str,
@@ -25,6 +26,7 @@ class Array implements BytecodeCompiler, QBECompiler, ArgumentChecker {
       { expr: { type: 'num', value: xs.length }, meta: cell.meta },
       env,
     )
+    ctx.compileExpr(num(0, cell.meta), env)
     ctx.compileExpr(
       { expr: { type: 'str', value: 'array-new' }, meta: cell.meta },
       env,

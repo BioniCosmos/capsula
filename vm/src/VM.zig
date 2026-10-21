@@ -14,14 +14,15 @@ pub const Var = union(enum) {
     unit: void,
     bool: bool,
     i64: i64,
-    array: []const Var,
+    arr: []const Var,
+    @"struct": []const Var,
     str: []const u8,
     state: State,
 
     pub fn format(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
         switch (self) {
             .unit => try writer.print("()", .{}),
-            .array => |xs| {
+            .arr, .@"struct" => |xs| {
                 try writer.print("[ ", .{});
                 for (xs) |x| {
                     try writer.print("{f} ", .{x});
@@ -288,6 +289,7 @@ fn sizeOf(vm: *Self) !void {
 }
 
 fn arrayNew(vm: *Self) !void {
+    const inner_type = vm.pop().i64;
     const len: usize = @intCast(vm.pop().i64);
     const xs = vm.allocator.alloc(Var, len) catch |err| {
         vm.err = fmt.bufPrint(&vm.err_buf, "failed to allocate memory for array", .{}) catch unreachable;
@@ -296,15 +298,18 @@ fn arrayNew(vm: *Self) !void {
     for (0..len) |i| {
         xs[i] = vm.pop();
     }
-    try vm.pushToList(.{ .array = xs }, &vm.stack);
+    try vm.pushToList(if (inner_type == 0) .{ .arr = xs } else .{ .@"struct" = xs }, &vm.stack);
 }
 
 fn arrayLen(vm: *Self) !void {
-    try vm.pushToList(.{ .i64 = @intCast(vm.pop().array.len) }, &vm.stack);
+    try vm.pushToList(.{ .i64 = @intCast(vm.pop().arr.len) }, &vm.stack);
 }
 
 fn arrayAt(vm: *Self) !void {
-    const arr = vm.pop().array;
+    const xs = switch (vm.pop()) {
+        .arr, .@"struct" => |xs| xs,
+        else => unreachable,
+    };
     const i = vm.pop().i64;
-    try vm.pushToList(arr[@intCast(i)], &vm.stack);
+    try vm.pushToList(xs[@intCast(i)], &vm.stack);
 }

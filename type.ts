@@ -53,7 +53,9 @@ export const vmVarType = {
   unit: 0,
   bool: 1,
   i64: 2,
-  array: 3,
+  arr: 3,
+  struct: 4,
+  str: 5,
 }
 
 export const qbeConst = {
@@ -77,33 +79,27 @@ export const qbeSegment = { stack: 0, heap: 1, data: 2 }
 
 export function typeToVMVarType(paramType: PrimitiveType) {
   switch (paramType) {
-    case 'bool':
-      return vmVarType.bool
-    case 'i64':
-      return vmVarType.i64
-    case 'arr':
-      return vmVarType.array
+    case 'sym':
+      throw Error('unimplemented')
     case 'any':
       throw Error('`any` is not a real type.')
     default:
-      throw Error('unimplemented')
+      return vmVarType[paramType]
   }
 }
 
 export function typeToQBETag(paramType: PrimitiveType) {
   switch (paramType) {
-    case 'bool':
-      return qbeConst.bool
-    case 'i64':
-      return qbeConst.i64
+    case 'sym':
+      throw Error('unimplemented')
+    case 'any':
+      throw Error('`any` is not a real type.')
     case 'arr':
     case 'struct':
     case 'str':
       return qbeConst.box
-    case 'any':
-      throw Error('`any` is not a real type.')
     default:
-      throw Error('unimplemented')
+      return qbeConst[paramType]
   }
 }
 
