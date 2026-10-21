@@ -2,6 +2,7 @@ import type { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import { BytecodeEnv, QBEEnv } from '@/env'
 import {
+  consWith,
   qbeConst,
   type ASTNode,
   type BytecodeCompiler,
@@ -12,21 +13,38 @@ import {
 import { error } from '@/utils'
 import type { Module } from '.'
 
-// TODO: support rest parameters
 export class BytecodeFn implements BytecodeCompiler {
   constructor(
     public idx: number,
-    public env: BytecodeEnv,
-    public required: ASTNode<SExprSym>[],
-  ) {
-    for (const param of required) {
-      env.defineVar(param.expr.value)
-    }
-  }
+    private requiredLen: number,
+    private hasRest: boolean,
+  ) {}
 
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    for (let i = 0; i < this.required.length; i++) {
-      ctx.compileExpr(cell.expr.car[i + 1], env)
+    const { sym, consCAR } = consWith(cell.meta)
+    const args = cell.expr.car.slice(1)
+
+    if (args.length < this.requiredLen) {
+      error(
+        cell.expr.car[0].meta,
+        `compiling: The function expects ${this.hasRest ? 'at least ' : ''}${this.requiredLen} arguments, but found ${args.length}.`,
+      )
+    }
+    if (!this.hasRest && args.length > this.requiredLen) {
+      error(
+        args[this.requiredLen].meta,
+        `compiling: The function expects exactly ${this.requiredLen} arguments, but found ${args.length}.`,
+      )
+    }
+
+    if (this.hasRest) {
+      ctx.compileExpr(
+        consCAR([sym('array'), ...args.slice(this.requiredLen)]),
+        env,
+      )
+    }
+    for (let i = this.requiredLen - 1; i >= 0; i--) {
+      ctx.compileExpr(args[i], env)
     }
     ctx.emit(Instruction.Call(this.idx))
   }
@@ -106,24 +124,25 @@ class Defn implements BytecodeCompiler, QBECompiler {
     // Ensure all required parameters are symbol.
     Defn.#assertAllSymbols(car)
     // Ensure the rest parameter is a symbol.
-    if (cdr !== null && cdr.expr.type !== 'sym') {
-      throw Error(
-        `compiling \`defn\`: expecting \`symbol\`, found \`${cdr.expr.type}\``,
-      )
-    }
+    Defn.#assertSymbol(cdr)
 
-    const fn = new BytecodeFn(ctx.startFn(), new BytecodeEnv(env, true), car)
+    const fn = new BytecodeFn(ctx.startFn(), car.length, cdr !== null)
     env.defineVarUnit(id.expr.value, fn)
 
-    for (const param of fn.required.toReversed()) {
-      ctx.emit(Instruction.Save(fn.env.lookup(param.expr.value) as number))
+    const fnEnv = new BytecodeEnv(env, true)
+    for (const param of car) {
+      ctx.emit(Instruction.Save(fnEnv.defineVar(param.expr.value)))
     }
+    if (cdr !== null) {
+      ctx.emit(Instruction.Save(fnEnv.defineVar(cdr.expr.value)))
+    }
+
     for (const expr of cell.expr.car.slice(3)) {
-      ctx.compileExpr(expr, fn.env)
+      ctx.compileExpr(expr, fnEnv)
     }
     ctx.emit(Instruction.Ret)
 
-    ctx.endFn(fn.env.sp!)
+    ctx.endFn(fnEnv.sp!)
   }
 
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
