@@ -410,7 +410,7 @@ class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     { expr, meta }: ASTNode<SExprCell>,
     env: QBEEnv,
   ) {
-    const { bool, num, str, sym, consCAR } = consWith(meta)
+    const { num, sym, consCAR } = consWith(meta)
 
     if (expr.cdr !== null) {
       error(expr.cdr.meta, 'compiling: unexpected `cdr`')
@@ -504,7 +504,18 @@ class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
       }
     }
 
-    throw new Error('Method not implemented.')
+    ctx.compileExpr(
+      consCAR([
+        sym('loop'),
+        consCAR([
+          sym('cond'),
+          consCAR([clause, ...body]),
+          consCAR([sym('else'), consCAR([sym('break')])]),
+        ]),
+      ]),
+      env,
+    )
+    return qbeConst.Unit
   }
 
   checkRule: CheckRule = {}
