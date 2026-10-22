@@ -490,14 +490,11 @@ class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
         const tag = ctx.tag(xs, env)
         ctx.if(() => `ceqw ${tag}, ${qbeConst.i64}`, forInNum, { env })
         ctx.if(
-          () => `ceqw ${tag}, ${qbeConst.box}`,
-          () =>
-            ctx.if(
-              () =>
-                `ceqw ${ctx.defineTemp(`loaduh ${xs}`, env)}, ${qbeBox.arr}`,
-              forInArray,
-              { env },
-            ),
+          [
+            () => `ceqw ${tag}, ${qbeConst.box}`,
+            () => `ceqw ${ctx.defineTemp(`loaduh ${xs}`, env)}, ${qbeBox.arr}`,
+          ],
+          forInArray,
           { env },
         )
         return qbeConst.Unit
@@ -739,35 +736,61 @@ BytecodeBackend.prototype.panic = function (meta, format, env) {
   this.emit(Instruction.NativeCall)
 }
 
+function predWithCtx(
+  ctx: QBEBackend,
+  env: QBEEnv,
+  hasElse: boolean,
+  predIsValue: boolean,
+) {
+  const end = env.defineBlock()
+  const elseBranch = hasElse ? env.defineBlock() : end
+
+  const predicate = (pred: () => string) => {
+    const thenBranch = env.defineBlock()
+    const testResult = predIsValue ? pred() : ctx.defineTemp(pred(), env, 'w')
+    ctx.emit(`jnz ${testResult}, ${thenBranch}, ${elseBranch}`)
+    ctx.emit(thenBranch)
+    return elseBranch
+  }
+
+  const predicates = (preds: (() => string)[]) => {
+    if (preds.length === 0) {
+      throw Error('no predicate')
+    }
+    let thenBranch: string | undefined
+    for (const pred of preds) {
+      thenBranch = env.defineBlock()
+      const testResult = predIsValue ? pred() : ctx.defineTemp(pred(), env, 'w')
+      ctx.emit(`jnz ${testResult}, ${thenBranch}, ${elseBranch}`)
+      ctx.emit(thenBranch)
+    }
+    return elseBranch
+  }
+
+  return { predicate, predicates, end }
+}
+
 QBEBackend.prototype.if = function (
   pred,
   thenBody,
   { elseBody, env, predIsValue = false },
 ) {
-  const thenBranch = env.defineBlock()
-  const end = env.defineBlock()
+  const hasElse = !!elseBody
+  const { predicate, predicates, end } = predWithCtx(
+    this,
+    env,
+    hasElse,
+    predIsValue,
+  )
+  const elseBranch = Array.isArray(pred) ? predicates(pred) : predicate(pred)
 
-  if (Array.isArray(pred)) {
-    throw Error('unimplemented')
-  }
-
-  const testResult = predIsValue ? pred() : this.defineTemp(pred(), env, 'w')
-  if (elseBody === undefined) {
-    this.emit(`jnz ${testResult}, ${thenBranch}, ${end}`)
-
-    this.emit(thenBranch)
-    thenBody()
-  } else {
-    const elseBranch = env.defineBlock()
-    this.emit(`jnz ${testResult}, ${thenBranch}, ${elseBranch}`)
-
-    this.emit(thenBranch)
-    thenBody()
+  thenBody()
+  if (hasElse) {
     this.emit(`jmp ${end}`)
-
     this.emit(elseBranch)
     elseBody()
   }
+
   this.emit(end)
 }
 
@@ -775,12 +798,17 @@ QBEBackend.prototype.ifExpr = function (
   pred,
   thenBody,
   elseBody,
-  { env, predIsValue = true, resultType = 'l' },
+  { env, predIsValue = false, resultType = 'l' },
 ) {
-  const thenBranch = env.defineBlock()
-  const end = env.defineBlock()
-  const result = env.defineTemp()
+  const { predicate, predicates, end } = predWithCtx(
+    this,
+    env,
+    true,
+    predIsValue,
+  )
+  const elseBranch = Array.isArray(pred) ? predicates(pred) : predicate(pred)
 
+  const result = env.defineTemp()
   const evalBranch = (body: (result: string) => string | void) => {
     const branchResult = body(result)
     if (branchResult) {
@@ -788,15 +816,6 @@ QBEBackend.prototype.ifExpr = function (
     }
   }
 
-  if (Array.isArray(pred)) {
-    throw Error('unimplemented')
-  }
-
-  const testResult = predIsValue ? this.defineTemp(pred(), env, 'w') : pred()
-  const elseBranch = env.defineBlock()
-  this.emit(`jnz ${testResult}, ${thenBranch}, ${elseBranch}`)
-
-  this.emit(thenBranch)
   evalBranch(thenBody)
   this.emit(`jmp ${end}`)
 

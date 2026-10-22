@@ -13,7 +13,6 @@ import {
 import type { Module } from '.'
 
 // TODO: Do some optimization for constant?
-// TODO: nested if is bad.
 class Box implements QBECompiler, ArgumentChecker {
   compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
     const x = ctx.compileExpr(cell.expr.car[1], env)
@@ -52,14 +51,8 @@ class Box implements QBECompiler, ArgumentChecker {
     }
 
     const box = ctx.ifExpr(
-      isBox,
-      () =>
-        ctx.ifExpr(
-          isNotBoxScalar,
-          () => ctx.ifExpr(isNotOnHeap, boxStackComposite, boxScalar, { env }),
-          boxScalar,
-          { env },
-        ),
+      [isBox, isNotBoxScalar, isNotOnHeap],
+      boxStackComposite,
       boxScalar,
       { env },
     )
