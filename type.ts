@@ -6,7 +6,7 @@ import { error } from './utils'
 export type SExprBool = { type: 'bool'; value: boolean }
 export type SExprNum = { type: 'num'; value: number }
 export type SExprStr = { type: 'str'; value: string }
-export type SExprSym = { type: 'sym'; value: string; internal?: boolean }
+export type SExprSym = { type: 'sym'; value: string; internal?: unknown }
 export type SExprCell = { type: 'cell'; car: ASTNode[]; cdr: ASTNode | null }
 export type SExpr = SExprBool | SExprNum | SExprStr | SExprSym | SExprCell
 export type ASTMeta = { fileName: string; line: number; column: number }
@@ -24,16 +24,16 @@ export function str(value: string, meta: ASTMeta): ASTNode<SExprStr> {
   return { expr: { type: 'str', value }, meta }
 }
 
-export function sym(
-  value: string,
-  meta: ASTMeta,
-  internal?: boolean,
-): ASTNode<SExprSym> {
-  return { expr: { type: 'sym', value, internal }, meta }
+export function sym(value: string, meta: ASTMeta): ASTNode<SExprSym> {
+  return { expr: { type: 'sym', value }, meta }
 }
 
 export function consCAR(car: ASTNode[], meta: ASTMeta): ASTNode<SExprCell> {
   return { expr: { type: 'cell', car, cdr: null }, meta }
+}
+
+export function internal(value: unknown, meta: ASTMeta): ASTNode<SExprSym> {
+  return { expr: { type: 'sym', value: '', internal: value }, meta }
 }
 
 export function consWith(meta: ASTMeta) {
@@ -41,8 +41,9 @@ export function consWith(meta: ASTMeta) {
     bool: (x: boolean) => bool(x, meta),
     num: (x: number) => num(x, meta),
     str: (x: string) => str(x, meta),
-    sym: (x: string, internal?: boolean) => sym(x, meta, internal),
+    sym: (x: string) => sym(x, meta),
     consCAR: (x: ASTNode[]) => consCAR(x, meta),
+    internal: (x: unknown) => internal(x, meta),
   }
 }
 

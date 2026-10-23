@@ -47,6 +47,10 @@ export class BytecodeEnv implements Environment<BytecodeCompiler, number> {
     return addr
   }
 
+  defineTemp() {
+    return this.#updateSP((sp) => sp + 1)
+  }
+
   lookup(name: string): number | BytecodeCompiler | null {
     if (this.#vars.has(name)) {
       const item = this.#vars.get(name)!

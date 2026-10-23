@@ -2,9 +2,15 @@ import { BytecodeBackend, QBEBackend, type Backend } from '@/backend'
 import { Instruction, Label } from '@/bytecode'
 import { BytecodeEnv, QBEEnv, type Environment } from '@/env'
 import {
+  consCAR,
   consWith,
+  internal,
+  num,
   qbeBox,
   qbeConst,
+  str,
+  sym,
+  vmVarType,
   type ArgumentChecker,
   type ASTMeta,
   type ASTNode,
@@ -326,11 +332,18 @@ class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     checkId(id, 'set!')
 
     ctx.compileExpr(cell.expr.car[2], env)
-    const addr = mustLookup(id, env)
-    if (typeof addr !== 'number') {
-      error(id.meta, 'compiling: cannot mutate built-in unit')
+    if (id.expr.internal !== undefined) {
+      if (typeof id.expr.internal !== 'number') {
+        throw Error('invalid internal value')
+      }
+      ctx.emit(Instruction.Save(id.expr.internal))
+    } else {
+      const addr = mustLookup(id, env)
+      if (typeof addr !== 'number') {
+        error(id.meta, 'compiling: cannot mutate built-in unit')
+      }
+      ctx.emit(Instruction.Save(addr))
     }
-    ctx.emit(Instruction.Save(addr))
     ctx.emit(Instruction.Unit)
   }
 
@@ -339,8 +352,11 @@ class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     checkId(id, 'set!')
 
     const x = ctx.compileExpr(cell.expr.car[2], env)
-    if (id.expr.internal) {
-      ctx.emit(`${id.expr.value} =l copy ${x}`)
+    if (id.expr.internal !== undefined) {
+      if (typeof id.expr.internal !== 'string') {
+        throw Error('invalid internal value')
+      }
+      ctx.emit(`${id.expr.internal} =l copy ${x}`)
     } else {
       const innerId = mustLookup(id, env)
       if (typeof innerId !== 'string') {
@@ -399,22 +415,149 @@ class Loop implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   checkRule: CheckRule = {}
 }
 
-// Add error branch test cases
+// TODO: check type after `:in` (both compile and run time)
 class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    throw new Error('Method not implemented.')
+    const { meta } = cell
+    For.#compileTo(
+      cell,
+      (xsNode) => {
+        ctx.compileExpr(xsNode, env)
+        const addr = env.defineTemp()
+        ctx.emit(Instruction.Save(addr))
+        return internal(addr, meta)
+      },
+      (x, xs, body) => {
+        for (const node of For.#inNum(x, xs, body, meta)) {
+          ctx.compileExpr(node, env)
+        }
+      },
+      (x, xs, body) => {
+        ctx.compileExpr(xs, env)
+        ctx.compileExpr(str('type-of', meta), env)
+        ctx.emit(Instruction.NativeCall)
+        const type = env.defineTemp()
+        ctx.emit(Instruction.Save(type))
+
+        ctx.if(
+          () => {
+            ctx.emit(Instruction.Load(type))
+            ctx.compileExpr(num(vmVarType.i64, meta), env)
+            ctx.emit(Instruction.Eq)
+          },
+          () => {
+            for (const node of For.#inNum(x, xs, body, meta)) {
+              ctx.compileExpr(node, env)
+            }
+          },
+        )
+
+        ctx.if(
+          () => {
+            ctx.emit(Instruction.Load(type))
+            ctx.compileExpr(num(vmVarType.arr, meta), env)
+            ctx.emit(Instruction.Eq)
+          },
+          () => {
+            ctx.compileExpr(num(0, meta), env)
+            const i = env.defineTemp()
+            ctx.emit(Instruction.Save(i))
+
+            ctx.compileExpr(consCAR([sym('array-len', meta), xs], meta), env)
+            const len = env.defineTemp()
+            ctx.emit(Instruction.Save(len))
+
+            ctx.compileExpr(
+              For.#inArray(
+                internal(i, meta),
+                internal(len, meta),
+                x,
+                xs,
+                body,
+                meta,
+              ),
+              env,
+            )
+          },
+        )
+      },
+      (pred, body) => ctx.compileExpr(For.#pred(pred, body, meta), env),
+    )
   }
 
-  compileToQBE(
-    ctx: QBEBackend,
-    { expr, meta }: ASTNode<SExprCell>,
-    env: QBEEnv,
-  ) {
-    const { num, sym, consCAR } = consWith(meta)
+  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
+    const { meta } = cell
+    For.#compileTo(
+      cell,
+      (xsNode) => internal(ctx.compileExpr(xsNode, env), meta),
+      (x, xs, body) => {
+        for (const node of For.#inNum(x, xs, body, meta)) {
+          ctx.compileExpr(node, env)
+        }
+      },
+      (x, xs, body) => {
+        if (typeof xs.expr.internal !== 'string') {
+          throw Error('invalid internal value')
+        }
+        const tag = ctx.tag(xs.expr.internal, env)
+        ctx.if(
+          () => `ceqw ${tag}, ${qbeConst.i64}`,
+          () => {
+            for (const node of For.#inNum(x, xs, body, meta)) {
+              ctx.compileExpr(node, env)
+            }
+          },
+          { env },
+        )
+        ctx.if(
+          [
+            () => `ceqw ${tag}, ${qbeConst.box}`,
+            () =>
+              `ceqw ${ctx.defineTemp(`loaduh ${xs.expr.internal}`, env)}, ${qbeBox.arr}`,
+          ],
+          () =>
+            ctx.compileExpr(
+              For.#inArray(
+                internal(ctx.wrapI64('0', env), meta),
+                internal(
+                  ctx.compileExpr(
+                    consCAR([sym('array-len', meta), xs], meta),
+                    env,
+                  ),
+                  meta,
+                ),
+                x,
+                xs,
+                body,
+                meta,
+              ),
+              env,
+            ),
+          { env },
+        )
+      },
+      (pred, body) => ctx.compileExpr(For.#pred(pred, body, meta), env),
+    )
+    return qbeConst.Unit
+  }
 
-    if (expr.cdr !== null) {
-      error(expr.cdr.meta, 'compiling: unexpected `cdr`')
-    }
+  checkRule: CheckRule = {}
+
+  static #compileTo(
+    { expr, meta }: ASTNode<SExprCell>,
+    compileXs: (xsNode: ASTNode) => ASTNode<SExprSym>,
+    forInNum: (
+      x: ASTNode<SExprSym>,
+      xs: ASTNode<SExprSym>,
+      body: ASTNode[],
+    ) => void,
+    forInAny: (
+      x: ASTNode<SExprSym>,
+      xs: ASTNode<SExprSym>,
+      body: ASTNode[],
+    ) => void,
+    forPred: (pred: ASTNode, body: ASTNode[]) => void,
+  ) {
     if (expr.car.length < 2) {
       error(meta, 'compiling: missing clause')
     }
@@ -431,91 +574,88 @@ class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
       clause.expr.car[1].expr.value === ':in'
     ) {
       const x = clause.expr.car[0]
-      if (x.expr.type !== 'sym') {
-        error(
-          x.meta,
-          `compiling: expecting a symbol for variable binding, found \`${x.expr.type}\``,
-        )
+      function assertSym(x: ASTNode): asserts x is ASTNode<SExprSym> {
+        if (x.expr.type !== 'sym') {
+          error(
+            x.meta,
+            `compiling: expecting a symbol for variable binding, found \`${x.expr.type}\``,
+          )
+        }
       }
+      assertSym(x)
 
       const xsNode = clause.expr.car[2]
-      const xs = ctx.compileExpr(xsNode, env)
-      const xsInternal = sym(xs, true)
-
-      function forInNum() {
-        ctx.compileExpr(consCAR([sym('def'), x, num(0)]), env)
-        ctx.compileExpr(
-          consCAR([
-            sym('loop'),
-            consCAR([
-              sym('if'),
-              consCAR([sym('>='), x, xsInternal]),
-              consCAR([sym('break')]),
-            ]),
-            ...body,
-            consCAR([sym('set!'), x, consCAR([sym('+'), x, num(1)])]),
-          ]),
-          env,
-        )
-      }
-
-      function forInArray() {
-        const i = sym(ctx.wrapI64('0', env), true)
-        const len = sym(
-          ctx.compileExpr(consCAR([sym('array-len'), xsInternal]), env),
-          true,
-        )
-        ctx.compileExpr(
-          consCAR([
-            sym('loop'),
-            consCAR([
-              sym('if'),
-              consCAR([sym('>='), i, len]),
-              consCAR([sym('break')]),
-            ]),
-            consCAR([sym('def'), x, consCAR([sym('array-at'), xsInternal, i])]),
-            ...body,
-            consCAR([sym('set!'), i, consCAR([sym('+'), i, num(1)])]),
-          ]),
-          env,
-        )
-      }
+      const xs = compileXs(xsNode)
 
       if (xsNode.expr.type === 'num') {
-        forInNum()
-        return qbeConst.Unit
+        forInNum(x, xs, body)
+        return
       }
 
       if (xsNode.expr.type === 'sym' || xsNode.expr.type === 'cell') {
-        const tag = ctx.tag(xs, env)
-        ctx.if(() => `ceqw ${tag}, ${qbeConst.i64}`, forInNum, { env })
-        ctx.if(
-          [
-            () => `ceqw ${tag}, ${qbeConst.box}`,
-            () => `ceqw ${ctx.defineTemp(`loaduh ${xs}`, env)}, ${qbeBox.arr}`,
-          ],
-          forInArray,
-          { env },
-        )
-        return qbeConst.Unit
+        forInAny(x, xs, body)
+        return
       }
     }
 
-    ctx.compileExpr(
+    forPred(clause, body)
+  }
+
+  static #inNum(
+    x: ASTNode<SExprSym>,
+    xs: ASTNode<SExprSym>,
+    body: ASTNode[],
+    meta: ASTMeta,
+  ) {
+    const { num, sym, consCAR } = consWith(meta)
+    return [
+      consCAR([sym('def'), x, num(0)]),
       consCAR([
         sym('loop'),
         consCAR([
-          sym('cond'),
-          consCAR([clause, ...body]),
-          consCAR([sym('else'), consCAR([sym('break')])]),
+          sym('if'),
+          consCAR([sym('>='), x, xs]),
+          consCAR([sym('break')]),
         ]),
+        ...body,
+        consCAR([sym('set!'), x, consCAR([sym('+'), x, num(1)])]),
       ]),
-      env,
-    )
-    return qbeConst.Unit
+    ]
   }
 
-  checkRule: CheckRule = {}
+  static #inArray(
+    i: ASTNode<SExprSym>,
+    len: ASTNode<SExprSym>,
+    x: ASTNode<SExprSym>,
+    xs: ASTNode<SExprSym>,
+    body: ASTNode[],
+    meta: ASTMeta,
+  ) {
+    const { num, sym, consCAR } = consWith(meta)
+    return consCAR([
+      sym('loop'),
+      consCAR([
+        sym('if'),
+        consCAR([sym('>='), i, len]),
+        consCAR([sym('break')]),
+      ]),
+      consCAR([sym('def'), x, consCAR([sym('array-at'), xs, i])]),
+      ...body,
+      consCAR([sym('set!'), i, consCAR([sym('+'), i, num(1)])]),
+    ])
+  }
+
+  static #pred(pred: ASTNode, body: ASTNode[], meta: ASTMeta) {
+    const { sym, consCAR } = consWith(meta)
+    return consCAR([
+      sym('loop'),
+      consCAR([
+        sym('cond'),
+        consCAR([pred, ...body]),
+        consCAR([sym('else'), consCAR([sym('break')])]),
+      ]),
+    ])
+  }
 }
 
 class BytecodeBreak implements BytecodeCompiler, ArgumentChecker {

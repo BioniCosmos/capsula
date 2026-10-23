@@ -116,6 +116,14 @@ export class BytecodeBackend implements Backend<BytecodeCompiler> {
         this.emit(Instruction.Push(this.#fn.constants.push(expr) - 1))
         return
       case 'sym': {
+        if (expr.internal !== undefined) {
+          if (typeof expr.internal !== 'number') {
+            throw Error('invalid internal value')
+          }
+          this.emit(Instruction.Load(expr.internal))
+          return
+        }
+
         const x = mustLookup(node as ASTNode<SExprSym>, env)
 
         if (typeof x === 'number') {
@@ -305,8 +313,11 @@ export class QBEBackend implements Backend<QBECompiler> {
       case 'num':
         return ((expr.value << 3) | qbeConst.i64).toString()
       case 'sym': {
-        if (expr.internal) {
-          return expr.value
+        if (expr.internal !== undefined) {
+          if (typeof expr.internal !== 'string') {
+            throw Error('invalid internal value')
+          }
+          return expr.internal
         }
         const x = mustLookup(node as ASTNode<SExprSym>, env)
         if (typeof x === 'string') {
