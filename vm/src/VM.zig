@@ -23,11 +23,15 @@ pub const Var = union(enum) {
         switch (self) {
             .unit => try writer.print("()", .{}),
             .arr, .@"struct" => |xs| {
-                try writer.print("[ ", .{});
-                for (xs) |x| {
-                    try writer.print("{f} ", .{x});
+                if (xs.len == 0) {
+                    try writer.print("[]", .{});
+                    return;
                 }
-                try writer.print("]", .{});
+                try writer.print("[", .{});
+                for (xs) |x| {
+                    try writer.print(" {f}", .{x});
+                }
+                try writer.print(" ]", .{});
             },
             .str => |x| try writer.print("{s}", .{x}),
             inline else => |x| try writer.print("{}", .{x}),
