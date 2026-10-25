@@ -48,7 +48,7 @@ export function consWith(meta: ASTMeta) {
 }
 
 export type PrimitiveType =
-  'bool' | 'i64' | 'sym' | 'str' | 'arr' | 'struct' | 'any'
+  'bool' | 'i64' | 'sym' | 'str' | 'arr' | 'struct' | 'fn' | 'any'
 
 export const vmVarType = {
   unit: 0,
@@ -140,6 +140,111 @@ export function isUnitConstructor<T extends Unit>(
   return typeof target === 'function' && target[unitConstructorSymbol] === true
 }
 
+export interface Fn {
+  id: string
+  params: CheckRule
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, args: number[]): void
+  qbe(ctx: QBEBackend, env: QBEEnv, args: string[]): string
+}
+
+export function compileCell(
+  ctx: Backend,
+  env: Environment,
+  { expr: { car, cdr }, meta }: ASTNode<SExprCell>,
+  compileOpExpr: (node: ASTNode) => unknown,
+  runtimeCheckType: RuntimeTypeChecker,
+  fnTypeError: string,
+  compileArgs: ArgCompiler,
+  call: (fn: unknown, args: unknown[]) => void,
+) {
+  if (cdr !== null) {
+    error(cdr.meta, 'compiling: unexpected `cdr`')
+  }
+
+  if (car.length === 0) {
+    error(meta, 'compiling: empty cell')
+  }
+
+  const opNode = car[0]
+  const argNodes = car.slice(1)
+
+  let unit: Unit | undefined
+  let fnValue: unknown
+  switch (opNode.expr.type) {
+    case 'sym': {
+      if (opNode.expr.internal !== undefined) {
+        throw Error(`Internal value as a function is unsupported.`)
+      }
+
+      const op = env.lookup(opNode.expr.value)
+      if (isUnit(op)) {
+        unit = op
+      } else {
+        runtimeCheckType(ctx, env, 'fn', op, opNode.meta, fnTypeError)
+        fnValue = op
+      }
+
+      break
+    }
+    case 'cell': {
+      fnValue = compileOpExpr(opNode)
+      runtimeCheckType(ctx, env, 'fn', fnValue, opNode.meta, fnTypeError)
+      break
+    }
+    default:
+      error(meta, `compiling: \`${opNode.expr.type}\` is not callable.`)
+  }
+
+  const args = compileArgs(ctx, env, argNodes)
+
+  if (fnValue !== undefined) {
+    call(fnValue, args)
+    return
+  }
+
+  // TODO: compile unit
+}
+
+export type ArgCompiler = (
+  ctx: Backend,
+  env: Environment,
+  nodes: ASTNode[],
+) => unknown[]
+
+export function bytecodeCompileArgs(
+  ctx: BytecodeBackend,
+  env: BytecodeEnv,
+  nodes: ASTNode[],
+) {
+  const args: number[] = []
+  for (const node of nodes) {
+    ctx.compileExpr(node, env)
+    const arg = env.defineTemp()
+    ctx.emit(Instruction.Save(arg))
+    args.push(arg)
+  }
+  return args
+}
+
+export function qbeCompileArgs(ctx: QBEBackend, env: QBEEnv, nodes: ASTNode[]) {
+  const args: string[] = []
+  let protectCount = 0
+
+  for (const node of nodes) {
+    const arg = ctx.compileExpr(node, env)
+    if (node.expr.type === 'cell') {
+      ctx.emit(`call $gc_retain(l ${arg})`)
+      protectCount++
+    }
+    args.push(arg)
+  }
+
+  for (let i = 0; i < protectCount; i++) {
+    ctx.emit(`call $gc_release()`)
+  }
+  return args
+}
+
 export type CheckRule = { car?: PrimitiveType[]; cdr?: boolean }
 export interface ArgumentChecker {
   checkRule: CheckRule
@@ -228,11 +333,77 @@ export function checkArgs(
   }
 }
 
-export type RuntimeTypeChecker<T> = (
+export function checkType<T>(
+  ctx: Backend,
+  env: Environment,
+  { id, params: { car, cdr } }: Fn,
+  fnNode: ASTNode,
+  argNodes: ASTNode[],
+  // fnValue: T,
+  // args: T[],
+) {
+  // if (fnNode.expr.type !== '')
+
+  if (car === undefined) {
+    return
+  }
+
+  if (argNodes.length < car.length) {
+    error(
+      fnNode.meta,
+      `compiling: \`${id}\` expects ${cdr ? 'at least ' : ''}${car.length} arguments, but found ${argNodes.length}.`,
+    )
+  }
+  if (!cdr && argNodes.length > car.length) {
+    error(
+      argNodes[car.length].meta,
+      `compiling: \`${id}\` expects exactly ${car.length} arguments, but found ${argNodes.length}.`,
+    )
+  }
+
+  for (const [i, paramType] of car.entries()) {
+    if (paramType === 'any') {
+      continue
+    }
+
+    const arg = args[i]
+    const argType = arg.expr.type
+    switch (argType) {
+      case 'sym':
+        if (!arg.expr.internal) {
+          ctx.runtimeCheckArg(paramType, env, arg)
+        }
+        break
+      case 'cell':
+        ctx.runtimeCheckArg(paramType, env, arg)
+        break
+      case 'num':
+        if (!Number.isInteger(arg.expr.value)) {
+          error(arg.meta, `compiling: Float number is currently unsupported.`)
+        }
+        if (paramType !== 'i64') {
+          error(
+            arg.meta,
+            `compiling: expecting \`${paramType}\`, found \`i64\``,
+          )
+        }
+        break
+      default:
+        if (argType !== paramType) {
+          error(
+            arg.meta,
+            `compiling: expecting \`${paramType}\`, found \`${argType}\``,
+          )
+        }
+    }
+  }
+}
+
+export type RuntimeTypeChecker = (
   ctx: Backend,
   env: Environment,
   type: PrimitiveType,
-  x: T,
+  x: unknown,
   meta: ASTMeta,
   format?: string,
 ) => void
