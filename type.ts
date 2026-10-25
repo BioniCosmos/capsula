@@ -111,40 +111,31 @@ export function typeToQBEBox(paramType: PrimitiveType) {
   throw Error(`\`${paramType}\` is not a box type.`)
 }
 
-export type Unit = BytecodeCompiler | QBECompiler
-const unitSymbol = Symbol('unit')
-const unitConstructorSymbol = Symbol('unit-constructor')
-export type UnitClass<T extends Unit = Unit> = new () => T
-export type UnitConstructor<T extends Unit> = {
-  (): T
-  readonly [unitConstructorSymbol]: true
+export type Unit = Syntax | Fn
+
+export abstract class Syntax {
+  abstract isStatement?: boolean
+  abstract bytecode(
+    ctx: BytecodeBackend,
+    env: BytecodeEnv,
+    cell: ASTNode<SExprCell>,
+  ): void
+  abstract qbe(ctx: QBEBackend, env: QBEEnv, cell: ASTNode<SExprCell>): string
 }
 
-export function unitConstructor<T extends Unit>(Unit: UnitClass<T>) {
-  const cons = () => {
-    const unit = new Unit()
-    Object.defineProperty(unit, unitSymbol, { value: true })
-    return unit
-  }
-  Object.defineProperty(cons, unitConstructorSymbol, { value: true })
-  return cons as UnitConstructor<T>
+export abstract class Fn {
+  abstract id: string
+  abstract params: CheckRule
+  abstract bytecode(
+    ctx: BytecodeBackend,
+    env: BytecodeEnv,
+    args: number[],
+  ): void
+  abstract qbe(ctx: QBEBackend, env: QBEEnv, args: string[]): string
 }
 
 export function isUnit(x: any): x is Unit {
-  return x[unitSymbol] === true
-}
-
-export function isUnitConstructor<T extends Unit>(
-  target: any,
-): target is UnitConstructor<T> {
-  return typeof target === 'function' && target[unitConstructorSymbol] === true
-}
-
-export interface Fn {
-  id: string
-  params: CheckRule
-  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, args: number[]): void
-  qbe(ctx: QBEBackend, env: QBEEnv, args: string[]): string
+  return x instanceof Syntax || x instanceof Fn
 }
 
 export function compileCell(
@@ -201,7 +192,12 @@ export function compileCell(
     call(fnValue, args)
     return
   }
-
+  if (unit === undefined) {
+    throw Error('unreachable')
+  }
+  if (unit instanceof Syntax) {
+    return
+  }
   // TODO: compile unit
 }
 
@@ -463,26 +459,6 @@ export function qbeCheckType(
       { env, predIsValue: true },
     )
   }
-}
-
-export interface BytecodeCompiler {
-  compile(
-    ctx: BytecodeBackend,
-    cell: ASTNode<SExprCell>,
-    env: BytecodeEnv,
-  ): void
-}
-
-export function isBytecodeCompiler(x: any): x is BytecodeCompiler {
-  return typeof x?.compile === 'function'
-}
-
-export interface QBECompiler {
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv): string
-}
-
-export function isQBECompiler(x: any): x is QBECompiler {
-  return typeof x?.compileToQBE === 'function'
 }
 
 export class BytecodeFnChunk {
