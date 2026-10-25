@@ -140,15 +140,11 @@ export function isUnit(x: any): x is Unit {
   return x instanceof Syntax || x instanceof Fn
 }
 
-export function compileCell(
+export function compileCell<T>(
   ctx: Backend,
   env: Environment,
   { expr: { car, cdr }, meta }: ASTNode<SExprCell>,
-  compileOpExpr: (node: ASTNode) => unknown,
-  runtimeCheckType: RuntimeTypeChecker,
-  fnTypeError: string,
-  compileArgs: ArgCompiler,
-  call: (fn: unknown, args: unknown[]) => void,
+  { checkType, compileOpExpr, fnTypeError, compileArgs, call }: CellCompiler<T>,
 ) {
   if (cdr !== null) {
     error(cdr.meta, 'compiling: unexpected `cdr`')
@@ -161,67 +157,85 @@ export function compileCell(
   const opNode = car[0]
   const argNodes = car.slice(1)
 
-  let unit: Unit | undefined
-  let fnValue: unknown
+  let op: Unit | T
   switch (opNode.expr.type) {
     case 'sym': {
       if (opNode.expr.internal !== undefined) {
         throw Error(`Internal value as a function is unsupported.`)
       }
 
-      const op = env.lookup(opNode.expr.value)
-      if (isUnit(op)) {
-        unit = op
-      } else {
-        runtimeCheckType(ctx, env, 'fn', op, opNode.meta, fnTypeError)
-        fnValue = op
+      op = env.lookup(opNode.expr.value)
+      if (!isUnit(op)) {
+        checkType('fn', op, opNode.meta, fnTypeError)
       }
 
       break
     }
     case 'cell': {
-      fnValue = compileOpExpr(opNode)
-      runtimeCheckType(ctx, env, 'fn', fnValue, opNode.meta, fnTypeError)
+      op = compileOpExpr(opNode)
+      checkType('fn', op, opNode.meta, fnTypeError)
       break
     }
     default:
       error(meta, `compiling: \`${opNode.expr.type}\` is not callable.`)
   }
 
-  const args = compileArgs(ctx, env, argNodes)
+  const args = compileArgs(argNodes)
 
-  if (fnValue !== undefined) {
-    call(fnValue, args)
+  if (!isUnit(op)) {
+    call(op, args)
     return
   }
-  if (unit === undefined) {
-    throw Error('unreachable')
-  }
-  if (unit instanceof Syntax) {
+  if (op instanceof Syntax) {
     return
   }
   // TODO: compile unit
 }
 
-export type ArgCompiler = (
-  ctx: Backend,
-  env: Environment,
-  nodes: ASTNode[],
-) => unknown[]
+interface CellCompiler<T> {
+  checkType(type: PrimitiveType, x: T, meta: ASTMeta, format?: string): void
+  compileOpExpr(node: ASTNode): T
+  fnTypeError: string
+  compileArgs(nodes: ASTNode[]): T[]
+  call(fn: T, args: T[]): void
+}
 
-export function bytecodeCompileArgs(
-  ctx: BytecodeBackend,
-  env: BytecodeEnv,
-  nodes: ASTNode[],
-) {
-  const args: number[] = []
-  for (const node of nodes) {
-    ctx.compileExpr(node, env)
-    const arg = env.defineTemp()
-    ctx.emit(Instruction.Save(arg))
-    args.push(arg)
+export class BytecodeCellCompiler implements CellCompiler<number> {
+  constructor(
+    private ctx: BytecodeBackend,
+    private env: BytecodeEnv,
+  ) {}
+
+  checkType(type: PrimitiveType, x: number, meta: ASTMeta, format?: string) {
+    bytecodeCheckType(this.ctx, this.env, type, x, meta, format)
   }
-  return args
+
+  compileOpExpr(node: ASTNode) {
+    const fn = this.env.defineTemp()
+    this.ctx.compileExpr(node, this.env)
+    this.ctx.emit(Instruction.Save(fn))
+    return fn
+  }
+
+  fnTypeError = '`{}` is not callable.'
+
+  compileArgs(nodes: ASTNode[]) {
+    const args: number[] = []
+    for (const node of nodes) {
+      this.ctx.compileExpr(node, this.env)
+      const arg = this.env.defineTemp()
+      this.ctx.emit(Instruction.Save(arg))
+      args.push(arg)
+    }
+    return args
+  }
+
+  call(fn: number, args: number[]) {
+    for (const arg of args.toReversed()) {
+      this.ctx.emit(Instruction.Load(arg))
+    }
+    this.ctx.emit(Instruction.Call(fn))
+  }
 }
 
 export function qbeCompileArgs(ctx: QBEBackend, env: QBEEnv, nodes: ASTNode[]) {
@@ -396,15 +410,6 @@ export function checkType<T>(
     }
   }
 }
-
-export type RuntimeTypeChecker = (
-  ctx: Backend,
-  env: Environment,
-  type: PrimitiveType,
-  x: unknown,
-  meta: ASTMeta,
-  format?: string,
-) => void
 
 export function bytecodeCheckType(
   ctx: BytecodeBackend,

@@ -3,30 +3,27 @@ import { $ } from 'bun'
 import { Instruction } from './bytecode'
 import { BytecodeEnv, QBEEnv, type Environment } from './env'
 import {
+  BytecodeCellCompiler,
   BytecodeFnChunk,
   checkArgs,
+  compileCell,
   hasArgumentChecker,
-  isBytecodeCompiler,
-  isQBECompiler,
   isUnit,
   qbeConst,
   QBEFnChunk,
   type ASTNode,
-  type BytecodeCompiler,
-  type QBECompiler,
   type SExprCell,
   type SExprSym,
-  type Unit,
 } from './type'
 import { error, mustLookup } from './utils'
 
-export interface Backend<U extends Unit = Unit> {
-  readonly env: Environment<U>
+export interface Backend {
+  readonly env: Environment
   compile(source: ASTNode[], output?: string): Promise<void>
   run(output: string): Promise<void>
 }
 
-export class BytecodeBackend implements Backend<BytecodeCompiler> {
+export class BytecodeBackend implements Backend {
   readonly env = new BytecodeEnv()
   readonly #functions: BytecodeFnChunk[] = []
   readonly #fnStack: number[] = []
@@ -68,7 +65,7 @@ export class BytecodeBackend implements Backend<BytecodeCompiler> {
   }
 
   compileExpr(node: ASTNode, env: BytecodeEnv) {
-    const { expr } = node
+    const { expr, meta } = node
     switch (expr.type) {
       case 'bool':
       case 'num':
@@ -102,27 +99,12 @@ export class BytecodeBackend implements Backend<BytecodeCompiler> {
         return
       }
       case 'cell': {
-        const sym = expr.car[0]
-        if (sym.expr.type !== 'sym') {
-          throw Error(`compiling: expecting symbol, found \`${sym.expr.type}\``)
-        }
-
-        const compiler = mustLookup(sym as ASTNode<SExprSym>, env)
-        if (!isBytecodeCompiler(compiler)) {
-          if (isUnit(compiler)) {
-            error(
-              sym.meta,
-              'compiling: This unit is currently not supported by Bytecode backend.',
-            )
-          }
-          error(sym.meta, 'compiling: This expression is not callable.')
-        }
-
-        const cell = node as ASTNode<SExprCell>
-        if (hasArgumentChecker(compiler)) {
-          checkArgs(compiler.checkRule, this, env, cell)
-        }
-        compiler.compile(this, cell, env)
+        compileCell(
+          this,
+          env,
+          { expr, meta },
+          new BytecodeCellCompiler(this, env),
+        )
       }
     }
   }

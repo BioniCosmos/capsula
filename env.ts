@@ -6,7 +6,7 @@ import {
   type UnitConstructor,
 } from './type'
 
-export interface Environment<T extends Unit = Unit, R = unknown> {
+export interface Environment<R = unknown> {
   defineUnit(name: string, constructor: UnitConstructor<T>): void
   defineVarUnit(name: string, unit: T): void
   lookup(name: string): R | T | null
