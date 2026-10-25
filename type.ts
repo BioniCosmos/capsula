@@ -57,6 +57,7 @@ export const vmVarType = {
   arr: 3,
   struct: 4,
   str: 5,
+  fn: 6,
 }
 
 export const qbeConst = {
@@ -75,7 +76,7 @@ export const qbeConst = {
   I64: `${0b010}`,
 }
 
-export const qbeBox = { scalar: 0, arr: 1, struct: 2, str: 3 }
+export const qbeBox = { scalar: 0, arr: 1, struct: 2, str: 3, fn: 4 }
 export const qbeSegment = { stack: 0, heap: 1, data: 2 }
 
 export function typeToVMVarType(paramType: PrimitiveType) {
@@ -98,6 +99,7 @@ export function typeToQBETag(paramType: PrimitiveType) {
     case 'arr':
     case 'struct':
     case 'str':
+    case 'fn':
       return qbeConst.box
     default:
       return qbeConst[paramType]

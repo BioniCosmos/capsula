@@ -16,7 +16,7 @@ constexpr auto unit = 0b10001;
 constexpr auto bool_false = 0b0001;
 constexpr auto bool_true = 0b1001;
 
-typedef enum : uint16_t { BoxScalar, BoxArray, BoxStruct, BoxString } BoxType;
+typedef enum : uint16_t { BoxScalar, BoxArray, BoxStruct, BoxString, BoxFn } BoxType;
 typedef enum : uint16_t { Stack, Heap, Data } Segment;
 
 typedef struct {
@@ -97,6 +97,8 @@ void var_display(const uint64_t x) {
                     fwrite(box->data, sizeof(char), box->len, stdout);
                     fflush(stdout);
                     return;
+                case BoxFn:
+                    error("TODO: add symbolic table to store fn metadata");
             }
             break;
         }
@@ -132,6 +134,8 @@ const char* type_name(const uint64_t x) {
                     return "struct";
                 case BoxString:
                     return "str";
+                case BoxFn:
+                    return "fn";
             }
             break;
         case TypeNarrow:

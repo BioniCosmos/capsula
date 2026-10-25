@@ -17,6 +17,7 @@ pub const Var = union(enum) {
     arr: []const Var,
     @"struct": []const Var,
     str: []const u8,
+    @"fn": u64,
     state: State,
 
     pub fn format(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
