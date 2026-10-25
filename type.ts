@@ -1,5 +1,5 @@
 import type { Backend, BytecodeBackend, QBEBackend } from './backend'
-import { CodeBuffer } from './bytecode'
+import { CodeBuffer, Instruction } from './bytecode'
 import type { BytecodeEnv, Environment, QBEEnv } from './env'
 import { error } from './utils'
 
@@ -198,11 +198,13 @@ export function checkArgs(
     switch (argType) {
       case 'sym':
         if (!arg.expr.internal) {
-          ctx.runtimeCheckArg(paramType, env, arg)
+          // TODO
+          // ctx.runtimeCheckArg(paramType, env, arg)
         }
         break
       case 'cell':
-        ctx.runtimeCheckArg(paramType, env, arg)
+        // TODO
+        // ctx.runtimeCheckArg(paramType, env, arg)
         break
       case 'num':
         if (!Number.isInteger(arg.expr.value)) {
@@ -223,6 +225,72 @@ export function checkArgs(
           )
         }
     }
+  }
+}
+
+export type RuntimeTypeChecker<T> = (
+  ctx: Backend,
+  env: Environment,
+  type: PrimitiveType,
+  x: T,
+  meta: ASTMeta,
+  format?: string,
+) => void
+
+export function bytecodeCheckType(
+  ctx: BytecodeBackend,
+  env: BytecodeEnv,
+  type: PrimitiveType,
+  x: number,
+  meta: ASTMeta,
+  format = `expecting \`${type}\`, found \`{}\``,
+) {
+  const { num, str } = consWith(meta)
+  ctx.if(
+    () => {
+      ctx.emit(Instruction.Load(x))
+      ctx.compileExpr(str('type-of'), env)
+      ctx.emit(Instruction.NativeCall)
+      ctx.compileExpr(num(typeToVMVarType(type)), env)
+      ctx.emit(Instruction.Ne)
+    },
+    () => {
+      ctx.emit(Instruction.Load(x))
+      ctx.compileExpr(str('type-name'), env)
+      ctx.emit(Instruction.NativeCall)
+      ctx.panic(meta, format, env)
+    },
+  )
+}
+
+export function qbeCheckType(
+  ctx: QBEBackend,
+  env: QBEEnv,
+  type: PrimitiveType,
+  x: string,
+  meta: ASTMeta,
+  format = `expecting \`${type}\`, found \`%s\``,
+) {
+  const panic = () =>
+    ctx.panic(
+      meta,
+      format,
+      `l ${ctx.defineTemp(`call $type_name(l ${x})`, env)}`,
+    )
+  ctx.if(() => `cnew ${ctx.tag(x, env)}, ${typeToQBETag(type)}`, panic, {
+    env,
+  })
+  if (type === 'arr' || type === 'struct' || type === 'str') {
+    ctx.if(
+      () => {
+        const innerCheck = env.defineTemp()
+        ctx.emit(`${innerCheck} =w loaduh ${x}`)
+        ctx.emit(`${innerCheck} =w cnew ${innerCheck}, ${typeToQBEBox(type)}`)
+        return innerCheck
+      },
+      panic,
+      { env, predIsValue: true },
+    )
   }
 }
 

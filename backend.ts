@@ -11,12 +11,8 @@ import {
   isUnit,
   qbeConst,
   QBEFnChunk,
-  typeToQBEBox,
-  typeToQBETag,
-  typeToVMVarType,
   type ASTNode,
   type BytecodeCompiler,
-  type PrimitiveType,
   type QBECompiler,
   type SExprCell,
   type SExprSym,
@@ -28,12 +24,6 @@ export interface Backend<U extends Unit = Unit> {
   readonly env: Environment<U>
   compile(source: ASTNode[], output?: string): Promise<void>
   run(output: string): Promise<void>
-  runtimeCheckArg(
-    paramType: PrimitiveType,
-    env: Environment<U>,
-    node: ASTNode,
-    format?: string,
-  ): void
 }
 
 export class BytecodeBackend implements Backend<BytecodeCompiler> {
@@ -75,36 +65,6 @@ export class BytecodeBackend implements Backend<BytecodeCompiler> {
       cwd: 'vm',
       stdout: 'inherit',
     }).exited
-  }
-
-  runtimeCheckArg(
-    paramType: PrimitiveType,
-    env: BytecodeEnv,
-    node: ASTNode,
-    format = `expecting \`${paramType}\`, found \`{}\``,
-  ) {
-    const { meta } = node
-    this.if(
-      () => {
-        this.compileExpr(node, env)
-        this.compileExpr({ expr: { type: 'str', value: 'type-of' }, meta }, env)
-        this.emit(Instruction.NativeCall)
-        this.compileExpr(
-          { expr: { type: 'num', value: typeToVMVarType(paramType) }, meta },
-          env,
-        )
-        this.emit(Instruction.Ne)
-      },
-      () => {
-        this.compileExpr(node, env)
-        this.compileExpr(
-          { expr: { type: 'str', value: 'type-name' }, meta },
-          env,
-        )
-        this.emit(Instruction.NativeCall)
-        this.panic(meta, format, env)
-      },
-    )
   }
 
   compileExpr(node: ASTNode, env: BytecodeEnv) {
@@ -261,40 +221,6 @@ export class QBEBackend implements Backend<QBECompiler> {
 
   async run(output: string) {
     await Bun.spawn([output], { stdout: 'inherit' }).exited
-  }
-
-  runtimeCheckArg(
-    paramType: PrimitiveType,
-    env: QBEEnv,
-    node: ASTNode,
-    format = `expecting \`${paramType}\`, found \`%s\``,
-  ) {
-    const x = this.compileExpr(node, env)
-    const panic = () =>
-      this.panic(
-        node.meta,
-        format,
-        `l ${this.defineTemp(`call $type_name(l ${x})`, env)}`,
-      )
-    this.if(
-      () => `cnew ${this.tag(x, env)}, ${typeToQBETag(paramType)}`,
-      panic,
-      { env },
-    )
-    if (paramType === 'arr' || paramType === 'struct' || paramType === 'str') {
-      this.if(
-        () => {
-          const innerCheck = env.defineTemp()
-          this.emit(`${innerCheck} =w loaduh ${x}`)
-          this.emit(
-            `${innerCheck} =w cnew ${innerCheck}, ${typeToQBEBox(paramType)}`,
-          )
-          return innerCheck
-        },
-        panic,
-        { env, predIsValue: true },
-      )
-    }
   }
 
   /**
