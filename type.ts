@@ -1,4 +1,4 @@
-import type { Backend, BytecodeBackend, QBEBackend } from './backend'
+import type { BytecodeBackend, QBEBackend } from './backend'
 import { CodeBuffer, Instruction } from './bytecode'
 import type { BytecodeEnv, Environment, QBEEnv } from './env'
 import { error } from './utils'
@@ -141,15 +141,24 @@ export function isUnit(x: any): x is Unit {
 }
 
 export function compileCell<T>(
-  ctx: Backend,
   env: Environment,
-  { expr: { car, cdr }, meta }: ASTNode<SExprCell>,
-  { checkType, compileOpExpr, fnTypeError, compileArgs, call }: CellCompiler<T>,
+  cell: ASTNode<SExprCell>,
+  {
+    checkType,
+    compileOpExpr,
+    fnTypeError,
+    compileArgs,
+    call,
+    compileSyntax,
+  }: CellCompiler<T>,
 ) {
+  const {
+    expr: { car, cdr },
+    meta,
+  } = cell
   if (cdr !== null) {
     error(cdr.meta, 'compiling: unexpected `cdr`')
   }
-
   if (car.length === 0) {
     error(meta, 'compiling: empty cell')
   }
@@ -187,6 +196,7 @@ export function compileCell<T>(
     return
   }
   if (op instanceof Syntax) {
+    compileSyntax(op, cell)
     return
   }
   // TODO: compile unit
@@ -198,6 +208,7 @@ interface CellCompiler<T> {
   fnTypeError: string
   compileArgs(nodes: ASTNode[]): T[]
   call(fn: T, args: T[]): void
+  compileSyntax(syntax: Syntax, cell: ASTNode<SExprCell>): void
 }
 
 export class BytecodeCellCompiler implements CellCompiler<number> {
@@ -236,6 +247,10 @@ export class BytecodeCellCompiler implements CellCompiler<number> {
     }
     this.ctx.emit(Instruction.Call(fn))
   }
+
+  compileSyntax(syntax: Syntax, cell: ASTNode<SExprCell>) {
+    syntax.bytecode(this.ctx, this.env, cell)
+  }
 }
 
 export function qbeCompileArgs(ctx: QBEBackend, env: QBEEnv, nodes: ASTNode[]) {
@@ -258,111 +273,25 @@ export function qbeCompileArgs(ctx: QBEBackend, env: QBEEnv, nodes: ASTNode[]) {
 }
 
 export type CheckRule = { car?: PrimitiveType[]; cdr?: boolean }
-export interface ArgumentChecker {
-  checkRule: CheckRule
-}
-
-export function hasArgumentChecker(x: any): x is ArgumentChecker {
-  return 'checkRule' in x
-}
 
 // all unit changes env should be blocked
 // def defn struct...
 // also break continue
 // they are all statements
-export function checkArgs(
-  rule: CheckRule,
-  ctx: Backend,
-  env: Environment,
-  { expr }: ASTNode<SExprCell>,
-) {
-  if (expr.cdr !== null) {
-    error(expr.cdr.meta, 'compiling: unexpected `cdr`')
-  }
-
-  if (rule.car === undefined) {
-    return
-  }
-
-  const { car } = expr
-  const unit = car[0]
-  const unitValue = (unit.expr as SExprSym).value
-
-  const args = car.slice(1)
-  const paramLen = rule.car.length
-  const argLen = args.length
-
-  if (argLen < paramLen) {
-    error(
-      unit.meta,
-      `compiling: \`${unitValue}\` expects ${rule.cdr ? 'at least ' : ''}${paramLen} arguments, but found ${argLen}.`,
-    )
-  }
-  if (!rule.cdr && argLen > paramLen) {
-    error(
-      args[paramLen].meta,
-      `compiling: \`${unitValue}\` expects exactly ${paramLen} arguments, but found ${argLen}.`,
-    )
-  }
-
-  for (const [i, paramType] of rule.car.entries()) {
-    if (paramType === 'any') {
-      continue
-    }
-
-    const arg = args[i]
-    const argType = arg.expr.type
-    switch (argType) {
-      case 'sym':
-        if (!arg.expr.internal) {
-          // TODO
-          // ctx.runtimeCheckArg(paramType, env, arg)
-        }
-        break
-      case 'cell':
-        // TODO
-        // ctx.runtimeCheckArg(paramType, env, arg)
-        break
-      case 'num':
-        if (!Number.isInteger(arg.expr.value)) {
-          error(arg.meta, `compiling: Float number is currently unsupported.`)
-        }
-        if (paramType !== 'i64') {
-          error(
-            arg.meta,
-            `compiling: expecting \`${paramType}\`, found \`i64\``,
-          )
-        }
-        break
-      default:
-        if (argType !== paramType) {
-          error(
-            arg.meta,
-            `compiling: expecting \`${paramType}\`, found \`${argType}\``,
-          )
-        }
-    }
-  }
-}
-
-export function checkType<T>(
-  ctx: Backend,
-  env: Environment,
+export function checkArgs<T>(
   { id, params: { car, cdr } }: Fn,
-  fnNode: ASTNode,
+  fnMeta: ASTMeta,
   argNodes: ASTNode[],
-  // fnValue: T,
-  // args: T[],
+  args: T[],
+  checkType: (type: PrimitiveType, x: T, meta: ASTMeta) => void,
 ) {
-  // if (fnNode.expr.type !== '')
-
   if (car === undefined) {
     return
   }
 
   if (argNodes.length < car.length) {
     error(
-      fnNode.meta,
+      fnMeta,
       `compiling: \`${id}\` expects ${cdr ? 'at least ' : ''}${car.length} arguments, but found ${argNodes.length}.`,
     )
   }
@@ -379,23 +308,27 @@ export function checkType<T>(
     }
 
     const arg = args[i]
-    const argType = arg.expr.type
+    const argNode = argNodes[i]
+    const argType = argNode.expr.type
     switch (argType) {
       case 'sym':
-        if (!arg.expr.internal) {
-          ctx.runtimeCheckArg(paramType, env, arg)
+        if (!argNode.expr.internal) {
+          checkType(paramType, arg, argNode.meta)
         }
         break
       case 'cell':
-        ctx.runtimeCheckArg(paramType, env, arg)
+        checkType(paramType, arg, argNode.meta)
         break
       case 'num':
-        if (!Number.isInteger(arg.expr.value)) {
-          error(arg.meta, `compiling: Float number is currently unsupported.`)
+        if (!Number.isInteger(argNode.expr.value)) {
+          error(
+            argNode.meta,
+            `compiling: Float number is currently unsupported.`,
+          )
         }
         if (paramType !== 'i64') {
           error(
-            arg.meta,
+            argNode.meta,
             `compiling: expecting \`${paramType}\`, found \`i64\``,
           )
         }
@@ -403,7 +336,7 @@ export function checkType<T>(
       default:
         if (argType !== paramType) {
           error(
-            arg.meta,
+            argNode.meta,
             `compiling: expecting \`${paramType}\`, found \`${argType}\``,
           )
         }
