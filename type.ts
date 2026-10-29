@@ -1,7 +1,7 @@
 import type { BytecodeBackend, QBEBackend } from './backend'
 import { CodeBuffer, Instruction } from './bytecode'
 import type { BytecodeEnv, Environment, QBEEnv } from './env'
-import { error } from './utils'
+import { error, mustLookup } from './utils'
 
 export type SExprBool = { type: 'bool'; value: boolean }
 export type SExprNum = { type: 'num'; value: number }
@@ -114,6 +114,7 @@ export function typeToQBEBox(paramType: PrimitiveType) {
 }
 
 export type Unit = Syntax | Fn
+export type UnitClass = new () => Unit
 
 export abstract class Syntax {
   abstract isStatement?: boolean
@@ -141,7 +142,7 @@ export function isUnit(x: any): x is Unit {
 }
 
 export function compileCell<T>(
-  env: Environment,
+  env: Environment<T>,
   cell: ASTNode<SExprCell>,
   {
     checkType,
@@ -173,7 +174,7 @@ export function compileCell<T>(
         throw Error(`Internal value as a function is unsupported.`)
       }
 
-      op = env.lookup(opNode.expr.value)
+      op = mustLookup(opNode as ASTNode<SExprSym>, env)
       if (!isUnit(op)) {
         checkType('fn', op, opNode.meta, fnTypeError)
       }
@@ -274,17 +275,31 @@ export function qbeCompileArgs(ctx: QBEBackend, env: QBEEnv, nodes: ASTNode[]) {
 
 export type CheckRule = { car?: PrimitiveType[]; cdr?: boolean }
 
-// all unit changes env should be blocked
-// def defn struct...
-// also break continue
-// they are all statements
 export function checkArgs<T>(
+  env: Environment<T>,
   { id, params: { car, cdr } }: Fn,
   fnMeta: ASTMeta,
   argNodes: ASTNode[],
   args: T[],
   checkType: (type: PrimitiveType, x: T, meta: ASTMeta) => void,
 ) {
+  for (const node of argNodes) {
+    if (node.expr.type !== 'cell') {
+      continue
+    }
+    const opNode = node.expr.car.at(0)
+    if (opNode === undefined || opNode.expr.type !== 'sym') {
+      continue
+    }
+    const syntax = env.lookup(opNode.expr.value)
+    if (syntax instanceof Syntax && syntax.isStatement) {
+      error(
+        opNode.meta,
+        'compiling: Statements are not allowed in an expression context.',
+      )
+    }
+  }
+
   if (car === undefined) {
     return
   }

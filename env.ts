@@ -1,15 +1,9 @@
-import {
-  isUnitConstructor,
-  type BytecodeCompiler,
-  type QBECompiler,
-  type Unit,
-  type UnitConstructor,
-} from './type'
+import type { Unit, UnitClass } from './type'
 
 export interface Environment<R = unknown> {
-  defineUnit(name: string, constructor: UnitConstructor<T>): void
-  defineVarUnit(name: string, unit: T): void
-  lookup(name: string): R | T | null
+  defineUnit(name: string, constructor: UnitClass): void
+  defineVarUnit(name: string, unit: Unit): void
+  lookup(name: string): R | Unit | null
 
   readonly struct: StructState
 }
@@ -17,11 +11,8 @@ export interface Environment<R = unknown> {
 export type StructState = { idCounter: number; meta: StructMeta[] }
 export type StructMeta = { name: string; fields: string[] }
 
-export class BytecodeEnv implements Environment<BytecodeCompiler, number> {
-  readonly #vars = new Map<
-    string,
-    number | UnitConstructor<BytecodeCompiler> | BytecodeCompiler
-  >()
+export class BytecodeEnv implements Environment<number> {
+  readonly #vars = new Map<string, number | Unit | UnitClass>()
   sp: number | null
 
   readonly struct: StructState = { idCounter: 0, meta: [] }
@@ -33,11 +24,11 @@ export class BytecodeEnv implements Environment<BytecodeCompiler, number> {
     this.sp = isFnScope ? 0 : null
   }
 
-  defineUnit(name: string, constructor: UnitConstructor<BytecodeCompiler>) {
+  defineUnit(name: string, constructor: UnitClass) {
     this.#vars.set(name, constructor)
   }
 
-  defineVarUnit(name: string, unit: BytecodeCompiler) {
+  defineVarUnit(name: string, unit: Unit) {
     this.#vars.set(name, unit)
   }
 
@@ -51,11 +42,11 @@ export class BytecodeEnv implements Environment<BytecodeCompiler, number> {
     return this.#updateSP((sp) => sp + 1)
   }
 
-  lookup(name: string): number | BytecodeCompiler | null {
+  lookup(name: string): number | Unit | null {
     if (this.#vars.has(name)) {
       const item = this.#vars.get(name)!
-      if (isUnitConstructor(item)) {
-        return item()
+      if (typeof item === 'function') {
+        return new item()
       }
       return item
     }
@@ -77,12 +68,8 @@ export class BytecodeEnv implements Environment<BytecodeCompiler, number> {
   }
 }
 
-// TODO: Distinguish the identifier of the builtin and the external.
-export class QBEEnv implements Environment<QBECompiler, string> {
-  readonly #vars = new Map<
-    string,
-    (string | UnitConstructor<QBECompiler> | QBECompiler)[]
-  >()
+export class QBEEnv implements Environment<string> {
+  readonly #vars = new Map<string, (string | Unit | UnitClass)[]>()
   #counter: number | null
   #subScopes: QBEEnv[] | null
 
@@ -113,11 +100,11 @@ export class QBEEnv implements Environment<QBECompiler, string> {
       .toArray()
   }
 
-  defineUnit(name: string, constructor: UnitConstructor<QBECompiler>) {
+  defineUnit(name: string, constructor: UnitClass) {
     this.#vars.set(name, [constructor])
   }
 
-  defineVarUnit(name: string, unit: QBECompiler) {
+  defineVarUnit(name: string, unit: Unit) {
     this.#vars.set(name, [unit])
   }
 
@@ -138,11 +125,11 @@ export class QBEEnv implements Environment<QBECompiler, string> {
     return `@b_${this.#updateCount((count) => count + 1)}`
   }
 
-  lookup(name: string): string | QBECompiler | null {
+  lookup(name: string): string | Unit | null {
     if (this.#vars.has(name)) {
       const item = this.#vars.get(name)!.at(-1)!
-      if (isUnitConstructor<QBECompiler>(item)) {
-        return item()
+      if (typeof item === 'function') {
+        return new item()
       }
       return item
     }

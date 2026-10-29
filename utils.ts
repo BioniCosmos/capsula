@@ -7,13 +7,13 @@ export function error(meta: ASTMeta, message: string): never {
   exit(1)
 }
 
-export function mustLookup<R, U extends Unit>(
+export function mustLookup<R>(
   { expr, meta }: ASTNode<SExprSym>,
-  env: Environment<U, R>,
+  env: Environment<R>,
 ) {
   const x = env.lookup(expr.value)
   if (x === null) {
     error(meta, 'compiling: unbound identifier')
   }
-  return x as R | U
+  return x as R | Unit
 }
