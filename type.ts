@@ -127,8 +127,7 @@ export abstract class Syntax {
 }
 
 export abstract class Fn {
-  abstract id: string
-  abstract params: CheckRule
+  abstract params: Params
   abstract bytecode(
     ctx: BytecodeBackend,
     env: BytecodeEnv,
@@ -142,17 +141,11 @@ export function isUnit(x: any): x is Unit {
 }
 
 export function compileCell<T>(
-  env: Environment<T>,
+  compiler: CellCompiler<T>,
   cell: ASTNode<SExprCell>,
-  {
-    checkType,
-    compileOpExpr,
-    fnTypeError,
-    compileArgs,
-    call,
-    compileSyntax,
-  }: CellCompiler<T>,
 ) {
+  const { env, fnTypeError } = compiler
+
   const {
     expr: { car, cdr },
     meta,
@@ -176,46 +169,48 @@ export function compileCell<T>(
 
       op = mustLookup(opNode as ASTNode<SExprSym>, env)
       if (!isUnit(op)) {
-        checkType('fn', op, opNode.meta, fnTypeError)
+        compiler.checkType('fn', op, opNode.meta, fnTypeError)
       }
 
       break
     }
     case 'cell': {
-      op = compileOpExpr(opNode)
-      checkType('fn', op, opNode.meta, fnTypeError)
+      op = compiler.compileOpExpr(opNode)
+      compiler.checkType('fn', op, opNode.meta, fnTypeError)
       break
     }
     default:
       error(meta, `compiling: \`${opNode.expr.type}\` is not callable.`)
   }
 
-  const args = compileArgs(argNodes)
-
+  const args = compiler.compileArgs(argNodes)
   if (!isUnit(op)) {
-    call(op, args)
+    compiler.call(op, args)
     return
   }
   if (op instanceof Syntax) {
-    compileSyntax(op, cell)
+    compiler.compileSyntax(op, cell)
     return
   }
-  // TODO: compile unit
+  checkFnArgs(compiler, op, opNode as ASTNode<SExprSym>, argNodes, args)
+  compiler.compileFn(op, args)
 }
 
 interface CellCompiler<T> {
+  env: Environment<T>
   checkType(type: PrimitiveType, x: T, meta: ASTMeta, format?: string): void
   compileOpExpr(node: ASTNode): T
   fnTypeError: string
   compileArgs(nodes: ASTNode[]): T[]
   call(fn: T, args: T[]): void
   compileSyntax(syntax: Syntax, cell: ASTNode<SExprCell>): void
+  compileFn(fn: Fn, args: T[]): void
 }
 
 export class BytecodeCellCompiler implements CellCompiler<number> {
   constructor(
     private ctx: BytecodeBackend,
-    private env: BytecodeEnv,
+    public env: BytecodeEnv,
   ) {}
 
   checkType(type: PrimitiveType, x: number, meta: ASTMeta, format?: string) {
@@ -252,6 +247,10 @@ export class BytecodeCellCompiler implements CellCompiler<number> {
   compileSyntax(syntax: Syntax, cell: ASTNode<SExprCell>) {
     syntax.bytecode(this.ctx, this.env, cell)
   }
+
+  compileFn(fn: Fn, args: number[]) {
+    fn.bytecode(this.ctx, this.env, args)
+  }
 }
 
 export function qbeCompileArgs(ctx: QBEBackend, env: QBEEnv, nodes: ASTNode[]) {
@@ -273,15 +272,14 @@ export function qbeCompileArgs(ctx: QBEBackend, env: QBEEnv, nodes: ASTNode[]) {
   return args
 }
 
-export type CheckRule = { car?: PrimitiveType[]; cdr?: boolean }
+export type Params = { car?: PrimitiveType[]; cdr?: boolean }
 
-export function checkArgs<T>(
-  env: Environment<T>,
-  { id, params: { car, cdr } }: Fn,
-  fnMeta: ASTMeta,
+export function checkFnArgs<T>(
+  compiler: CellCompiler<T>,
+  { params: { car, cdr } }: Fn,
+  fnNode: ASTNode<SExprSym>,
   argNodes: ASTNode[],
   args: T[],
-  checkType: (type: PrimitiveType, x: T, meta: ASTMeta) => void,
 ) {
   for (const node of argNodes) {
     if (node.expr.type !== 'cell') {
@@ -291,7 +289,7 @@ export function checkArgs<T>(
     if (opNode === undefined || opNode.expr.type !== 'sym') {
       continue
     }
-    const syntax = env.lookup(opNode.expr.value)
+    const syntax = compiler.env.lookup(opNode.expr.value)
     if (syntax instanceof Syntax && syntax.isStatement) {
       error(
         opNode.meta,
@@ -306,14 +304,14 @@ export function checkArgs<T>(
 
   if (argNodes.length < car.length) {
     error(
-      fnMeta,
-      `compiling: \`${id}\` expects ${cdr ? 'at least ' : ''}${car.length} arguments, but found ${argNodes.length}.`,
+      fnNode.meta,
+      `compiling: \`${fnNode.expr.value}\` expects ${cdr ? 'at least ' : ''}${car.length} arguments, but found ${argNodes.length}.`,
     )
   }
   if (!cdr && argNodes.length > car.length) {
     error(
       argNodes[car.length].meta,
-      `compiling: \`${id}\` expects exactly ${car.length} arguments, but found ${argNodes.length}.`,
+      `compiling: \`${fnNode.expr.value}\` expects exactly ${car.length} arguments, but found ${argNodes.length}.`,
     )
   }
 
@@ -328,11 +326,11 @@ export function checkArgs<T>(
     switch (argType) {
       case 'sym':
         if (!argNode.expr.internal) {
-          checkType(paramType, arg, argNode.meta)
+          compiler.checkType(paramType, arg, argNode.meta)
         }
         break
       case 'cell':
-        checkType(paramType, arg, argNode.meta)
+        compiler.checkType(paramType, arg, argNode.meta)
         break
       case 'num':
         if (!Number.isInteger(argNode.expr.value)) {
