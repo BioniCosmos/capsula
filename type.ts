@@ -1,6 +1,6 @@
 import type { BytecodeBackend, QBEBackend } from './backend'
 import { CodeBuffer, Instruction } from './bytecode'
-import type { BytecodeEnv, Environment, QBEEnv } from './env'
+import { BytecodeEnv, type Environment, type QBEEnv } from './env'
 import { error, mustLookup } from './utils'
 
 export type SExprBool = { type: 'bool'; value: boolean }
@@ -412,6 +412,51 @@ export function qbeCheckType(
       { env, predIsValue: true },
     )
   }
+}
+
+export function compileSym(
+  ctx: BytecodeBackend,
+  env: BytecodeEnv,
+  node: ASTNode<SExprSym>,
+) {
+  const { expr, meta } = node
+
+  if (expr.internal !== undefined) {
+    if (typeof expr.internal !== 'number') {
+      throw Error('invalid internal value')
+    }
+    ctx.emit(Instruction.Load(expr.internal))
+    return
+  }
+
+  const x = mustLookup(node, env)
+  if (x instanceof Syntax) {
+    throw Error(
+      'unreachable: `compileCell` guarantees that `Syntax` will not appear here.',
+    )
+  }
+
+  if (typeof x === 'number') {
+    ctx.emit(Instruction.Load(x))
+    return
+  }
+
+  const fnAddr = ctx.startFn()
+  const fnScope = new BytecodeEnv(null, true)
+  const args: number[] = []
+  if (x.params.car !== undefined) {
+    for (let i = 0; i < x.params.car.length; i++) {
+      ctx.emit(Instruction.Save(env.defineTemp()))
+    }
+  }
+  if (x.params.cdr) {
+    ctx.emit(Instruction.Save(env.defineTemp()))
+  }
+  x.bytecode(ctx, fnScope, args)
+  ctx.endFn(fnScope.sp!)
+  ctx.compileExpr(num(fnAddr, meta), env)
+  ctx.compileExpr(str('fn', meta), env)
+  ctx.emit(Instruction.NativeCall)
 }
 
 export class BytecodeFnChunk {

@@ -5,9 +5,9 @@ import { BytecodeEnv, QBEEnv, type Environment } from './env'
 import {
   BytecodeCellCompiler,
   BytecodeFnChunk,
-  checkArgs,
+  checkFnArgs,
   compileCell,
-  hasArgumentChecker,
+  compileSym,
   isUnit,
   qbeConst,
   QBEFnChunk,
@@ -65,47 +65,20 @@ export class BytecodeBackend implements Backend {
   }
 
   compileExpr(node: ASTNode, env: BytecodeEnv) {
-    const { expr, meta } = node
-    switch (expr.type) {
+    switch (node.expr.type) {
       case 'bool':
       case 'num':
       case 'str':
-        this.emit(Instruction.Push(this.#fn.constants.push(expr) - 1))
+        this.emit(Instruction.Push(this.#fn.constants.push(node.expr) - 1))
         return
-      case 'sym': {
-        if (expr.internal !== undefined) {
-          if (typeof expr.internal !== 'number') {
-            throw Error('invalid internal value')
-          }
-          this.emit(Instruction.Load(expr.internal))
-          return
-        }
-
-        const x = mustLookup(node as ASTNode<SExprSym>, env)
-
-        if (typeof x === 'number') {
-          this.emit(Instruction.Load(x))
-          return
-        }
-
-        this.emit(
-          Instruction.Push(
-            this.#fn.constants.push({
-              type: 'str',
-              value: `unit:${expr.value}`,
-            }) - 1,
-          ),
-        )
+      case 'sym':
+        compileSym(this, env, node as ASTNode<SExprSym>)
         return
-      }
-      case 'cell': {
+      case 'cell':
         compileCell(
-          this,
-          env,
-          { expr, meta },
           new BytecodeCellCompiler(this, env),
+          node as ASTNode<SExprCell>,
         )
-      }
     }
   }
 
