@@ -1,24 +1,20 @@
 import type { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { BytecodeEnv, QBEEnv } from '@/env'
-import {
-  qbeConst,
-  type ASTNode,
-  type BytecodeCompiler,
-  type QBECompiler,
-  type SExprCell,
-} from '@/type'
+import { CallSite, type Params, qbeConst, str, Unit } from '@/type'
 import type { Module } from '.'
 
-class Print implements BytecodeCompiler, QBECompiler {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    ctx.compileExpr(cell.expr.car[1], env)
-    ctx.emit(Instruction.Print)
+class Print extends Unit {
+  override params: Params = { car: ['any'] }
+
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, _site: CallSite, args: number[]) {
+    ctx.emit(Instruction.Load(args[0]))
+    ctx.compileExpr(str('print'), env)
+    ctx.emit(Instruction.NativeCall)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const value = ctx.compileExpr(cell.expr.car[1], env)
-    ctx.emit(`call $var_display(l ${value})`)
+  qbe(ctx: QBEBackend, _env: QBEEnv, _site: CallSite, args: string[]) {
+    ctx.emit(`call $var_display(l ${args[0]})`)
     return qbeConst.Unit
   }
 }
