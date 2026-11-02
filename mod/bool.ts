@@ -97,7 +97,7 @@ class Not extends Unit {
 
 export default {
   name: 'bool',
-  dependencies: ['core'],
+  dependencies: [],
   units: { and: And, or: Or, not: Not },
   prelude: '',
 } satisfies Module
