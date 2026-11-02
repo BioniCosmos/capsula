@@ -12,31 +12,31 @@ export type SExpr = SExprBool | SExprNum | SExprStr | SExprSym | SExprCell
 export type ASTMeta = { fileName: string; line: number; column: number }
 export type ASTNode<T extends SExpr = SExpr> = { expr: T; meta: ASTMeta }
 
-export function bool(value: boolean, meta: ASTMeta): ASTNode<SExprBool> {
+export function bool(value: boolean, meta = internalMeta): ASTNode<SExprBool> {
   return { expr: { type: 'bool', value }, meta }
 }
 
-export function num(value: number, meta: ASTMeta): ASTNode<SExprNum> {
+export function num(value: number, meta = internalMeta): ASTNode<SExprNum> {
   return { expr: { type: 'num', value }, meta }
 }
 
-export function str(value: string, meta: ASTMeta): ASTNode<SExprStr> {
+export function str(value: string, meta = internalMeta): ASTNode<SExprStr> {
   return { expr: { type: 'str', value }, meta }
 }
 
-export function sym(value: string, meta: ASTMeta): ASTNode<SExprSym> {
+export function sym(value: string, meta = internalMeta): ASTNode<SExprSym> {
   return { expr: { type: 'sym', value }, meta }
 }
 
-export function consCAR(car: ASTNode[], meta: ASTMeta): ASTNode<SExprCell> {
+export function consCAR(car: ASTNode[], meta = internalMeta): ASTNode<SExprCell> {
   return { expr: { type: 'cell', car, cdr: null }, meta }
 }
 
-export function internal(value: unknown, meta: ASTMeta): ASTNode<SExprSym> {
+export function internal(value: unknown, meta = internalMeta): ASTNode<SExprSym> {
   return { expr: { type: 'sym', value: '', internal: value }, meta }
 }
 
-export function consWith(meta: ASTMeta) {
+export function consWith(meta = internalMeta) {
   return {
     bool: (x: boolean) => bool(x, meta),
     num: (x: number) => num(x, meta),
@@ -47,8 +47,9 @@ export function consWith(meta: ASTMeta) {
   }
 }
 
-export type PrimitiveType =
-  'bool' | 'i64' | 'sym' | 'str' | 'arr' | 'struct' | 'fn' | 'any'
+const internalMeta: ASTMeta = { fileName: '', line: 0, column: 0 }
+
+export type PrimitiveType = 'bool' | 'i64' | 'sym' | 'str' | 'arr' | 'struct' | 'fn' | 'any'
 
 export const vmVarType = {
   unit: 0,
@@ -112,37 +113,29 @@ export function typeToQBEBox(paramType: PrimitiveType) {
   throw Error(`\`${paramType}\` is not a box type.`)
 }
 
-export type Unit = Syntax | Fn
+export abstract class Unit {
+  params: Params = {}
+  lazy = false
+  isStatement = false
+
+  abstract bytecode(ctx: BytecodeBackend, env: BytecodeEnv, site: CallSite, args: number[]): void
+  abstract qbe(ctx: QBEBackend, env: QBEEnv, site: CallSite, args: string[]): string
+}
 export type UnitClass = new () => Unit
 
-export abstract class Syntax {
-  abstract isStatement?: boolean
-  abstract bytecode(
-    ctx: BytecodeBackend,
-    env: BytecodeEnv,
-    cell: ASTNode<SExprCell>,
-  ): void
-  abstract qbe(ctx: QBEBackend, env: QBEEnv, cell: ASTNode<SExprCell>): string
+export class CallSite {
+  constructor(public cell: ASTNode<SExprCell>) {}
+
+  get operator() {
+    return this.cell.expr.car[0]
+  }
+
+  get operands() {
+    return this.cell.expr.car.slice(1)
+  }
 }
 
-export abstract class Fn {
-  abstract params: Params
-  abstract bytecode(
-    ctx: BytecodeBackend,
-    env: BytecodeEnv,
-    args: number[],
-  ): void
-  abstract qbe(ctx: QBEBackend, env: QBEEnv, args: string[]): string
-}
-
-export function isUnit(x: any): x is Unit {
-  return x instanceof Syntax || x instanceof Fn
-}
-
-export function compileCell<T>(
-  compiler: CellCompiler<T>,
-  cell: ASTNode<SExprCell>,
-) {
+export function compileCell<T>(compiler: CellCompiler<T>, cell: ASTNode<SExprCell>) {
   const { env, fnTypeError } = compiler
 
   const {
@@ -167,7 +160,7 @@ export function compileCell<T>(
       }
 
       op = mustLookup(opNode as ASTNode<SExprSym>, env)
-      if (!isUnit(op)) {
+      if (!(op instanceof Unit)) {
         compiler.checkType('fn', op, opNode.meta, fnTypeError)
       }
 
@@ -182,17 +175,14 @@ export function compileCell<T>(
       error(meta, `compiling: \`${opNode.expr.type}\` is not callable.`)
   }
 
-  const args = compiler.compileArgs(argNodes)
-  if (!isUnit(op)) {
+  const site = new CallSite(cell)
+  const args = op instanceof Unit && op.lazy ? [] : compiler.compileArgs(argNodes)
+  if (!(op instanceof Unit)) {
     compiler.call(op, args)
     return
   }
-  if (op instanceof Syntax) {
-    compiler.compileSyntax(op, cell)
-    return
-  }
-  checkFnArgs(compiler, op, opNode as ASTNode<SExprSym>, argNodes, args)
-  compiler.compileFn(op, args)
+  checkArgs(compiler, op, site, args)
+  compiler.compileUnit(op, site, args)
 }
 
 interface CellCompiler<T> {
@@ -202,8 +192,7 @@ interface CellCompiler<T> {
   fnTypeError: string
   compileArgs(nodes: ASTNode[]): T[]
   call(fn: T, args: T[]): void
-  compileSyntax(syntax: Syntax, cell: ASTNode<SExprCell>): void
-  compileFn(fn: Fn, args: T[]): void
+  compileUnit(unit: Unit, site: CallSite, args: T[]): void
 }
 
 export class BytecodeCellCompiler implements CellCompiler<number> {
@@ -243,12 +232,8 @@ export class BytecodeCellCompiler implements CellCompiler<number> {
     this.ctx.emit(Instruction.Call(fn))
   }
 
-  compileSyntax(syntax: Syntax, cell: ASTNode<SExprCell>) {
-    syntax.bytecode(this.ctx, this.env, cell)
-  }
-
-  compileFn(fn: Fn, args: number[]) {
-    fn.bytecode(this.ctx, this.env, args)
+  compileUnit(unit: Unit, site: CallSite, args: number[]) {
+    unit.bytecode(this.ctx, this.env, site, args)
   }
 }
 
@@ -271,16 +256,12 @@ export function qbeCompileArgs(ctx: QBEBackend, env: QBEEnv, nodes: ASTNode[]) {
   return args
 }
 
-export type Params = { car?: PrimitiveType[]; cdr?: boolean }
+export type Params = { car?: PrimitiveType[]; cdr?: boolean; check?(site: CallSite): void }
 
-export function checkFnArgs<T>(
-  compiler: CellCompiler<T>,
-  { params: { car, cdr } }: Fn,
-  fnNode: ASTNode<SExprSym>,
-  argNodes: ASTNode[],
-  args: T[],
-) {
-  for (const node of argNodes) {
+export function checkArgs<T>(compiler: CellCompiler<T>, unit: Unit, site: CallSite, args: T[]) {
+  const { operator, operands } = site
+
+  for (const node of operands) {
     if (node.expr.type !== 'cell') {
       continue
     }
@@ -288,72 +269,64 @@ export function checkFnArgs<T>(
     if (opNode === undefined || opNode.expr.type !== 'sym') {
       continue
     }
-    const syntax = compiler.env.lookup(opNode.expr.value)
-    if (syntax instanceof Syntax && syntax.isStatement) {
+    const unit = compiler.env.lookup(opNode.expr.value)
+    if (unit instanceof Unit && unit.isStatement) {
+      error(opNode.meta, 'compiling: Statements are not allowed in an expression context.')
+    }
+  }
+
+  const { car, cdr, check } = unit.params
+
+  if (car !== undefined) {
+    const fnId = (operator.expr as SExprSym).value
+    if (operands.length < car.length) {
       error(
-        opNode.meta,
-        'compiling: Statements are not allowed in an expression context.',
+        operator.meta,
+        `compiling: \`${fnId}\` expects ${cdr ? 'at least ' : ''}${car.length} arguments, but found ${operands.length}.`,
       )
     }
-  }
-
-  if (car === undefined) {
-    return
-  }
-
-  if (argNodes.length < car.length) {
-    error(
-      fnNode.meta,
-      `compiling: \`${fnNode.expr.value}\` expects ${cdr ? 'at least ' : ''}${car.length} arguments, but found ${argNodes.length}.`,
-    )
-  }
-  if (!cdr && argNodes.length > car.length) {
-    error(
-      argNodes[car.length].meta,
-      `compiling: \`${fnNode.expr.value}\` expects exactly ${car.length} arguments, but found ${argNodes.length}.`,
-    )
-  }
-
-  for (const [i, paramType] of car.entries()) {
-    if (paramType === 'any') {
-      continue
+    if (!cdr && operands.length > car.length) {
+      error(
+        operands[car.length].meta,
+        `compiling: \`${fnId}\` expects exactly ${car.length} arguments, but found ${operands.length}.`,
+      )
     }
 
-    const arg = args[i]
-    const argNode = argNodes[i]
-    const argType = argNode.expr.type
-    switch (argType) {
-      case 'sym':
-        if (!argNode.expr.internal) {
-          compiler.checkType(paramType, arg, argNode.meta)
-        }
-        break
-      case 'cell':
-        compiler.checkType(paramType, arg, argNode.meta)
-        break
-      case 'num':
-        if (!Number.isInteger(argNode.expr.value)) {
-          error(
-            argNode.meta,
-            `compiling: Float number is currently unsupported.`,
-          )
-        }
-        if (paramType !== 'i64') {
-          error(
-            argNode.meta,
-            `compiling: expecting \`${paramType}\`, found \`i64\``,
-          )
-        }
-        break
-      default:
-        if (argType !== paramType) {
-          error(
-            argNode.meta,
-            `compiling: expecting \`${paramType}\`, found \`${argType}\``,
-          )
-        }
+    for (const [i, paramType] of car.entries()) {
+      if (paramType === 'any') {
+        continue
+      }
+
+      const argNode = operands[i]
+      const argType = argNode.expr.type
+      switch (argType) {
+        case 'sym':
+          if (!argNode.expr.internal && !unit.lazy) {
+            compiler.checkType(paramType, args[i], argNode.meta)
+          }
+          break
+        case 'cell':
+          if (!unit.lazy) {
+            compiler.checkType(paramType, args[i], argNode.meta)
+          }
+          break
+        case 'num':
+          if (!Number.isInteger(argNode.expr.value)) {
+            error(argNode.meta, `compiling: Float number is currently unsupported.`)
+          }
+          if (paramType !== 'i64') {
+            error(argNode.meta, `compiling: expecting \`${paramType}\`, found \`i64\``)
+          }
+          break
+        default:
+          if (argType !== paramType) {
+            error(argNode.meta, `compiling: expecting \`${paramType}\`, found \`${argType}\``)
+          }
+      }
     }
   }
+
+  check?.(site)
 }
 
 export function bytecodeCheckType(
@@ -390,12 +363,7 @@ export function qbeCheckType(
   meta: ASTMeta,
   format = `expecting \`${type}\`, found \`%s\``,
 ) {
-  const panic = () =>
-    ctx.panic(
-      meta,
-      format,
-      `l ${ctx.defineTemp(`call $type_name(l ${x})`, env)}`,
-    )
+  const panic = () => ctx.panic(meta, format, `l ${ctx.defineTemp(`call $type_name(l ${x})`, env)}`)
   ctx.if(() => `cnew ${ctx.tag(x, env)}, ${typeToQBETag(type)}`, panic, {
     env,
   })
@@ -413,11 +381,7 @@ export function qbeCheckType(
   }
 }
 
-export function compileSym(
-  ctx: BytecodeBackend,
-  env: BytecodeEnv,
-  node: ASTNode<SExprSym>,
-) {
+export function compileSym(ctx: BytecodeBackend, env: BytecodeEnv, node: ASTNode<SExprSym>) {
   const { expr, meta } = node
 
   if (expr.internal !== undefined) {
@@ -429,29 +393,29 @@ export function compileSym(
   }
 
   const x = mustLookup(node, env)
-  if (x instanceof Syntax) {
-    throw Error(
-      'unreachable: `compileCell` guarantees that `Syntax` will not appear here.',
-    )
-  }
 
   if (typeof x === 'number') {
     ctx.emit(Instruction.Load(x))
     return
   }
 
+  if (x.params.car === undefined || x.lazy || x.isStatement) {
+    error(meta, 'compiling: Syntax itself cannot be used as an expression.')
+    // throw Error(
+    //   'unreachable: `compileCell` guarantees that `Syntax` will not appear here.',
+    // )
+  }
+
   const fnAddr = ctx.startFn()
   const fnScope = new BytecodeEnv(null, true)
   const args: number[] = []
-  if (x.params.car !== undefined) {
-    for (let i = 0; i < x.params.car.length; i++) {
-      ctx.emit(Instruction.Save(env.defineTemp()))
-    }
+  for (let i = 0; i < x.params.car.length; i++) {
+    ctx.emit(Instruction.Save(env.defineTemp()))
   }
   if (x.params.cdr) {
     ctx.emit(Instruction.Save(env.defineTemp()))
   }
-  x.bytecode(ctx, fnScope, args)
+  x.bytecode(ctx, fnScope, new CallSite({ expr: { type: 'cell', car: [], cdr: null }, meta }), args)
   ctx.endFn(fnScope.sp!)
   ctx.compileExpr(num(fnAddr, meta), env)
   ctx.compileExpr(str('fn', meta), env)
