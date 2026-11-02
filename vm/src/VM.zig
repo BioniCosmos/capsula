@@ -191,7 +191,7 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
                 self.base = self.top + 1;
                 self.top = self.base + functions[fn_idx].local_count;
             },
-            .native_call => native_functions.get(self.pop().sym).?(self) catch |err|
+            .native_call => native_functions.get(self.pop().str).?(self) catch |err|
                 if (err == NativeFnError.Break) break else return @errorCast(err),
             .ret => {
                 const top = self.base - 1;
