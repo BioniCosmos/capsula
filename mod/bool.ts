@@ -1,95 +1,65 @@
-import { QBEBackend, type BytecodeBackend } from '@/backend'
+import { type BytecodeBackend, QBEBackend } from '@/backend'
 import type { BytecodeEnv, QBEEnv } from '@/env'
-import type {
-  ArgumentChecker,
-  ASTNode,
-  BytecodeCompiler,
-  CheckRule,
-  QBECompiler,
-  SExprCell,
+import {
+  type ASTNode,
+  bool,
+  type CallSite,
+  consCAR,
+  internal,
+  type Params,
+  type SExprCell,
+  sym,
+  Unit,
 } from '@/type'
 import type { Module } from '.'
 
-class And implements BytecodeCompiler, QBECompiler, ArgumentChecker {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    ctx.compileExpr(And.#if(cell), env)
+class And extends Unit {
+  override params: Params = { car: ['bool', 'bool'] }
+  override lazy = true
+
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, site: CallSite, _args: number[]) {
+    ctx.compileExpr(And.#if(site), env)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    return ctx.compileExpr(And.#if(cell), env)
+  qbe(ctx: QBEBackend, env: QBEEnv, site: CallSite, _args: string[]) {
+    return ctx.compileExpr(And.#if(site), env)
   }
 
-  checkRule: CheckRule = { car: ['bool', 'bool'] }
-
-  static #if({ expr, meta }: ASTNode<SExprCell>): ASTNode<SExprCell> {
-    return {
-      expr: {
-        type: 'cell',
-        car: [
-          { expr: { type: 'sym', value: 'if' }, meta: expr.car[0].meta },
-          expr.car[1],
-          expr.car[2],
-          { expr: { type: 'bool', value: false }, meta },
-        ],
-        cdr: null,
-      },
-      meta,
-    }
+  static #if({ operands }: CallSite): ASTNode<SExprCell> {
+    return consCAR([sym('if'), operands[0], operands[1], bool(false)])
   }
 }
 
-class Or implements BytecodeCompiler, QBECompiler, ArgumentChecker {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    ctx.compileExpr(Or.#if(cell), env)
+class Or extends Unit {
+  override params: Params = { car: ['bool', 'bool'] }
+  override lazy = true
+
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, site: CallSite, _args: number[]) {
+    ctx.compileExpr(Or.#if(site), env)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    return ctx.compileExpr(Or.#if(cell), env)
+  qbe(ctx: QBEBackend, env: QBEEnv, site: CallSite, _args: string[]) {
+    return ctx.compileExpr(Or.#if(site), env)
   }
 
-  checkRule: CheckRule = { car: ['bool', 'bool'] }
-
-  static #if({ expr, meta }: ASTNode<SExprCell>): ASTNode<SExprCell> {
-    return {
-      expr: {
-        type: 'cell',
-        car: [
-          { expr: { type: 'sym', value: 'if' }, meta: expr.car[0].meta },
-          expr.car[1],
-          { expr: { type: 'bool', value: true }, meta },
-          expr.car[2],
-        ],
-        cdr: null,
-      },
-      meta,
-    }
+  static #if({ operands }: CallSite): ASTNode<SExprCell> {
+    return consCAR([sym('if'), operands[0], bool(true), operands[1]])
   }
 }
 
-class Not implements BytecodeCompiler, QBECompiler, ArgumentChecker {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    ctx.compileExpr(Not.#eq(cell), env)
+class Not extends Unit {
+  override params: Params = { car: ['bool'] }
+
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, _site: CallSite, args: number[]) {
+    ctx.compileExpr(Not.#eq(args[0]), env)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    return ctx.compileExpr(Not.#eq(cell), env)
+  qbe(ctx: QBEBackend, env: QBEEnv, _site: CallSite, args: string[]) {
+    return ctx.compileExpr(Not.#eq(args[0]), env)
   }
 
-  checkRule: CheckRule = { car: ['bool'] }
-
-  static #eq({ expr, meta }: ASTNode<SExprCell>): ASTNode<SExprCell> {
-    return {
-      expr: {
-        type: 'cell',
-        car: [
-          { expr: { type: 'sym', value: '=' }, meta: expr.car[0].meta },
-          expr.car[1],
-          { expr: { type: 'bool', value: false }, meta },
-        ],
-        cdr: null,
-      },
-      meta,
-    }
+  static #eq(x: unknown): ASTNode<SExprCell> {
+    return consCAR([sym('='), internal(x), bool(false)])
   }
 }
 
