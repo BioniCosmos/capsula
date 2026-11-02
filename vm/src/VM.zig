@@ -14,6 +14,7 @@ pub const Var = union(enum) {
     unit: void,
     bool: bool,
     i64: i64,
+    sym: []const u8,
     arr: []const Var,
     @"struct": []const Var,
     str: []const u8,
@@ -34,7 +35,7 @@ pub const Var = union(enum) {
                 }
                 try writer.print(" ]", .{});
             },
-            .str => |x| try writer.print("{s}", .{x}),
+            .sym, .str => |x| try writer.print("{s}", .{x}),
             inline else => |x| try writer.print("{}", .{x}),
         }
     }
@@ -93,9 +94,6 @@ pub const Instruction = enum(u8) {
     native_call,
     ret,
     beqz,
-    unit,
-    is_i64,
-    print,
 };
 
 const Error = error{MaxVariableNumberExceeded} || mem.Allocator.Error || Io.Writer.Error;
@@ -193,7 +191,7 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
                 self.base = self.top + 1;
                 self.top = self.base + functions[fn_idx].local_count;
             },
-            .native_call => native_functions.get(self.pop().str).?(self) catch |err|
+            .native_call => native_functions.get(self.pop().sym).?(self) catch |err|
                 if (err == NativeFnError.Break) break else return @errorCast(err),
             .ret => {
                 const top = self.base - 1;
@@ -210,18 +208,6 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
                     self.pc = jump(current, offset);
                     stop_add = true;
                 }
-            },
-            .unit => try self.pushToList(.{ .unit = {} }, &self.stack),
-            .is_i64 => try self.pushToList(.{ .bool = self.pop() == .i64 }, &self.stack),
-            .print => {
-                self.stdout.print("{f}", .{self.pop()}) catch |err| {
-                    self.err = fmt.bufPrint(&self.err_buf, "failed to print", .{}) catch unreachable;
-                    return err;
-                };
-                self.stdout.flush() catch |err| {
-                    self.err = fmt.bufPrint(&self.err_buf, "failed to flush", .{}) catch unreachable;
-                    return err;
-                };
             },
         }
     }
@@ -251,13 +237,15 @@ fn jump(from: usize, offset: i16) usize {
     return @intCast(@as(isize, @intCast(from)) + @as(isize, @intCast(offset)));
 }
 
-const NativeFnError = error{Break} || mem.Allocator.Error;
+const NativeFnError = error{Break} || mem.Allocator.Error || Io.Writer.Error;
 
 var native_functions = std.StaticStringMap(*const fn (vm: *Self) NativeFnError!void).initComptime(.{
     .{ "panic", &panic },
     .{ "type-of", &typeOf },
     .{ "type-name", &typeName },
     .{ "size-of", &sizeOf },
+    .{ "print", &print },
+    .{ "unit", &unit },
     .{ "array-new", &arrayNew },
     .{ "array-len", &arrayLen },
     .{ "array-at", &arrayAt },
@@ -291,6 +279,21 @@ fn typeName(vm: *Self) !void {
 
 fn sizeOf(vm: *Self) !void {
     try vm.pushToList(.{ .i64 = @sizeOf(Var) }, &vm.stack);
+}
+
+fn print(vm: *Self) !void {
+    vm.stdout.print("{f}", .{vm.pop()}) catch |err| {
+        vm.err = fmt.bufPrint(&vm.err_buf, "failed to print", .{}) catch unreachable;
+        return err;
+    };
+    vm.stdout.flush() catch |err| {
+        vm.err = fmt.bufPrint(&vm.err_buf, "failed to flush", .{}) catch unreachable;
+        return err;
+    };
+}
+
+fn unit(vm: *Self) !void {
+    try vm.pushToList(.{ .unit = {} }, &vm.stack);
 }
 
 fn arrayNew(vm: *Self) !void {

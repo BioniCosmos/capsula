@@ -54,10 +54,11 @@ export const vmVarType = {
   unit: 0,
   bool: 1,
   i64: 2,
-  arr: 3,
-  struct: 4,
-  str: 5,
-  fn: 6,
+  sym: 3,
+  arr: 4,
+  struct: 5,
+  str: 6,
+  fn: 7,
 }
 
 export const qbeConst = {
@@ -81,8 +82,6 @@ export const qbeSegment = { stack: 0, heap: 1, data: 2 }
 
 export function typeToVMVarType(paramType: PrimitiveType) {
   switch (paramType) {
-    case 'sym':
-      throw Error('unimplemented')
     case 'any':
       throw Error('`any` is not a real type.')
     default:

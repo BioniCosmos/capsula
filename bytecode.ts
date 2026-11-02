@@ -19,17 +19,12 @@ export const Instruction = {
   NativeCall: { type: 'NativeCall' },
   Ret: { type: 'Ret' },
   BEqZ: (offset: number) => ({ type: 'BEqZ', offset }) as const,
-  Unit: { type: 'Unit' },
-  IsI64: { type: 'IsI64' },
-  Print: { type: 'Print' },
 } as const
 
 type GetValueOrReturnValue<T> = T extends (...args: any[]) => infer R ? R : T
 
 type InstructionType = keyof typeof Instruction
-export type Instruction = GetValueOrReturnValue<
-  (typeof Instruction)[InstructionType]
->
+export type Instruction = GetValueOrReturnValue<(typeof Instruction)[InstructionType]>
 
 export class CodeBuffer {
   static readonly maxInstructionSize = 3
@@ -106,9 +101,7 @@ export class CodeBuffer {
   }
 }
 
-const serializeCmd = new Map(
-  (Object.keys(Instruction) as InstructionType[]).map((k, i) => [k, i]),
-)
+const serializeCmd = new Map((Object.keys(Instruction) as InstructionType[]).map((k, i) => [k, i]))
 const deserializeCmd = new Map(Array.from(serializeCmd, ([k, v]) => [v, k]))
 
 export type JumpableEntry = { from: number; fill: (offset: number) => void }
