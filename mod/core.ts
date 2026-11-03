@@ -39,29 +39,46 @@ class Eq extends Unit {
   }
 }
 
-class Cond implements BytecodeCompiler, QBECompiler, ArgumentChecker {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
+class Cond extends Unit {
+  override lazy = true
+
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, site: CallSite, _args: number[]) {
     const end = new Label()
 
     let nextClause = new Label()
 
-    const clauses = cell.expr.car.slice(1)
+    const clauses = site.operands
     for (const [i, clause] of clauses.entries()) {
-      this.#validateClause(clause)
-      this.#validatePredicate(
-        ctx,
-        env,
-        clause,
-        this.#bytecodeValidatePredicateFormat,
-      )
-
-      const predicate = clause.expr.car[0]
-      this.#replaceElse(predicate, this.#isLastClause(i, clauses.length))
-
       nextClause.fillOffset(ctx.code.len)
       nextClause = new Label()
 
-      ctx.compileExpr(predicate, env)
+      this.#validateClause(clause)
+      const predicate = this.#validatePredicate(
+        clause,
+        this.#isLastClause(i, clauses.length),
+        (node) => {
+          const pred = env.defineTemp()
+          ctx.compileExpr(node, env)
+          ctx.emit(Instruction.Save(pred))
+          bytecodeCheckType(
+            ctx,
+            env,
+            'bool',
+            pred,
+            node.meta,
+            'The predicate type must be `bool`, found `{}`.',
+          )
+          return pred
+        },
+        (x) => {
+          const t = env.defineTemp()
+          ctx.compileExpr(bool(x), env)
+          ctx.emit(Instruction.Save(t))
+          return t
+        },
+      )
+
+      ctx.emit(Instruction.Load(predicate))
 
       const jumpToNextFrom = ctx.code.len
       const jumpToNext = ctx.emit(Instruction.BEqZ(0))
@@ -75,12 +92,23 @@ class Cond implements BytecodeCompiler, QBECompiler, ArgumentChecker {
         const scope = new BytecodeEnv(env)
         for (const [i, x] of body.entries()) {
           ctx.compileExpr(x, scope)
+          if (x.expr.type === 'cell') {
+            const op = x.expr.car[0]
+            if (op.expr.type === 'sym') {
+              const unit = ctx.env.lookup(op.expr.value)
+              if (unit instanceof Unit && unit.isStatement) {
+                ctx.compileExpr(str('unit'), env)
+                ctx.emit(Instruction.NativeCall)
+              }
+            }
+          }
           if (i !== body.length - 1) {
             ctx.emit(Instruction.Pop)
           }
         }
       } else {
-        ctx.emit(Instruction.Unit)
+        ctx.compileExpr(str('unit'), env)
+        ctx.emit(Instruction.NativeCall)
       }
 
       const jumpToEndFrom = ctx.code.len
@@ -99,19 +127,20 @@ class Cond implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     // `else` above) will be pushed to the evaluation stack. Then the `jump` to
     // end instruction will skip this instruction. It turns out that no excess
     // value will be stored to the evaluation stack.
-    ctx.emit(Instruction.Unit)
+    ctx.compileExpr(str('unit'), env)
+    ctx.emit(Instruction.NativeCall)
 
     end.fillOffset(ctx.code.len)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
+  qbe(ctx: QBEBackend, env: QBEEnv, site: CallSite, _args: string[]) {
     const result = env.defineTemp()
     ctx.emit(`${result} =l copy ${qbeConst.unit}`)
     const end = env.defineBlock()
 
     let nextClause = env.defineBlock()
 
-    const clauses = cell.expr.car.slice(1)
+    const clauses = site.operands
     for (const [i, clause] of clauses.entries()) {
       // Insert the current branch label (as the preview branch jump target).
       ctx.emit(nextClause)
@@ -119,22 +148,26 @@ class Cond implements BytecodeCompiler, QBECompiler, ArgumentChecker {
       nextClause = env.defineBlock()
 
       this.#validateClause(clause)
-      this.#validatePredicate(
-        ctx,
-        env,
+      const predicate = this.#validatePredicate(
         clause,
-        this.#qbeValidatePredicateFormat,
+        this.#isLastClause(i, clauses.length),
+        (node) => {
+          const pred = ctx.compileExpr(node, env)
+          qbeCheckType(
+            ctx,
+            env,
+            'bool',
+            pred,
+            node.meta,
+            'The predicate type must be `bool`, found `%s`.',
+          )
+          return pred
+        },
+        (x) => ctx.compileExpr(bool(x), env),
       )
 
-      const predicate = clause.expr.car[0]
-      this.#replaceElse(predicate, this.#isLastClause(i, clauses.length))
-
-      const testResult = env.defineTemp()
-      ctx.emit(`${testResult} =l copy ${ctx.compileExpr(predicate, env)}`)
-      ctx.emit(`${testResult} =l shr ${testResult}, 3`)
-
       const body = env.defineBlock()
-      ctx.emit(`jnz ${testResult}, ${body}, ${nextClause}`)
+      ctx.emit(`jnz ${ctx.unwrapBool(predicate, env)}, ${body}, ${nextClause}`)
       ctx.emit(body)
 
       const scope = new QBEEnv(env)
@@ -157,44 +190,34 @@ class Cond implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     return result
   }
 
-  checkRule: CheckRule = {}
-
-  #replaceElse(predicate: ASTNode, isLastClause: boolean) {
-    if (predicate.expr.type === 'sym' && predicate.expr.value === 'else') {
-      if (isLastClause) {
-        predicate.expr = { type: 'bool', value: true }
-      } else {
-        error(predicate.meta, 'compiling: The `else` clause must be the last.')
-      }
-    }
-  }
-
   #isLastClause(index: number, clausesLen: number) {
     return index === clausesLen - 1
   }
 
-  #validatePredicate(
-    ctx: Backend,
-    env: Environment,
-    { expr, meta }: ASTNode<SExprCell>,
-    runtimeFormat: string,
+  #validatePredicate<T>(
+    node: ASTNode<SExprCell>,
+    isLastClause: boolean,
+    runtimeValidate: (node: ASTNode) => T,
+    compileBool: (x: boolean) => T,
   ) {
-    if (expr.car.length === 0) {
-      error(meta, `compiling: Clause must at least have a predicate.`)
+    if (node.expr.car.length === 0) {
+      error(node.meta, `compiling: Clause must at least have a predicate.`)
     }
 
-    const predicate = expr.car[0]
+    const predicate = node.expr.car[0]
     switch (predicate.expr.type) {
       case 'bool':
-        break
+        return compileBool(predicate.expr.value)
       case 'sym':
         if (predicate.expr.value !== 'else') {
-          ctx.runtimeCheckArg('bool', env, predicate, runtimeFormat)
+          return runtimeValidate(predicate)
         }
-        break
+        if (!isLastClause) {
+          error(predicate.meta, 'compiling: The `else` clause must be the last.')
+        }
+        return compileBool(true)
       case 'cell':
-        ctx.runtimeCheckArg('bool', env, predicate, runtimeFormat)
-        break
+        return runtimeValidate(predicate)
       default:
         error(
           predicate.meta,
@@ -202,9 +225,6 @@ class Cond implements BytecodeCompiler, QBECompiler, ArgumentChecker {
         )
     }
   }
-
-  #bytecodeValidatePredicateFormat = `The predicate type must be \`bool\`, found \`{}\`.`
-  #qbeValidatePredicateFormat = `The predicate type must be \`bool\`, found \`%s\`.`
 
   #validateClause(node: ASTNode): asserts node is ASTNode<SExprCell> {
     const { expr, meta } = node
