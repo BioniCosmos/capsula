@@ -1,41 +1,42 @@
-import { BytecodeBackend, QBEBackend, type Backend } from '@/backend'
+import { BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction, Label } from '@/bytecode'
-import { BytecodeEnv, QBEEnv, type Environment } from '@/env'
+import { BytecodeEnv, QBEEnv } from '@/env'
 import {
+  type ASTMeta,
+  type ASTNode,
+  bool,
+  bytecodeCheckType,
+  CallSite,
   consCAR,
   consWith,
   internal,
   num,
+  type Params,
   qbeBox,
+  qbeCheckType,
   qbeConst,
-  str,
-  sym,
-  vmVarType,
-  type ArgumentChecker,
-  type ASTMeta,
-  type ASTNode,
-  type BytecodeCompiler,
-  type CheckRule,
-  type QBECompiler,
   type SExprCell,
   type SExprSym,
+  str,
+  sym,
+  Unit,
+  vmVarType,
 } from '@/type'
 import { error, mustLookup } from '@/utils'
 import type { Module } from '.'
 
-class Eq implements BytecodeCompiler, QBECompiler, ArgumentChecker {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    ctx.compileExpr(cell.expr.car[1], env)
-    ctx.compileExpr(cell.expr.car[2], env)
+class Eq extends Unit {
+  override params: Params = { car: ['any', 'any'] }
+
+  bytecode(ctx: BytecodeBackend, _env: BytecodeEnv, _site: CallSite, args: number[]) {
+    ctx.emit(Instruction.Load(args[1]))
+    ctx.emit(Instruction.Load(args[0]))
     ctx.emit(Instruction.Eq)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const [lhs, rhs] = ctx.compileArgs(cell, env)
-    return ctx.wrapBool(ctx.defineTemp(`ceql ${lhs}, ${rhs}`, env), env)
+  qbe(ctx: QBEBackend, env: QBEEnv, _site: CallSite, args: string[]) {
+    return ctx.wrapBool(ctx.defineTemp(`ceql ${args[0]}, ${args[1]}`, env), env)
   }
-
-  checkRule: CheckRule = { car: ['any', 'any'] }
 }
 
 class Cond implements BytecodeCompiler, QBECompiler, ArgumentChecker {
