@@ -52,10 +52,10 @@ class Cond extends Unit {
       nextClause.fillOffset(ctx.code.len)
       nextClause = new Label()
 
-      this.#validateClause(clause)
-      const predicate = this.#validatePredicate(
+      Cond.#validateClause(clause)
+      const predicate = Cond.#validatePredicate(
         clause,
-        this.#isLastClause(i, clauses.length),
+        Cond.#isLastClause(i, clauses.length),
         (node) => {
           const pred = env.defineTemp()
           ctx.compileExpr(node, env)
@@ -147,10 +147,10 @@ class Cond extends Unit {
       // Generate the next branch label (used in the current branch `jnz`).
       nextClause = env.defineBlock()
 
-      this.#validateClause(clause)
-      const predicate = this.#validatePredicate(
+      Cond.#validateClause(clause)
+      const predicate = Cond.#validatePredicate(
         clause,
-        this.#isLastClause(i, clauses.length),
+        Cond.#isLastClause(i, clauses.length),
         (node) => {
           const pred = ctx.compileExpr(node, env)
           qbeCheckType(
@@ -190,11 +190,11 @@ class Cond extends Unit {
     return result
   }
 
-  #isLastClause(index: number, clausesLen: number) {
+  static #isLastClause(index: number, clausesLen: number) {
     return index === clausesLen - 1
   }
 
-  #validatePredicate<T>(
+  static #validatePredicate<T>(
     node: ASTNode<SExprCell>,
     isLastClause: boolean,
     runtimeValidate: (node: ASTNode) => T,
@@ -226,7 +226,7 @@ class Cond extends Unit {
     }
   }
 
-  #validateClause(node: ASTNode): asserts node is ASTNode<SExprCell> {
+  static #validateClause(node: ASTNode): asserts node is ASTNode<SExprCell> {
     const { expr, meta } = node
 
     if (expr.type !== 'cell') {
@@ -242,70 +242,43 @@ class Cond extends Unit {
   }
 }
 
-class If implements BytecodeCompiler, QBECompiler, ArgumentChecker {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    ctx.compileExpr(If.#cond(cell), env)
+class If extends Unit {
+  override params: Params = {
+    check({ operator, operands }) {
+      if (operands.length === 0) {
+        error(
+          operator.meta,
+          'compiling: bad syntax. `if` requires predicate and result expression.',
+        )
+      }
+      if (operands.length === 1) {
+        error(operator.meta, 'compiling: `if` requires result expression.')
+      }
+      if (operands.length > 3) {
+        error(operands[3].meta, 'compiling: too many arguments passed to `if`')
+      }
+      const pred = operands[0]
+      if (pred.expr.type === 'sym' && pred.expr.value === 'else') {
+        error(pred.meta, 'compiling: Symbol `else` cannot be used as a predicate in `if`.')
+      }
+    },
+  }
+  override lazy = true
+
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, site: CallSite, _args: number[]) {
+    ctx.compileExpr(If.#cond(site), env)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    return ctx.compileExpr(If.#cond(cell), env)
+  qbe(ctx: QBEBackend, env: QBEEnv, site: CallSite, _args: string[]) {
+    return ctx.compileExpr(If.#cond(site), env)
   }
 
-  checkRule: CheckRule = {}
-
-  static #cond({ expr, meta }: ASTNode<SExprCell>): ASTNode<SExprCell> {
-    const { car } = expr
-    const unit = car[0]
-    if (car.length === 1) {
-      error(
-        unit.meta,
-        'compiling: bad syntax. `if` requires predicate and result expression.',
-      )
-    }
-    if (car.length === 2) {
-      error(unit.meta, 'compiling: `if` requires result expression.')
-    }
-    if (car.length > 4) {
-      error(car[4].meta, 'compiling: too many arguments passed to `if`')
-    }
-
-    const pred = car[1]
-    if (pred.expr.type === 'sym' && pred.expr.value === 'else') {
-      error(
-        pred.meta,
-        'compiling: Symbol `else` cannot be used as a predicate in `if`.',
-      )
-    }
-
-    return {
-      expr: {
-        type: 'cell',
-        car: [
-          { expr: { type: 'sym', value: 'cond' }, meta: unit.meta },
-          {
-            expr: { type: 'cell', car: [pred, expr.car[2]], cdr: null },
-            meta,
-          },
-          ...(car.length === 4
-            ? [
-                {
-                  expr: {
-                    type: 'cell' as const,
-                    car: [
-                      { expr: { type: 'bool' as const, value: true }, meta },
-                      expr.car[3],
-                    ],
-                    cdr: null,
-                  },
-                  meta,
-                },
-              ]
-            : []),
-        ],
-        cdr: null,
-      },
-      meta,
-    }
+  static #cond({ operands }: CallSite): ASTNode<SExprCell> {
+    return consCAR([
+      sym('cond'),
+      consCAR(operands.slice(0, 2)),
+      ...(operands.length === 3 ? [consCAR([bool(true), operands[2]])] : []),
+    ])
   }
 }
 
