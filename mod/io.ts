@@ -11,6 +11,8 @@ class Print extends Unit {
     ctx.emit(Instruction.Load(args[0]))
     ctx.compileExpr(str('print'), env)
     ctx.emit(Instruction.NativeCall)
+    ctx.compileExpr(str('unit'), env)
+    ctx.emit(Instruction.NativeCall)
   }
 
   qbe(ctx: QBEBackend, _env: QBEEnv, _site: CallSite, args: string[]) {
