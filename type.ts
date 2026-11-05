@@ -256,26 +256,32 @@ export function qbeCompileArgs(ctx: QBEBackend, env: QBEEnv, nodes: ASTNode[]) {
   return args
 }
 
-export type Params = { car?: PrimitiveType[]; cdr?: boolean; check?(site: CallSite): void }
+export type Params = {
+  car?: PrimitiveType[]
+  cdr?: boolean
+  body?: boolean
+  check?(site: CallSite): void
+}
 
 export function checkArgs<T>(compiler: CellCompiler<T>, unit: Unit, site: CallSite, args: T[]) {
   const { operator, operands } = site
+  const { car, cdr, body, check } = unit.params
 
-  for (const node of operands) {
-    if (node.expr.type !== 'cell') {
-      continue
-    }
-    const opNode = node.expr.car.at(0)
-    if (opNode === undefined || opNode.expr.type !== 'sym') {
-      continue
-    }
-    const unit = compiler.env.lookup(opNode.expr.value)
-    if (unit instanceof Unit && unit.isStatement) {
-      error(opNode.meta, 'compiling: Statements are not allowed in an expression context.')
+  if (!body) {
+    for (const node of operands) {
+      if (node.expr.type !== 'cell') {
+        continue
+      }
+      const opNode = node.expr.car.at(0)
+      if (opNode === undefined || opNode.expr.type !== 'sym') {
+        continue
+      }
+      const unit = compiler.env.lookup(opNode.expr.value)
+      if (unit instanceof Unit && unit.isStatement) {
+        error(opNode.meta, 'compiling: Statements are not allowed in an expression context.')
+      }
     }
   }
-
-  const { car, cdr, check } = unit.params
 
   if (car !== undefined) {
     const fnId = (operator.expr as SExprSym).value
