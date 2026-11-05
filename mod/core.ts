@@ -292,40 +292,42 @@ function checkId(id: ASTNode, unit: string): asserts id is ASTNode<SExprSym> {
   }
 }
 
-class Def implements BytecodeCompiler, QBECompiler, ArgumentChecker {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    const id = cell.expr.car[1]
-    checkId(id, 'def')
+class Def extends Unit {
+  override params: Params = { car: ['any', 'any'] }
+  override lazy = true
+  override isStatement = true
 
-    ctx.compileExpr(cell.expr.car[2], env)
-    ctx.emit(Instruction.Save(env.defineVar(id.expr.value)))
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, { operands }: CallSite, _args: number[]) {
+    checkId(operands[0], 'def')
 
-    ctx.emit(Instruction.Unit)
+    ctx.compileExpr(operands[1], env)
+    ctx.emit(Instruction.Save(env.defineVar(operands[0].expr.value)))
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const id = cell.expr.car[1]
-    checkId(id, 'def')
+  qbe(ctx: QBEBackend, env: QBEEnv, { operands }: CallSite, _args: string[]) {
+    checkId(operands[0], 'def')
 
     // Ensure that values are evaluated first, then assigned.
-    const x = ctx.compileExpr(cell.expr.car[2], env)
-    const slot = env.defineVar(id.expr.value)
+    const x = ctx.compileExpr(operands[1], env)
+    const slot = env.defineVar(operands[0].expr.value)
     ctx.emitPrologue(`${slot} =l alloc8 8`)
     ctx.emitPrologue(`storel ${qbeConst.unit}, ${slot}`)
     ctx.emit(`storel ${x}, ${slot}`)
 
-    return qbeConst.Unit
+    return ''
   }
-
-  checkRule: CheckRule = { car: ['any', 'any'] }
 }
 
-class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    const id = cell.expr.car[1]
+class Set extends Unit {
+  override params: Params = { car: ['any', 'any'] }
+  override lazy = true
+  override isStatement = true
+
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, { operands }: CallSite, _args: number[]) {
+    const id = operands[0]
     checkId(id, 'set!')
 
-    ctx.compileExpr(cell.expr.car[2], env)
+    ctx.compileExpr(operands[1], env)
     if (id.expr.internal !== undefined) {
       if (typeof id.expr.internal !== 'number') {
         throw Error('invalid internal value')
@@ -338,14 +340,13 @@ class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
       }
       ctx.emit(Instruction.Save(addr))
     }
-    ctx.emit(Instruction.Unit)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const id = cell.expr.car[1]
+  qbe(ctx: QBEBackend, env: QBEEnv, { operands }: CallSite, _args: string[]) {
+    const id = operands[0]
     checkId(id, 'set!')
 
-    const x = ctx.compileExpr(cell.expr.car[2], env)
+    const x = ctx.compileExpr(operands[1], env)
     if (id.expr.internal !== undefined) {
       if (typeof id.expr.internal !== 'string') {
         throw Error('invalid internal value')
@@ -358,10 +359,8 @@ class Set implements BytecodeCompiler, QBECompiler, ArgumentChecker {
       }
       ctx.emit(`storel ${x}, ${innerId}`)
     }
-    return qbeConst.Unit
+    return ''
   }
-
-  checkRule: CheckRule = { car: ['any', 'any'] }
 }
 
 class Loop implements BytecodeCompiler, QBECompiler, ArgumentChecker {
