@@ -40,6 +40,7 @@ class Eq extends Unit {
 }
 
 class Cond extends Unit {
+  override params: Params = { body: true }
   override lazy = true
 
   bytecode(ctx: BytecodeBackend, env: BytecodeEnv, site: CallSite, _args: number[]) {
@@ -244,6 +245,7 @@ class Cond extends Unit {
 
 class If extends Unit {
   override params: Params = {
+    body: true,
     check({ operator, operands }) {
       if (operands.length === 0) {
         error(
@@ -363,35 +365,40 @@ class Set extends Unit {
   }
 }
 
-class Loop implements BytecodeCompiler, QBECompiler, ArgumentChecker {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
+class Loop extends Unit {
+  override params: Params = { body: true }
+  override lazy = true
+
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, { operands }: CallSite, _args: number[]) {
     const scope = new BytecodeEnv(env)
 
     const start = ctx.code.len
     const end = new Label()
-    scope.defineVarUnit('break', new BytecodeBreak(end))
-    scope.defineVarUnit('continue', new BytecodeContinue(start))
+    scope.defineVarUnit('break', new Break(end))
+    scope.defineVarUnit('continue', new Continue(start))
 
-    for (const expr of cell.expr.car.slice(1)) {
+    for (const expr of operands) {
       ctx.compileExpr(expr, scope)
     }
     ctx.emit(Instruction.Jump(start - ctx.code.len))
 
     end.fillOffset(ctx.code.len)
-    ctx.emit(Instruction.Unit)
+    ctx.compileExpr(str('unit'), env)
+    ctx.emit(Instruction.NativeCall)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
+  qbe(ctx: QBEBackend, env: QBEEnv, { operands }: CallSite, _args: string[]) {
     const scope = new QBEEnv(env)
 
     const start = env.defineBlock()
     const end = env.defineBlock()
-    scope.defineVarUnit('break', new QBEBreak(end))
-    scope.defineVarUnit('continue', new QBEContinue(start))
+    scope.defineVarUnit('break', new Break(undefined, end))
+    scope.defineVarUnit('continue', new Continue(undefined, start))
 
+    // TODO: Fix control flow termination check.
     let terminated = false
     ctx.emit(start)
-    for (const expr of cell.expr.car.slice(1)) {
+    for (const expr of operands) {
       if (ctx.compileExpr(expr, scope) === '') {
         terminated = true
         break
@@ -404,13 +411,14 @@ class Loop implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     ctx.emit(end)
     return qbeConst.Unit
   }
-
-  checkRule: CheckRule = {}
 }
 
 // TODO: check type after `:in` (both compile and run time)
-class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
+class For extends Unit {
+  override params: Params = { body: true }
+  override lazy = true
+
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, { cell }: CallSite, _args: number[]) {
     const { meta } = cell
     For.#compileTo(
       cell,
@@ -461,14 +469,7 @@ class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
             ctx.emit(Instruction.Save(len))
 
             ctx.compileExpr(
-              For.#inArray(
-                internal(i, meta),
-                internal(len, meta),
-                x,
-                xs,
-                body,
-                meta,
-              ),
+              For.#inArray(internal(i, meta), internal(len, meta), x, xs, body, meta),
               env,
             )
           },
@@ -478,7 +479,7 @@ class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     )
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
+  qbe(ctx: QBEBackend, env: QBEEnv, { cell }: CallSite, _args: string[]) {
     const { meta } = cell
     For.#compileTo(
       cell,
@@ -505,20 +506,13 @@ class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
         ctx.if(
           [
             () => `ceqw ${tag}, ${qbeConst.box}`,
-            () =>
-              `ceqw ${ctx.defineTemp(`loaduh ${xs.expr.internal}`, env)}, ${qbeBox.arr}`,
+            () => `ceqw ${ctx.defineTemp(`loaduh ${xs.expr.internal}`, env)}, ${qbeBox.arr}`,
           ],
           () =>
             ctx.compileExpr(
               For.#inArray(
                 internal(ctx.wrapI64('0', env), meta),
-                internal(
-                  ctx.compileExpr(
-                    consCAR([sym('array-len', meta), xs], meta),
-                    env,
-                  ),
-                  meta,
-                ),
+                internal(ctx.compileExpr(consCAR([sym('array-len', meta), xs], meta), env), meta),
                 x,
                 xs,
                 body,
@@ -534,21 +528,11 @@ class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     return qbeConst.Unit
   }
 
-  checkRule: CheckRule = {}
-
   static #compileTo(
     { expr, meta }: ASTNode<SExprCell>,
     compileXs: (xsNode: ASTNode) => ASTNode<SExprSym>,
-    forInNum: (
-      x: ASTNode<SExprSym>,
-      xs: ASTNode<SExprSym>,
-      body: ASTNode[],
-    ) => void,
-    forInAny: (
-      x: ASTNode<SExprSym>,
-      xs: ASTNode<SExprSym>,
-      body: ASTNode[],
-    ) => void,
+    forInNum: (x: ASTNode<SExprSym>, xs: ASTNode<SExprSym>, body: ASTNode[]) => void,
+    forInAny: (x: ASTNode<SExprSym>, xs: ASTNode<SExprSym>, body: ASTNode[]) => void,
     forPred: (pred: ASTNode, body: ASTNode[]) => void,
   ) {
     if (expr.car.length < 2) {
@@ -594,22 +578,13 @@ class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     forPred(clause, body)
   }
 
-  static #inNum(
-    x: ASTNode<SExprSym>,
-    xs: ASTNode<SExprSym>,
-    body: ASTNode[],
-    meta: ASTMeta,
-  ) {
+  static #inNum(x: ASTNode<SExprSym>, xs: ASTNode<SExprSym>, body: ASTNode[], meta: ASTMeta) {
     const { num, sym, consCAR } = consWith(meta)
     return [
       consCAR([sym('def'), x, num(0)]),
       consCAR([
         sym('loop'),
-        consCAR([
-          sym('if'),
-          consCAR([sym('>='), x, xs]),
-          consCAR([sym('break')]),
-        ]),
+        consCAR([sym('if'), consCAR([sym('>='), x, xs]), consCAR([sym('break')])]),
         ...body,
         consCAR([sym('set!'), x, consCAR([sym('+'), x, num(1)])]),
       ]),
@@ -627,11 +602,7 @@ class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
     const { num, sym, consCAR } = consWith(meta)
     return consCAR([
       sym('loop'),
-      consCAR([
-        sym('if'),
-        consCAR([sym('>='), i, len]),
-        consCAR([sym('break')]),
-      ]),
+      consCAR([sym('if'), consCAR([sym('>='), i, len]), consCAR([sym('break')])]),
       consCAR([sym('def'), x, consCAR([sym('array-at'), xs, i])]),
       ...body,
       consCAR([sym('set!'), i, consCAR([sym('+'), i, num(1)])]),
@@ -651,51 +622,51 @@ class For implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   }
 }
 
-class BytecodeBreak implements BytecodeCompiler, ArgumentChecker {
-  constructor(private end: Label) {}
+class Break extends Unit {
+  override params: Params = { car: [] }
+  override isStatement = true
 
-  compile(ctx: BytecodeBackend, _cell: ASTNode<SExprCell>, _env: BytecodeEnv) {
+  constructor(
+    private bytecodeEnd?: Label,
+    private qbeEnd?: string,
+  ) {
+    super()
+  }
+
+  bytecode(ctx: BytecodeBackend) {
     const from = ctx.code.len
     const jump = ctx.emit(Instruction.Jump(0))
-    this.end.jumpFrom({
+    this.bytecodeEnd!.jumpFrom({
       from,
       fill: (offset) => jump.setInt16(1, offset, true),
     })
   }
 
-  checkRule: CheckRule = { car: [] }
-}
-
-class BytecodeContinue implements BytecodeCompiler, ArgumentChecker {
-  constructor(private start: number) {}
-
-  compile(ctx: BytecodeBackend, _cell: ASTNode<SExprCell>, _env: BytecodeEnv) {
-    ctx.emit(Instruction.Jump(this.start - ctx.code.len))
-  }
-
-  checkRule: CheckRule = { car: [] }
-}
-
-class QBEBreak implements QBECompiler, ArgumentChecker {
-  constructor(private end: string) {}
-
-  compileToQBE(ctx: QBEBackend, _cell: ASTNode<SExprCell>, _env: QBEEnv) {
-    ctx.emit(`jmp ${this.end}`)
+  qbe(ctx: QBEBackend) {
+    ctx.emit(`jmp ${this.qbeEnd}`)
     return ''
   }
-
-  checkRule: CheckRule = { car: [] }
 }
 
-class QBEContinue implements QBECompiler, ArgumentChecker {
-  constructor(private start: string) {}
+class Continue extends Unit {
+  override params: Params = { car: [] }
+  override isStatement = true
 
-  compileToQBE(ctx: QBEBackend, _cell: ASTNode<SExprCell>, _env: QBEEnv) {
-    ctx.emit(`jmp ${this.start}`)
-    return ''
+  constructor(
+    private bytecodeStart?: number,
+    private qbeStart?: string,
+  ) {
+    super()
   }
 
-  checkRule: CheckRule = { car: [] }
+  bytecode(ctx: BytecodeBackend) {
+    ctx.emit(Instruction.Jump(this.bytecodeStart! - ctx.code.len))
+  }
+
+  qbe(ctx: QBEBackend) {
+    ctx.emit(`jmp ${this.qbeStart}`)
+    return ''
+  }
 }
 
 class SizeOf implements BytecodeCompiler, QBECompiler, ArgumentChecker {
