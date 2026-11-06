@@ -16,7 +16,7 @@ pub const Var = union(enum) {
     i64: i64,
     sym: []const u8,
     arr: []const Var,
-    @"struct": []const Var,
+    @"struct": Struct,
     str: []const u8,
     @"fn": u64,
     state: State,
@@ -24,7 +24,7 @@ pub const Var = union(enum) {
     pub fn format(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
         switch (self) {
             .unit => try writer.print("()", .{}),
-            .arr, .@"struct" => |xs| {
+            .arr => |xs| {
                 if (xs.len == 0) {
                     try writer.print("[]", .{});
                     return;
@@ -35,11 +35,27 @@ pub const Var = union(enum) {
                 }
                 try writer.print(" ]", .{});
             },
+            .@"struct" => |x| {
+                const m = structs[x.meta];
+                if (x.value.len == 0) {
+                    try writer.print("{s} {{}}", .{m.name});
+                    return;
+                }
+                try writer.print("{s} {{", .{m.name});
+                var sep: []const u8 = " ";
+                for (x.value, 0..) |field, i| {
+                    try writer.print("{s}{s} = {f}", .{ sep, m.fields[i], field });
+                    sep = ", ";
+                }
+                try writer.print(" }}", .{});
+            },
             .sym, .str => |x| try writer.print("{s}", .{x}),
             inline else => |x| try writer.print("{}", .{x}),
         }
     }
 };
+
+const Struct = struct { value: []const Var, meta: usize };
 
 fn sexprToVar(serialized: msgpack.Payload) Var {
     return switch (serialized) {
@@ -70,6 +86,30 @@ pub const Fn = struct {
         };
     }
 };
+
+pub const StructMeta = struct {
+    name: []const u8,
+    fields: [][]const u8,
+
+    pub fn deserialize(allocator: mem.Allocator, serialized: msgpack.Payload) !StructMeta {
+        const serialized_fields = (try serialized.mapGet("fields")).?;
+        const fields = try allocator.alloc([]const u8, try serialized_fields.getArrLen());
+        for (fields, 0..) |*field, i| {
+            field.* = try (try serialized_fields.getArrElement(i)).asStr();
+        }
+        return .{ .name = try (try serialized.mapGet("name")).?.asStr(), .fields = fields };
+    }
+};
+pub var structs: []const StructMeta = undefined;
+
+pub fn deserialize(T: type, allocator: mem.Allocator, serialized: msgpack.Payload, key: []const u8) ![]T {
+    const serialized_field = (try serialized.mapGet(key)).?;
+    const field = try allocator.alloc(T, try serialized_field.getArrLen());
+    for (field, 0..) |*field_element, i| {
+        field_element.* = try T.deserialize(allocator, try serialized_field.getArrElement(i));
+    }
+    return field;
+}
 
 const State = struct { func: usize, pc: usize, base: usize };
 
@@ -249,6 +289,7 @@ var native_functions = std.StaticStringMap(*const fn (vm: *Self) NativeFnError!v
     .{ "array-new", &arrayNew },
     .{ "array-len", &arrayLen },
     .{ "array-at", &arrayAt },
+    .{ "struct", &@"struct" },
 });
 
 fn panic(vm: *Self) !void {
@@ -297,7 +338,6 @@ fn unit(vm: *Self) !void {
 }
 
 fn arrayNew(vm: *Self) !void {
-    const inner_type = vm.pop().i64;
     const len: usize = @intCast(vm.pop().i64);
     const xs = vm.allocator.alloc(Var, len) catch |err| {
         vm.err = fmt.bufPrint(&vm.err_buf, "failed to allocate memory for array", .{}) catch unreachable;
@@ -306,7 +346,7 @@ fn arrayNew(vm: *Self) !void {
     for (0..len) |i| {
         xs[i] = vm.pop();
     }
-    try vm.pushToList(if (inner_type == 0) .{ .arr = xs } else .{ .@"struct" = xs }, &vm.stack);
+    try vm.pushToList(.{ .arr = xs }, &vm.stack);
 }
 
 fn arrayLen(vm: *Self) !void {
@@ -315,9 +355,23 @@ fn arrayLen(vm: *Self) !void {
 
 fn arrayAt(vm: *Self) !void {
     const xs = switch (vm.pop()) {
-        .arr, .@"struct" => |xs| xs,
+        .arr => |xs| xs,
+        .@"struct" => |x| x.value,
         else => unreachable,
     };
     const i = vm.pop().i64;
     try vm.pushToList(xs[@intCast(i)], &vm.stack);
+}
+
+fn @"struct"(vm: *Self) !void {
+    const m: usize = @intCast(vm.pop().i64);
+    const len: usize = @intCast(vm.pop().i64);
+    const xs = vm.allocator.alloc(Var, len) catch |err| {
+        vm.err = fmt.bufPrint(&vm.err_buf, "failed to allocate memory for array", .{}) catch unreachable;
+        return err;
+    };
+    for (0..len) |i| {
+        xs[i] = vm.pop();
+    }
+    try vm.pushToList(.{ .@"struct" = .{ .meta = m, .value = xs } }, &vm.stack);
 }

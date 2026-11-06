@@ -1,17 +1,15 @@
 import { encode } from '@msgpack/msgpack'
 import { $ } from 'bun'
 import { Instruction } from './bytecode'
-import { BytecodeEnv, QBEEnv, type Environment } from './env'
+import { BytecodeEnv, type Environment, QBEEnv } from './env'
 import {
+  type ASTNode,
   BytecodeCellCompiler,
   BytecodeFnChunk,
-  checkFnArgs,
   compileCell,
   compileSym,
-  isUnit,
-  qbeConst,
   QBEFnChunk,
-  type ASTNode,
+  qbeConst,
   type SExprCell,
   type SExprSym,
 } from './type'
@@ -46,14 +44,15 @@ export class BytecodeBackend implements Backend {
 
     await Bun.write(
       output,
-      encode(
-        this.#functions.map((fn) => {
+      encode({
+        functions: this.#functions.map((fn) => {
           if (import.meta.env.DEBUG === 'true') {
             console.log(fn.toString())
           }
           return fn.serialize()
         }),
-      ),
+        structs: this.env.struct.meta,
+      }),
     )
   }
 
@@ -75,10 +74,7 @@ export class BytecodeBackend implements Backend {
         compileSym(this, env, node as ASTNode<SExprSym>)
         return
       case 'cell':
-        compileCell(
-          new BytecodeCellCompiler(this, env),
-          node as ASTNode<SExprCell>,
-        )
+        compileCell(new BytecodeCellCompiler(this, env), node as ASTNode<SExprCell>)
     }
   }
 

@@ -26,11 +26,8 @@ pub fn main(init: process.Init) !void {
 
     var packer = msgpack.packIO(&reader.interface, @constCast(&Io.Writer.failing));
     const payload = try packer.read(allocator);
-
-    const functions = try allocator.alloc(VM.Fn, try payload.getArrLen());
-    for (functions, 0..) |*func, i| {
-        func.* = try VM.Fn.deserialize(allocator, try payload.getArrElement(i));
-    }
+    const functions = try VM.deserialize(VM.Fn, allocator, payload, "functions");
+    VM.structs = try VM.deserialize(VM.StructMeta, allocator, payload, "structs");
 
     const vm = try VM.init(allocator, io);
     defer vm.deinit();
