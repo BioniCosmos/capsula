@@ -2,33 +2,31 @@ import type { Backend, BytecodeBackend, QBEBackend } from '@/backend'
 import { Instruction } from '@/bytecode'
 import type { BytecodeEnv, Environment, QBEEnv } from '@/env'
 import {
-  consWith,
-  num,
-  qbeBox,
-  qbeConst,
-  qbeSegment,
-  str,
-  type ArgumentChecker,
   type ASTNode,
-  type BytecodeCompiler,
-  type CheckRule,
-  type QBECompiler,
+  CallSite,
+  num,
+  type Params,
+  qbeBox,
+  qbeSegment,
   type SExprCell,
+  str,
+  Unit,
 } from '@/type'
 import { error } from '@/utils'
 import type { Module } from '.'
 
-class Struct implements BytecodeCompiler, QBECompiler, ArgumentChecker {
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    Struct.#compileTo(ctx, cell, env)
+class Struct extends Unit {
+  override lazy = true
+  override isStatement = true
+
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, site: CallSite, _args: number[]) {
+    Struct.#compileTo(ctx, site.cell, env)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    Struct.#compileTo(ctx, cell, env)
-    return qbeConst.Unit
+  qbe(ctx: QBEBackend, env: QBEEnv, site: CallSite, _args: string[]) {
+    Struct.#compileTo(ctx, site.cell, env)
+    return ''
   }
-
-  checkRule: CheckRule = {}
 
   static #compileTo(ctx: Backend, cell: ASTNode<SExprCell>, env: Environment) {
     const id = ctx.env.struct.idCounter++
@@ -62,32 +60,32 @@ class Struct implements BytecodeCompiler, QBECompiler, ArgumentChecker {
   }
 }
 
-class StructConstructor
-  implements BytecodeCompiler, QBECompiler, ArgumentChecker
-{
+class StructConstructor extends Unit {
   constructor(
     private id: number,
     private fieldCount: number,
-  ) {}
+  ) {
+    super()
+  }
 
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    const { num, str } = consWith(cell.meta)
+  override params: Params = { car: [], cdr: true }
+
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, { cell }: CallSite, args: number[]) {
     this.#checkArgs(ctx, cell)
 
-    for (const expr of cell.expr.car.slice(1).toReversed()) {
-      ctx.compileExpr(expr, env)
+    for (const arg of args.toReversed()) {
+      ctx.emit(Instruction.Load(arg))
     }
     ctx.compileExpr(num(this.fieldCount), env)
-    ctx.compileExpr(num(1), env)
-    ctx.compileExpr(str('array-new'), env)
+    ctx.compileExpr(num(this.id), env)
+    ctx.compileExpr(str('struct'), env)
     ctx.emit(Instruction.NativeCall)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
+  qbe(ctx: QBEBackend, env: QBEEnv, { cell }: CallSite, args: string[]) {
     this.#checkArgs(ctx, cell)
-    const xs = ctx.compileArgs(cell, env)
 
-    const struct = ctx.defineTemp(`alloc8 ${16 + xs.length * 8}`, env)
+    const struct = ctx.defineTemp(`alloc8 ${16 + args.length * 8}`, env)
     const p = ctx.defineTemp(`copy ${struct}`, env)
     // struct.type = .struct
     ctx.emit(`storeh ${qbeBox.struct}, ${p}`)
@@ -99,17 +97,15 @@ class StructConstructor
     ctx.emit(`storew ${this.id}, ${p}`)
     // struct.len = xs.len
     ctx.emit(`${p} =l add ${p}, 4`)
-    ctx.emit(`storel ${xs.length}, ${p}`)
+    ctx.emit(`storel ${args.length}, ${p}`)
     // struct.data <- xs
-    for (const x of xs) {
+    for (const x of args) {
       // struct.data[i] = x
       ctx.emit(`${p} =l add ${p}, ${8}`)
       ctx.emit(`storel ${x}, ${p}`)
     }
     return struct
   }
-
-  checkRule: CheckRule = {}
 
   #checkArgs(ctx: Backend, { expr, meta }: ASTNode<SExprCell>) {
     const argCount = expr.car.length - 1
@@ -122,26 +118,25 @@ class StructConstructor
   }
 }
 
-class StructGetter implements BytecodeCompiler, QBECompiler, ArgumentChecker {
+class StructGetter extends Unit {
   constructor(
     private id: number,
     private offset: number,
-  ) {}
+  ) {
+    super()
+  }
 
-  compile(ctx: BytecodeBackend, cell: ASTNode<SExprCell>, env: BytecodeEnv) {
-    ctx.compileExpr(num(this.offset, cell.meta), env)
-    ctx.compileExpr(cell.expr.car[1], env)
-    ctx.compileExpr(str('array-at', cell.meta), env)
+  override params: Params = { car: ['struct'] }
+
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, _site: CallSite, args: number[]) {
+    ctx.compileExpr(num(this.offset), env)
+    ctx.emit(Instruction.Load(args[0]))
+    ctx.compileExpr(str('array-at'), env)
     ctx.emit(Instruction.NativeCall)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const node = cell.expr.car[1]
-    const x = ctx.compileExpr(node, env)
-    const id = ctx.defineTemp(
-      `loaduw ${ctx.defineTemp(`add ${x}, 4`, env)}`,
-      env,
-    )
+  qbe(ctx: QBEBackend, env: QBEEnv, site: CallSite, args: string[]) {
+    const id = ctx.defineTemp(`loaduw ${ctx.defineTemp(`add ${args[0]}, 4`, env)}`, env)
     ctx.if(
       () => `cnel ${id}, ${this.id}`,
       () => {
@@ -154,16 +149,13 @@ class StructGetter implements BytecodeCompiler, QBECompiler, ArgumentChecker {
         )
         const actual = ctx.defineTemp(
           `loadl ${ctx.defineTemp(
-            `loadl ${ctx.defineTemp(
-              `add $structs, ${ctx.defineTemp(`mul ${id}, 8`, env)}`,
-              env,
-            )}`,
+            `loadl ${ctx.defineTemp(`add $structs, ${ctx.defineTemp(`mul ${id}, 8`, env)}`, env)}`,
             env,
           )}`,
           env,
         )
         ctx.panic(
-          node.meta,
+          site.operands[0].meta,
           'expecting a value of struct `%s`, but got a value of struct `%s`',
           `l ${expect}`,
           `l ${actual}`,
@@ -172,12 +164,10 @@ class StructGetter implements BytecodeCompiler, QBECompiler, ArgumentChecker {
       { env },
     )
     return ctx.defineTemp(
-      `loadl ${ctx.defineTemp(`add ${x}, ${16 + 8 * this.offset}`, env)}`,
+      `loadl ${ctx.defineTemp(`add ${args[0]}, ${16 + 8 * this.offset}`, env)}`,
       env,
     )
   }
-
-  checkRule: CheckRule = { car: ['struct'] }
 }
 
 export default {
