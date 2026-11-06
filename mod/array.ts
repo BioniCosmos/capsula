@@ -12,7 +12,6 @@ class Array extends Unit {
       ctx.emit(Instruction.Load(arg))
     }
     ctx.compileExpr(num(args.length), env)
-    ctx.compileExpr(num(0), env)
     ctx.compileExpr(str('array-new'), env)
     ctx.emit(Instruction.NativeCall)
   }
