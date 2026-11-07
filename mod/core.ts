@@ -669,22 +669,17 @@ class Continue extends Unit {
   }
 }
 
-class SizeOf implements BytecodeCompiler, QBECompiler, ArgumentChecker {
-  compile(
-    ctx: BytecodeBackend,
-    { meta }: ASTNode<SExprCell>,
-    env: BytecodeEnv,
-  ) {
+class SizeOf extends Unit {
+  override params: Params = { car: ['any'] }
+
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, { cell: { meta } }: CallSite) {
     ctx.compileExpr({ expr: { type: 'str', value: 'size-of' }, meta }, env)
     ctx.emit(Instruction.NativeCall)
   }
 
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const x = ctx.compileExpr(cell.expr.car[1], env)
-    return ctx.wrapI64(ctx.defineTemp(`call $size_of(l ${x})`, env), env)
+  qbe(ctx: QBEBackend, env: QBEEnv, _site: CallSite, args: string[]) {
+    return ctx.wrapI64(ctx.defineTemp(`call $size_of(l ${args[0]})`, env), env)
   }
-
-  checkRule: CheckRule = { car: ['any'] }
 }
 
 // TODO: bytecode backend
