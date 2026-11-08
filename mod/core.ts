@@ -672,8 +672,8 @@ class Continue extends Unit {
 class SizeOf extends Unit {
   override params: Params = { car: ['any'] }
 
-  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, { cell: { meta } }: CallSite) {
-    ctx.compileExpr({ expr: { type: 'str', value: 'size-of' }, meta }, env)
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv) {
+    ctx.compileExpr(str('size-of'), env)
     ctx.emit(Instruction.NativeCall)
   }
 
@@ -682,24 +682,26 @@ class SizeOf extends Unit {
   }
 }
 
-// TODO: bytecode backend
-class Call implements QBECompiler {
-  compileToQBE(ctx: QBEBackend, cell: ASTNode<SExprCell>, env: QBEEnv) {
-    const id = cell.expr.car[1]
-    if (id.expr.type !== 'sym') {
-      throw Error(
-        `compiling \`call\`: expecting symbol, found \`${id.expr.type}\``,
-      )
-    }
+class Call extends Unit {
+  override params: Params = { car: ['sym'], cdr: true }
+  override lazy = true
 
-    const result = env.defineTemp()
-    ctx.emit(
-      `${result} =l call $${id.expr.value}(${cell.expr.car
-        .slice(2)
-        .map((arg) => `l ${ctx.compileExpr(arg, env)}`)
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, { operands }: CallSite, _args: number[]) {
+    for (const operand of operands.slice(1).toReversed()) {
+      ctx.compileExpr(operand, env)
+    }
+    ctx.compileExpr(str((operands[0].expr as SExprSym).value), env)
+    ctx.emit(Instruction.NativeCall)
+  }
+
+  qbe(ctx: QBEBackend, env: QBEEnv, { operands }: CallSite, _args: string[]) {
+    return ctx.defineTemp(
+      `call $${(operands[0].expr as SExprSym).value}(${operands
+        .slice(1)
+        .map((operand) => `l ${ctx.compileExpr(operand, env)}`)
         .join(', ')})`,
+      env,
     )
-    return result
   }
 }
 
