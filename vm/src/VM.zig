@@ -15,26 +15,15 @@ pub const Var = union(enum) {
     bool: bool,
     i64: i64,
     sym: []const u8,
-    arr: []const Var,
     @"struct": Struct,
     str: []const u8,
+    ref: [*]const u8,
     @"fn": u64,
     state: State,
 
     pub fn format(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
         switch (self) {
             .unit => try writer.print("()", .{}),
-            .arr => |xs| {
-                if (xs.len == 0) {
-                    try writer.print("[]", .{});
-                    return;
-                }
-                try writer.print("[", .{});
-                for (xs) |x| {
-                    try writer.print(" {f}", .{x});
-                }
-                try writer.print(" ]", .{});
-            },
             .@"struct" => |x| {
                 const m = structs[x.meta];
                 if (x.value.len == 0) {
@@ -50,11 +39,31 @@ pub const Var = union(enum) {
                 try writer.print(" }}", .{});
             },
             .sym, .str => |x| try writer.print("{s}", .{x}),
+            .ref => |ptr| {
+                const ref = mem.bytesAsValue(Ref, ptr);
+                switch (ref.type) {
+                    .arr => {
+                        if (ref.x == 0) {
+                            try writer.print("[]", .{});
+                            return;
+                        }
+                        const xs = ptr + @sizeOf(Ref);
+                        try writer.print("[", .{});
+                        for (0..ref.x) |i| {
+                            try writer.print(" {f}", .{mem.bytesAsValue(Var, xs + i * @sizeOf(Var))});
+                        }
+                        try writer.print(" ]", .{});
+                    },
+                    .@"struct" => @panic("TODO"),
+                }
+            },
             inline else => |x| try writer.print("{}", .{x}),
         }
     }
 };
 
+const Ref = struct { type: RefType, x: u64 };
+const RefType = enum(u8) { arr, @"struct" };
 const Struct = struct { value: []const Var, meta: usize };
 
 fn sexprToVar(serialized: msgpack.Payload) Var {
@@ -149,6 +158,10 @@ local: [1024]Var = undefined,
 pc: usize = 0,
 base: usize = 0,
 top: usize = 0,
+
+raw: [1024]u8 = undefined,
+raw_sp: usize = 0,
+
 stack: std.ArrayList(Var) = .empty,
 
 err_buf: [1024]u8 = undefined,
@@ -338,29 +351,31 @@ fn unit(vm: *Self) !void {
 }
 
 fn arrayNew(vm: *Self) !void {
-    const len: usize = @intCast(vm.pop().i64);
-    const xs = vm.allocator.alloc(Var, len) catch |err| {
-        vm.err = fmt.bufPrint(&vm.err_buf, "failed to allocate memory for array", .{}) catch unreachable;
-        return err;
-    };
+    const len: u64 = @intCast(vm.pop().i64);
+    const bp = vm.raw[vm.raw_sp..].ptr;
+    @memcpy(bp, mem.asBytes(&Ref{ .type = .arr, .x = len }));
+    const xs = bp + @sizeOf(Ref);
     for (0..len) |i| {
-        xs[i] = vm.pop();
+        @memcpy(xs + i * @sizeOf(Var), mem.asBytes(&vm.pop()));
     }
-    try vm.pushToList(.{ .arr = xs }, &vm.stack);
+    vm.raw_sp = @sizeOf(Ref) + @sizeOf(Var) * len;
+    try vm.pushToList(.{ .ref = bp }, &vm.stack);
 }
 
 fn arrayLen(vm: *Self) !void {
-    try vm.pushToList(.{ .i64 = @intCast(vm.pop().arr.len) }, &vm.stack);
+    _ = vm;
+    // try vm.pushToList(.{ .i64 = @intCast(vm.pop().arr.len) }, &vm.stack);
 }
 
 fn arrayAt(vm: *Self) !void {
-    const xs = switch (vm.pop()) {
-        .arr => |xs| xs,
-        .@"struct" => |x| x.value,
-        else => unreachable,
-    };
-    const i = vm.pop().i64;
-    try vm.pushToList(xs[@intCast(i)], &vm.stack);
+    _ = vm;
+    // const xs = switch (vm.pop()) {
+    //     .arr => |xs| xs,
+    //     .@"struct" => |x| x.value,
+    //     else => unreachable,
+    // };
+    // const i = vm.pop().i64;
+    // try vm.pushToList(xs[@intCast(i)], &vm.stack);
 }
 
 fn @"struct"(vm: *Self) !void {
