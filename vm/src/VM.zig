@@ -47,10 +47,13 @@ pub const Var = union(enum) {
                             try writer.print("[]", .{});
                             return;
                         }
-                        const xs = ptr + @sizeOf(Ref);
+                        const xs = @as([*]const Var, @ptrCast(@alignCast((mem.alignPointer(
+                            ptr + @sizeOf(Ref),
+                            @alignOf(Var),
+                        ).?))))[0..ref.x];
                         try writer.print("[", .{});
-                        for (0..ref.x) |i| {
-                            try writer.print(" {f}", .{mem.bytesAsValue(Var, xs + i * @sizeOf(Var))});
+                        for (xs) |x| {
+                            try writer.print(" {f}", .{x});
                         }
                         try writer.print(" ]", .{});
                     },
@@ -111,7 +114,12 @@ pub const StructMeta = struct {
 };
 pub var structs: []const StructMeta = undefined;
 
-pub fn deserialize(T: type, allocator: mem.Allocator, serialized: msgpack.Payload, key: []const u8) ![]T {
+pub fn deserialize(
+    T: type,
+    allocator: mem.Allocator,
+    serialized: msgpack.Payload,
+    key: []const u8,
+) ![]T {
     const serialized_field = (try serialized.mapGet(key)).?;
     const field = try allocator.alloc(T, try serialized_field.getArrLen());
     for (field, 0..) |*field_element, i| {
@@ -159,8 +167,8 @@ pc: usize = 0,
 base: usize = 0,
 top: usize = 0,
 
-raw: [1024]u8 = undefined,
-raw_sp: usize = 0,
+raw: [1024]u8 align(@max(@alignOf(Ref), @alignOf(Var))) = undefined,
+raw_sp: [*]u8,
 
 stack: std.ArrayList(Var) = .empty,
 
@@ -175,7 +183,7 @@ stdout: *Io.Writer = undefined,
 
 pub fn init(allocator: mem.Allocator, io: Io) !*Self {
     const vm = try allocator.create(Self);
-    vm.* = .{ .allocator = allocator, .io = io };
+    vm.* = .{ .allocator = allocator, .io = io, .raw_sp = &vm.raw };
 
     vm.stdout_writer = Io.File.stdout().writer(vm.io, &vm.stdout_buf);
     vm.stdout = &vm.stdout_writer.interface;
@@ -352,13 +360,18 @@ fn unit(vm: *Self) !void {
 
 fn arrayNew(vm: *Self) !void {
     const len: u64 = @intCast(vm.pop().i64);
-    const bp = vm.raw[vm.raw_sp..].ptr;
-    @memcpy(bp, mem.asBytes(&Ref{ .type = .arr, .x = len }));
-    const xs = bp + @sizeOf(Ref);
+
+    const bp = mem.alignPointer(vm.raw_sp, @alignOf(Ref)).?;
+    const ref: *Ref = @ptrCast(@alignCast(bp));
+    const xs: [*]Var = @ptrCast(@alignCast(mem.alignPointer(bp + @sizeOf(Ref), @alignOf(Var)).?));
+    const end = @as([*]u8, @ptrCast(xs)) + len * @sizeOf(Var);
+
+    ref.* = .{ .type = .arr, .x = len };
     for (0..len) |i| {
-        @memcpy(xs + i * @sizeOf(Var), mem.asBytes(&vm.pop()));
+        xs[i] = vm.pop();
     }
-    vm.raw_sp = @sizeOf(Ref) + @sizeOf(Var) * len;
+
+    vm.raw_sp = end;
     try vm.pushToList(.{ .ref = bp }, &vm.stack);
 }
 
