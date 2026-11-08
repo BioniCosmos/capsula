@@ -705,49 +705,40 @@ class Call extends Unit {
   }
 }
 
-class Panic implements BytecodeCompiler, QBECompiler, ArgumentChecker {
-  compile(
-    ctx: BytecodeBackend,
-    { expr, meta }: ASTNode<SExprCell>,
-    env: BytecodeEnv,
-  ) {
-    ctx.compileExpr(expr.car[1], env)
+class Panic extends Unit {
+  override params: Params = { car: ['str'] }
 
-    ctx.compileExpr({ expr: { type: 'num', value: meta.column }, meta }, env)
-    ctx.compileExpr({ expr: { type: 'num', value: meta.line }, meta }, env)
-    ctx.compileExpr({ expr: { type: 'str', value: meta.fileName }, meta }, env)
+  bytecode(ctx: BytecodeBackend, env: BytecodeEnv, site: CallSite, args: number[]) {
+    ctx.emit(Instruction.Load(args[0]))
 
-    ctx.compileExpr({ expr: { type: 'str', value: 'panic' }, meta }, env)
+    const { meta } = site.cell
+    ctx.compileExpr(num(meta.column), env)
+    ctx.compileExpr(num(meta.line), env)
+    ctx.compileExpr(str(meta.fileName), env)
+
+    ctx.compileExpr(str('panic'), env)
     ctx.emit(Instruction.NativeCall)
   }
 
-  compileToQBE(
-    ctx: QBEBackend,
-    { expr, meta }: ASTNode<SExprCell>,
-    env: QBEEnv,
-  ) {
+  qbe(ctx: QBEBackend, env: QBEEnv, site: CallSite, args: string[]) {
+    const { meta } = site.cell
+
     const fileName = ctx.env.defineTemp()
     ctx.emitGlobal(`data ${fileName} = { b "${meta.fileName}", b 0 }`)
 
-    const s = ctx.compileExpr(expr.car[1], env)
-
-    const size = ctx.defineTemp(`add ${s}, 8`, env)
+    const size = ctx.defineTemp(`add ${args[0]}, 8`, env)
     ctx.emit(`${size} =l loadl ${size}`)
     const newSize = ctx.defineTemp(`add ${size}, 1`, env)
 
-    const ptr = ctx.defineTemp(`add ${s}, 16`, env)
+    const ptr = ctx.defineTemp(`add ${args[0]}, 16`, env)
 
     const message = ctx.defineTemp(`call $gc_alloc(l ${newSize})`, env)
     ctx.emit(`call $memset(l ${message}, w 0, l ${newSize})`)
     ctx.emit(`call $memcpy(l ${message}, l ${ptr}, l ${size})`)
 
-    ctx.emit(
-      `call $panic(l ${fileName}, w ${meta.line}, w ${meta.column}, l ${message})`,
-    )
+    ctx.emit(`call $panic(l ${fileName}, w ${meta.line}, w ${meta.column}, l ${message})`)
     return qbeConst.Unit
   }
-
-  checkRule: CheckRule = { car: ['str'] }
 }
 
 export default {
@@ -782,11 +773,7 @@ declare module '@/backend' {
   }
 
   interface QBEBackend {
-    if(
-      pred: (() => string) | (() => string)[],
-      thenBody: () => void,
-      options: QBEIfOptions,
-    ): void
+    if(pred: (() => string) | (() => string)[], thenBody: () => void, options: QBEIfOptions): void
     ifExpr(
       pred: (() => string) | (() => string)[],
       thenBody: (result: string) => string | void,
@@ -837,12 +824,7 @@ BytecodeBackend.prototype.panic = function (meta, format, env) {
   this.emit(Instruction.NativeCall)
 }
 
-function predWithCtx(
-  ctx: QBEBackend,
-  env: QBEEnv,
-  hasElse: boolean,
-  predIsValue: boolean,
-) {
+function predWithCtx(ctx: QBEBackend, env: QBEEnv, hasElse: boolean, predIsValue: boolean) {
   const end = env.defineBlock()
   const elseBranch = hasElse ? env.defineBlock() : end
 
@@ -871,18 +853,9 @@ function predWithCtx(
   return { predicate, predicates, end }
 }
 
-QBEBackend.prototype.if = function (
-  pred,
-  thenBody,
-  { elseBody, env, predIsValue = false },
-) {
+QBEBackend.prototype.if = function (pred, thenBody, { elseBody, env, predIsValue = false }) {
   const hasElse = !!elseBody
-  const { predicate, predicates, end } = predWithCtx(
-    this,
-    env,
-    hasElse,
-    predIsValue,
-  )
+  const { predicate, predicates, end } = predWithCtx(this, env, hasElse, predIsValue)
   const elseBranch = Array.isArray(pred) ? predicates(pred) : predicate(pred)
 
   thenBody()
@@ -901,12 +874,7 @@ QBEBackend.prototype.ifExpr = function (
   elseBody,
   { env, predIsValue = false, resultType = 'l' },
 ) {
-  const { predicate, predicates, end } = predWithCtx(
-    this,
-    env,
-    true,
-    predIsValue,
-  )
+  const { predicate, predicates, end } = predWithCtx(this, env, true, predIsValue)
   const elseBranch = Array.isArray(pred) ? predicates(pred) : predicate(pred)
 
   const result = env.defineTemp()
