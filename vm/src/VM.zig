@@ -16,7 +16,7 @@ pub const Var = union(enum) {
     i64: i64,
     sym: []const u8,
     str: []const u8,
-    ref: [*]const u8,
+    ref: *const Ref,
     @"fn": u64,
     state: State,
 
@@ -24,12 +24,8 @@ pub const Var = union(enum) {
         switch (self) {
             .unit => try writer.print("()", .{}),
             .sym, .str => |x| try writer.print("{s}", .{x}),
-            .ref => |ptr| {
-                const ref = mem.bytesAsValue(Ref, ptr);
-                const xs = @as([*]const Var, @ptrCast(@alignCast((mem.alignPointer(
-                    ptr + @sizeOf(Ref),
-                    @alignOf(Var),
-                ).?))))[0..ref.len];
+            .ref => |ref| {
+                const xs = ref.items();
                 switch (ref.type) {
                     .arr => {
                         if (ref.len == 0) {
@@ -63,8 +59,21 @@ pub const Var = union(enum) {
     }
 };
 
-const Ref = struct { type: RefType, id: u32 = 0, len: u64 };
-const RefType = enum(u8) { arr, @"struct" };
+const Ref = struct {
+    const Type = enum(u8) { arr, @"struct" };
+
+    type: Type,
+    id: u32 = 0,
+    len: u64,
+
+    fn items(self: *const Ref) []const Var {
+        const p: [*]const u8 = @ptrCast(self);
+        return @as([*]const Var, @ptrCast(@alignCast((mem.alignPointer(
+            p + @sizeOf(Ref),
+            @alignOf(Var),
+        ).?))))[0..self.len];
+    }
+};
 
 fn sexprToVar(serialized: msgpack.Payload) Var {
     return switch (serialized) {
@@ -329,11 +338,20 @@ fn panic(vm: *Self) !void {
 }
 
 fn typeOf(vm: *Self) !void {
-    try vm.pushToList(.{ .i64 = @backingInt(vm.pop()) }, &vm.stack);
+    try vm.pushToList(.{ .i64 = switch (vm.pop()) {
+        .ref => |ref| switch (ref.type) {
+            .arr => 100,
+            .@"struct" => 101,
+        },
+        else => |x| @backingInt(x),
+    } }, &vm.stack);
 }
 
 fn typeName(vm: *Self) !void {
-    try vm.pushToList(.{ .str = @tagName(vm.pop()) }, &vm.stack);
+    try vm.pushToList(.{ .str = switch (vm.pop()) {
+        .ref => |ref| @tagName(ref.type),
+        else => |x| @tagName(x),
+    } }, &vm.stack);
 }
 
 fn sizeOf(vm: *Self) !void {
@@ -361,31 +379,24 @@ fn arrayNew(vm: *Self) !void {
     const bp = mem.alignPointer(vm.raw_sp, @alignOf(Ref)).?;
     const ref: *Ref = @ptrCast(@alignCast(bp));
     const xs: [*]Var = @ptrCast(@alignCast(mem.alignPointer(bp + @sizeOf(Ref), @alignOf(Var)).?));
-    const end = @as([*]u8, @ptrCast(xs)) + len * @sizeOf(Var);
+    const sp = @as([*]u8, @ptrCast(xs)) + len * @sizeOf(Var);
 
     ref.* = .{ .type = .arr, .len = len };
     for (0..len) |i| {
         xs[i] = vm.pop();
     }
 
-    vm.raw_sp = end;
-    try vm.pushToList(.{ .ref = bp }, &vm.stack);
+    vm.raw_sp = sp;
+    try vm.pushToList(.{ .ref = ref }, &vm.stack);
 }
 
 fn arrayLen(vm: *Self) !void {
-    _ = vm;
-    // try vm.pushToList(.{ .i64 = @intCast(vm.pop().arr.len) }, &vm.stack);
+    try vm.pushToList(.{ .i64 = @intCast(vm.pop().ref.len) }, &vm.stack);
 }
 
 fn arrayAt(vm: *Self) !void {
-    _ = vm;
-    // const xs = switch (vm.pop()) {
-    //     .arr => |xs| xs,
-    //     .@"struct" => |x| x.value,
-    //     else => unreachable,
-    // };
-    // const i = vm.pop().i64;
-    // try vm.pushToList(xs[@intCast(i)], &vm.stack);
+    const ref = vm.pop().ref;
+    try vm.pushToList(ref.items()[@intCast(vm.pop().i64)], &vm.stack);
 }
 
 fn @"struct"(vm: *Self) !void {
@@ -395,13 +406,13 @@ fn @"struct"(vm: *Self) !void {
     const bp = mem.alignPointer(vm.raw_sp, @alignOf(Ref)).?;
     const ref: *Ref = @ptrCast(@alignCast(bp));
     const xs: [*]Var = @ptrCast(@alignCast(mem.alignPointer(bp + @sizeOf(Ref), @alignOf(Var)).?));
-    const end = @as([*]u8, @ptrCast(xs)) + len * @sizeOf(Var);
+    const sp = @as([*]u8, @ptrCast(xs)) + len * @sizeOf(Var);
 
     ref.* = .{ .type = .@"struct", .id = id, .len = len };
     for (0..len) |i| {
         xs[i] = vm.pop();
     }
 
-    vm.raw_sp = end;
-    try vm.pushToList(.{ .ref = bp }, &vm.stack);
+    vm.raw_sp = sp;
+    try vm.pushToList(.{ .ref = ref }, &vm.stack);
 }
