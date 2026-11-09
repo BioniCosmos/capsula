@@ -15,7 +15,6 @@ pub const Var = union(enum) {
     bool: bool,
     i64: i64,
     sym: []const u8,
-    @"struct": Struct,
     str: []const u8,
     ref: [*]const u8,
     @"fn": u64,
@@ -24,40 +23,39 @@ pub const Var = union(enum) {
     pub fn format(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
         switch (self) {
             .unit => try writer.print("()", .{}),
-            .@"struct" => |x| {
-                const m = structs[x.meta];
-                if (x.value.len == 0) {
-                    try writer.print("{s} {{}}", .{m.name});
-                    return;
-                }
-                try writer.print("{s} {{", .{m.name});
-                var sep: []const u8 = " ";
-                for (x.value, 0..) |field, i| {
-                    try writer.print("{s}{s} = {f}", .{ sep, m.fields[i], field });
-                    sep = ", ";
-                }
-                try writer.print(" }}", .{});
-            },
             .sym, .str => |x| try writer.print("{s}", .{x}),
             .ref => |ptr| {
                 const ref = mem.bytesAsValue(Ref, ptr);
+                const xs = @as([*]const Var, @ptrCast(@alignCast((mem.alignPointer(
+                    ptr + @sizeOf(Ref),
+                    @alignOf(Var),
+                ).?))))[0..ref.len];
                 switch (ref.type) {
                     .arr => {
-                        if (ref.x == 0) {
+                        if (ref.len == 0) {
                             try writer.print("[]", .{});
                             return;
                         }
-                        const xs = @as([*]const Var, @ptrCast(@alignCast((mem.alignPointer(
-                            ptr + @sizeOf(Ref),
-                            @alignOf(Var),
-                        ).?))))[0..ref.x];
                         try writer.print("[", .{});
                         for (xs) |x| {
                             try writer.print(" {f}", .{x});
                         }
                         try writer.print(" ]", .{});
                     },
-                    .@"struct" => @panic("TODO"),
+                    .@"struct" => {
+                        const m = structs[ref.id];
+                        if (ref.len == 0) {
+                            try writer.print("{s} {{}}", .{m.name});
+                            return;
+                        }
+                        try writer.print("{s} {{", .{m.name});
+                        var sep: []const u8 = " ";
+                        for (xs, m.fields) |x, field| {
+                            try writer.print("{s}{s} = {f}", .{ sep, field, x });
+                            sep = ", ";
+                        }
+                        try writer.print(" }}", .{});
+                    },
                 }
             },
             inline else => |x| try writer.print("{}", .{x}),
@@ -65,9 +63,8 @@ pub const Var = union(enum) {
     }
 };
 
-const Ref = struct { type: RefType, x: u64 };
+const Ref = struct { type: RefType, id: u32 = 0, len: u64 };
 const RefType = enum(u8) { arr, @"struct" };
-const Struct = struct { value: []const Var, meta: usize };
 
 fn sexprToVar(serialized: msgpack.Payload) Var {
     return switch (serialized) {
@@ -366,7 +363,7 @@ fn arrayNew(vm: *Self) !void {
     const xs: [*]Var = @ptrCast(@alignCast(mem.alignPointer(bp + @sizeOf(Ref), @alignOf(Var)).?));
     const end = @as([*]u8, @ptrCast(xs)) + len * @sizeOf(Var);
 
-    ref.* = .{ .type = .arr, .x = len };
+    ref.* = .{ .type = .arr, .len = len };
     for (0..len) |i| {
         xs[i] = vm.pop();
     }
@@ -392,14 +389,19 @@ fn arrayAt(vm: *Self) !void {
 }
 
 fn @"struct"(vm: *Self) !void {
-    const m: usize = @intCast(vm.pop().i64);
-    const len: usize = @intCast(vm.pop().i64);
-    const xs = vm.allocator.alloc(Var, len) catch |err| {
-        vm.err = fmt.bufPrint(&vm.err_buf, "failed to allocate memory for array", .{}) catch unreachable;
-        return err;
-    };
+    const id: u32 = @intCast(vm.pop().i64);
+    const len: u64 = @intCast(vm.pop().i64);
+
+    const bp = mem.alignPointer(vm.raw_sp, @alignOf(Ref)).?;
+    const ref: *Ref = @ptrCast(@alignCast(bp));
+    const xs: [*]Var = @ptrCast(@alignCast(mem.alignPointer(bp + @sizeOf(Ref), @alignOf(Var)).?));
+    const end = @as([*]u8, @ptrCast(xs)) + len * @sizeOf(Var);
+
+    ref.* = .{ .type = .@"struct", .id = id, .len = len };
     for (0..len) |i| {
         xs[i] = vm.pop();
     }
-    try vm.pushToList(.{ .@"struct" = .{ .meta = m, .value = xs } }, &vm.stack);
+
+    vm.raw_sp = end;
+    try vm.pushToList(.{ .ref = bp }, &vm.stack);
 }
