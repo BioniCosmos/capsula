@@ -29,7 +29,7 @@ pub fn main(init: process.Init) !void {
     const functions = try VM.deserialize(VM.Fn, allocator, payload, "functions");
     VM.structs = try VM.deserialize(VM.StructMeta, allocator, payload, "structs");
 
-    const vm = try VM.init(allocator, io);
+    const vm = try VM.init(init.gpa, io);
     defer vm.deinit();
     _ = try vm.execute(functions);
 }

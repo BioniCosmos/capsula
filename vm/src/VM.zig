@@ -18,6 +18,7 @@ pub const Var = union(enum) {
     str: []const u8,
     ref: *const Ref,
     @"fn": u64,
+    box: *const Var,
     state: State,
 
     pub fn format(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
@@ -317,6 +318,7 @@ var native_functions = std.StaticStringMap(*const fn (vm: *Self) NativeFnError!v
     .{ "array-len", &arrayLen },
     .{ "array-at", &arrayAt },
     .{ "struct", &@"struct" },
+    .{ "box", &box },
 });
 
 fn panic(vm: *Self) !void {
@@ -415,4 +417,10 @@ fn @"struct"(vm: *Self) !void {
 
     vm.raw_sp = sp;
     try vm.pushToList(.{ .ref = ref }, &vm.stack);
+}
+
+fn box(vm: *Self) !void {
+    const x = try vm.allocator.create(Var);
+    x.* = vm.pop();
+    try vm.pushToList(.{ .box = x }, &vm.stack);
 }
