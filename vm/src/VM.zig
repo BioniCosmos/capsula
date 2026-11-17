@@ -62,8 +62,10 @@ pub const Var = union(enum) {
 
 const Ref = struct {
     const Type = enum(u8) { arr, @"struct" };
+    const Segment = enum(u8) { stack, heap, data };
 
     type: Type,
+    segment: Segment,
     id: u32 = 0,
     len: u64,
 
@@ -383,7 +385,7 @@ fn arrayNew(vm: *Self) !void {
     const xs: [*]Var = @ptrCast(@alignCast(mem.alignPointer(bp + @sizeOf(Ref), @alignOf(Var)).?));
     const sp = @as([*]u8, @ptrCast(xs)) + len * @sizeOf(Var);
 
-    ref.* = .{ .type = .arr, .len = len };
+    ref.* = .{ .type = .arr, .segment = .stack, .len = len };
     for (0..len) |i| {
         xs[i] = vm.pop();
     }
@@ -410,7 +412,7 @@ fn @"struct"(vm: *Self) !void {
     const xs: [*]Var = @ptrCast(@alignCast(mem.alignPointer(bp + @sizeOf(Ref), @alignOf(Var)).?));
     const sp = @as([*]u8, @ptrCast(xs)) + len * @sizeOf(Var);
 
-    ref.* = .{ .type = .@"struct", .id = id, .len = len };
+    ref.* = .{ .type = .@"struct", .segment = .stack, .id = id, .len = len };
     for (0..len) |i| {
         xs[i] = vm.pop();
     }
