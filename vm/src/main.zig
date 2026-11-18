@@ -18,6 +18,9 @@ pub fn main(init: process.Init) !void {
     }
     const path = args[1];
 
+    var vm = try VM.init(init.gpa, io);
+    defer vm.deinit();
+
     const file = try Io.Dir.cwd().openFile(io, path, .{});
     defer file.close(io);
 
@@ -26,10 +29,8 @@ pub fn main(init: process.Init) !void {
 
     var packer = msgpack.packIO(&reader.interface, @constCast(&Io.Writer.failing));
     const payload = try packer.read(allocator);
-    const functions = try VM.deserialize(VM.Fn, allocator, payload, "functions");
-    VM.structs = try VM.deserialize(VM.StructMeta, allocator, payload, "structs");
+    const functions = try VM.deserialize(VM.Fn, allocator, vm, payload, "functions");
+    VM.structs = try VM.deserialize(VM.StructMeta, allocator, vm, payload, "structs");
 
-    const vm = try VM.init(init.gpa, io);
-    defer vm.deinit();
     _ = try vm.execute(functions);
 }

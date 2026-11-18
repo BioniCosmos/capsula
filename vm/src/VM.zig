@@ -15,7 +15,6 @@ pub const Var = union(enum) {
     bool: bool,
     i64: i64,
     sym: []const u8,
-    str: []const u8,
     ref: *const Ref,
     @"fn": u64,
     box: *const Var,
@@ -24,9 +23,8 @@ pub const Var = union(enum) {
     pub fn format(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
         switch (self) {
             .unit => try writer.print("()", .{}),
-            .sym, .str => |x| try writer.print("{s}", .{x}),
+            .sym => |x| try writer.print("{s}", .{x}),
             .ref => |ref| {
-                const xs = ref.items();
                 switch (ref.type) {
                     .arr => {
                         if (ref.len == 0) {
@@ -34,6 +32,7 @@ pub const Var = union(enum) {
                             return;
                         }
                         try writer.print("[", .{});
+                        const xs = ref.items();
                         for (xs) |x| {
                             try writer.print(" {f}", .{x});
                         }
@@ -47,12 +46,14 @@ pub const Var = union(enum) {
                         }
                         try writer.print("{s} {{", .{m.name});
                         var sep: []const u8 = " ";
+                        const xs = ref.items();
                         for (xs, m.fields) |x, field| {
                             try writer.print("{s}{s} = {f}", .{ sep, field, x });
                             sep = ", ";
                         }
                         try writer.print(" }}", .{});
                     },
+                    .str => try writer.print("{s}", .{ref.str()}),
                 }
             },
             inline else => |x| try writer.print("{}", .{x}),
@@ -61,7 +62,7 @@ pub const Var = union(enum) {
 };
 
 const Ref = struct {
-    const Type = enum(u8) { arr, @"struct" };
+    const Type = enum(u8) { arr, @"struct", str };
     const Segment = enum(u8) { stack, heap, data };
 
     type: Type,
@@ -70,20 +71,41 @@ const Ref = struct {
     len: u64,
 
     fn items(self: *const Ref) []const Var {
+        debug.assert(self.type != .str);
         const p: [*]const u8 = @ptrCast(self);
         return @as([*]const Var, @ptrCast(@alignCast((mem.alignPointer(
             p + @sizeOf(Ref),
             @alignOf(Var),
         ).?))))[0..self.len];
     }
+
+    fn str(self: *const Ref) []const u8 {
+        debug.assert(self.type == .str);
+        const p: [*]const u8 = @ptrCast(self);
+        return @as(*const [*]const u8, @ptrCast(@alignCast((mem.alignPointer(
+            p + @sizeOf(Ref),
+            @alignOf([*]const u8),
+        ).?)))).*[0..self.len];
+    }
 };
 
-fn sexprToVar(serialized: msgpack.Payload) Var {
+fn sexprToVar(vm: *Self, serialized: msgpack.Payload) Var {
     return switch (serialized) {
         .bool => |x| .{ .bool = x },
         .int => |x| .{ .i64 = x },
         .uint => |x| .{ .i64 = @intCast(x) },
-        .str => |x| .{ .str = x.value() },
+        .str => |x| b: {
+            const bp = mem.alignPointer(vm.raw_sp, @alignOf(Ref)).?;
+            const ref: *Ref = @ptrCast(@alignCast(bp));
+            const ptr: *[*]const u8 = @ptrCast(@alignCast(mem.alignPointer(bp + @sizeOf(Ref), @alignOf([*]const u8)).?));
+            const sp = @as([*]u8, @ptrCast(ptr)) + @sizeOf([]const u8);
+
+            ref.* = .{ .type = .str, .segment = .data, .len = x.value().len };
+            ptr.* = x.value().ptr;
+
+            vm.raw_sp = sp;
+            break :b .{ .ref = ref };
+        },
         else => unreachable,
     };
 }
@@ -94,11 +116,11 @@ pub const Fn = struct {
     constants: []const Var,
     local_count: usize,
 
-    pub fn deserialize(allocator: mem.Allocator, serialized: msgpack.Payload) !Fn {
+    pub fn deserialize(allocator: mem.Allocator, vm: *Self, serialized: msgpack.Payload) !Fn {
         const constants_payload = (try serialized.mapGet("constants")).?;
         const constants = try allocator.alloc(Var, try constants_payload.getArrLen());
         for (constants, 0..) |*constant, i| {
-            constant.* = sexprToVar(try constants_payload.getArrElement(i));
+            constant.* = sexprToVar(vm, try constants_payload.getArrElement(i));
         }
         return .{
             .code = try (try serialized.mapGet("code")).?.asBin(),
@@ -112,7 +134,7 @@ pub const StructMeta = struct {
     name: []const u8,
     fields: [][]const u8,
 
-    pub fn deserialize(allocator: mem.Allocator, serialized: msgpack.Payload) !StructMeta {
+    pub fn deserialize(allocator: mem.Allocator, _: *Self, serialized: msgpack.Payload) !StructMeta {
         const serialized_fields = (try serialized.mapGet("fields")).?;
         const fields = try allocator.alloc([]const u8, try serialized_fields.getArrLen());
         for (fields, 0..) |*field, i| {
@@ -126,13 +148,14 @@ pub var structs: []const StructMeta = undefined;
 pub fn deserialize(
     T: type,
     allocator: mem.Allocator,
+    vm: *Self,
     serialized: msgpack.Payload,
     key: []const u8,
 ) ![]T {
     const serialized_field = (try serialized.mapGet(key)).?;
     const field = try allocator.alloc(T, try serialized_field.getArrLen());
     for (field, 0..) |*field_element, i| {
-        field_element.* = try T.deserialize(allocator, try serialized_field.getArrElement(i));
+        field_element.* = try T.deserialize(allocator, vm, try serialized_field.getArrElement(i));
     }
     return field;
 }
@@ -261,7 +284,7 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
                 self.base = self.top + 1;
                 self.top = self.base + functions[fn_idx].local_count;
             },
-            .native_call => native_functions.get(self.pop().str).?(self) catch |err|
+            .native_call => native_functions.get(self.pop().ref.str()).?(self) catch |err|
                 if (err == NativeFnError.Break) break else return @errorCast(err),
             .ret => {
                 const top = self.base - 1;
@@ -324,8 +347,8 @@ var native_functions = std.StaticStringMap(*const fn (vm: *Self) NativeFnError!v
 });
 
 fn panic(vm: *Self) !void {
-    debug.print("{s}:{}:{} panic: ", .{ vm.pop().str, vm.pop().i64, vm.pop().i64 });
-    const format = vm.pop().str;
+    debug.print("{s}:{}:{} panic: ", .{ vm.pop().ref.str(), vm.pop().i64, vm.pop().i64 });
+    const format = vm.pop().ref.str();
     var prev: u8 = 0;
     for (format) |c| {
         if (c == '}' and prev == '{') {
@@ -346,16 +369,18 @@ fn typeOf(vm: *Self) !void {
         .ref => |ref| switch (ref.type) {
             .arr => 100,
             .@"struct" => 101,
+            .str => 102,
         },
         else => |x| @backingInt(x),
     } }, &vm.stack);
 }
 
 fn typeName(vm: *Self) !void {
-    try vm.pushToList(.{ .str = switch (vm.pop()) {
-        .ref => |ref| @tagName(ref.type),
-        else => |x| @tagName(x),
-    } }, &vm.stack);
+    _ = vm;
+    // try vm.pushToList(.{ .str = switch (vm.pop()) {
+    // .ref => |ref| @tagName(ref.type),
+    // else => |x| @tagName(x),
+    // } }, &vm.stack);
 }
 
 fn sizeOf(vm: *Self) !void {

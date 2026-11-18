@@ -56,10 +56,10 @@ export const vmVarType = {
   bool: 1,
   i64: 2,
   sym: 3,
-  str: 4,
-  fn: 6,
+  fn: 5,
   arr: 100,
   struct: 101,
+  str: 102,
 }
 
 export const qbeConst = {
