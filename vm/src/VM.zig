@@ -70,22 +70,43 @@ const Ref = struct {
     id: u32 = 0,
     len: u64,
 
+    inline fn data(self: *const Ref) [*]const u8 {
+        const p: [*]const u8 = @ptrCast(self);
+        return p + @sizeOf(Ref);
+    }
+
     fn items(self: *const Ref) []const Var {
         debug.assert(self.type != .str);
-        const p: [*]const u8 = @ptrCast(self);
-        return @as([*]const Var, @ptrCast(@alignCast((mem.alignPointer(
-            p + @sizeOf(Ref),
-            @alignOf(Var),
-        ).?))))[0..self.len];
+        const aligned = mem.alignPointer(self.data(), @alignOf(Var)).?;
+        const xs: [*]const Var = @ptrCast(@alignCast(aligned));
+        return xs[0..self.len];
     }
 
     fn str(self: *const Ref) []const u8 {
         debug.assert(self.type == .str);
-        const p: [*]const u8 = @ptrCast(self);
-        return @as(*const [*]const u8, @ptrCast(@alignCast((mem.alignPointer(
-            p + @sizeOf(Ref),
-            @alignOf([*]const u8),
-        ).?)))).*[0..self.len];
+        const aligned = mem.alignPointer(self.data(), @alignOf([*]const u8)).?;
+        const ptr: *const [*]const u8 = @ptrCast(@alignCast(aligned));
+        return ptr.*[0..self.len];
+    }
+
+    fn store(self: Ref, vm: *Self, T: type) struct { *const Ref, [*]u8 } {
+        const ref_aligned = mem.alignPointer(vm.raw_sp, @alignOf(Ref)).?;
+        const ref: *Ref = @ptrCast(@alignCast(ref_aligned));
+        const data_aligned = mem.alignPointer(@constCast(ref.data()), @alignOf(T)).?;
+        ref.* = self;
+        return .{ ref, data_aligned };
+    }
+
+    fn storeItems(self: Ref, vm: *Self) struct { *const Ref, [*]Var } {
+        const ref, const raw = self.store(vm, Var);
+        vm.raw_sp = raw + self.len * @sizeOf(Var);
+        return .{ ref, @ptrCast(@alignCast(raw)) };
+    }
+
+    fn storeStr(self: Ref, vm: *Self) struct { *const Ref, *[*]const u8 } {
+        const ref, const raw = self.store(vm, [*]const u8);
+        vm.raw_sp = raw + @sizeOf([*]const u8);
+        return .{ ref, @ptrCast(@alignCast(raw)) };
     }
 };
 
@@ -95,15 +116,11 @@ fn sexprToVar(vm: *Self, serialized: msgpack.Payload) Var {
         .int => |x| .{ .i64 = x },
         .uint => |x| .{ .i64 = @intCast(x) },
         .str => |x| b: {
-            const bp = mem.alignPointer(vm.raw_sp, @alignOf(Ref)).?;
-            const ref: *Ref = @ptrCast(@alignCast(bp));
-            const ptr: *[*]const u8 = @ptrCast(@alignCast(mem.alignPointer(bp + @sizeOf(Ref), @alignOf([*]const u8)).?));
-            const sp = @as([*]u8, @ptrCast(ptr)) + @sizeOf([]const u8);
-
-            ref.* = .{ .type = .str, .segment = .data, .len = x.value().len };
+            const ref, const ptr = Ref.storeStr(
+                .{ .type = .str, .segment = .data, .len = x.value().len },
+                vm,
+            );
             ptr.* = x.value().ptr;
-
-            vm.raw_sp = sp;
             break :b .{ .ref = ref };
         },
         else => unreachable,
@@ -376,11 +393,13 @@ fn typeOf(vm: *Self) !void {
 }
 
 fn typeName(vm: *Self) !void {
-    _ = vm;
-    // try vm.pushToList(.{ .str = switch (vm.pop()) {
-    // .ref => |ref| @tagName(ref.type),
-    // else => |x| @tagName(x),
-    // } }, &vm.stack);
+    const s = switch (vm.pop()) {
+        .ref => |ref| @tagName(ref.type),
+        else => |x| @tagName(x),
+    };
+    const ref, const ptr = Ref.storeStr(.{ .type = .str, .segment = .data, .len = s.len }, vm);
+    ptr.* = s.ptr;
+    try vm.pushToList(.{ .ref = ref }, &vm.stack);
 }
 
 fn sizeOf(vm: *Self) !void {
@@ -404,18 +423,10 @@ fn unit(vm: *Self) !void {
 
 fn arrayNew(vm: *Self) !void {
     const len: u64 = @intCast(vm.pop().i64);
-
-    const bp = mem.alignPointer(vm.raw_sp, @alignOf(Ref)).?;
-    const ref: *Ref = @ptrCast(@alignCast(bp));
-    const xs: [*]Var = @ptrCast(@alignCast(mem.alignPointer(bp + @sizeOf(Ref), @alignOf(Var)).?));
-    const sp = @as([*]u8, @ptrCast(xs)) + len * @sizeOf(Var);
-
-    ref.* = .{ .type = .arr, .segment = .stack, .len = len };
+    const ref, const xs = Ref.storeItems(.{ .type = .arr, .segment = .stack, .len = len }, vm);
     for (0..len) |i| {
         xs[i] = vm.pop();
     }
-
-    vm.raw_sp = sp;
     try vm.pushToList(.{ .ref = ref }, &vm.stack);
 }
 
@@ -431,18 +442,13 @@ fn arrayAt(vm: *Self) !void {
 fn @"struct"(vm: *Self) !void {
     const id: u32 = @intCast(vm.pop().i64);
     const len: u64 = @intCast(vm.pop().i64);
-
-    const bp = mem.alignPointer(vm.raw_sp, @alignOf(Ref)).?;
-    const ref: *Ref = @ptrCast(@alignCast(bp));
-    const xs: [*]Var = @ptrCast(@alignCast(mem.alignPointer(bp + @sizeOf(Ref), @alignOf(Var)).?));
-    const sp = @as([*]u8, @ptrCast(xs)) + len * @sizeOf(Var);
-
-    ref.* = .{ .type = .@"struct", .segment = .stack, .id = id, .len = len };
+    const ref, const xs = Ref.storeItems(
+        .{ .type = .@"struct", .segment = .stack, .id = id, .len = len },
+        vm,
+    );
     for (0..len) |i| {
         xs[i] = vm.pop();
     }
-
-    vm.raw_sp = sp;
     try vm.pushToList(.{ .ref = ref }, &vm.stack);
 }
 
