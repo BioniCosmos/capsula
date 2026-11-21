@@ -24,38 +24,7 @@ pub const Var = union(enum) {
         switch (self) {
             .unit => try writer.print("()", .{}),
             .sym => |x| try writer.print("{s}", .{x}),
-            .ref => |ref| {
-                switch (ref.type) {
-                    .arr => {
-                        if (ref.len == 0) {
-                            try writer.print("[]", .{});
-                            return;
-                        }
-                        try writer.print("[", .{});
-                        const xs = ref.items();
-                        for (xs) |x| {
-                            try writer.print(" {f}", .{x});
-                        }
-                        try writer.print(" ]", .{});
-                    },
-                    .@"struct" => {
-                        const m = structs[ref.id];
-                        if (ref.len == 0) {
-                            try writer.print("{s} {{}}", .{m.name});
-                            return;
-                        }
-                        try writer.print("{s} {{", .{m.name});
-                        var sep: []const u8 = " ";
-                        const xs = ref.items();
-                        for (xs, m.fields) |x, field| {
-                            try writer.print("{s}{s} = {f}", .{ sep, field, x });
-                            sep = ", ";
-                        }
-                        try writer.print(" }}", .{});
-                    },
-                    .str => try writer.print("{s}", .{ref.str()}),
-                }
-            },
+            .ref => |ref| try writer.print("{f}", .{ref}),
             inline else => |x| try writer.print("{}", .{x}),
         }
     }
@@ -65,6 +34,7 @@ const Ref = struct {
     const Type = enum(u8) { arr, @"struct", str };
     const Segment = enum(u8) { stack, heap, data };
 
+    vm: *Self,
     type: Type,
     segment: Segment,
     id: u32 = 0,
@@ -89,24 +59,55 @@ const Ref = struct {
         return ptr.*[0..self.len];
     }
 
-    fn store(self: Ref, vm: *Self, T: type) struct { *const Ref, [*]u8 } {
-        const ref_aligned = mem.alignPointer(vm.raw_sp, @alignOf(Ref)).?;
+    fn store(self: Ref, T: type) struct { *const Ref, [*]u8 } {
+        const ref_aligned = mem.alignPointer(self.vm.raw_sp, @alignOf(Ref)).?;
         const ref: *Ref = @ptrCast(@alignCast(ref_aligned));
         const data_aligned = mem.alignPointer(@constCast(ref.data()), @alignOf(T)).?;
         ref.* = self;
         return .{ ref, data_aligned };
     }
 
-    fn storeItems(self: Ref, vm: *Self) struct { *const Ref, [*]Var } {
-        const ref, const raw = self.store(vm, Var);
-        vm.raw_sp = raw + self.len * @sizeOf(Var);
+    fn storeItems(self: Ref) struct { *const Ref, [*]Var } {
+        const ref, const raw = self.store(Var);
+        self.vm.raw_sp = raw + self.len * @sizeOf(Var);
         return .{ ref, @ptrCast(@alignCast(raw)) };
     }
 
-    fn storeStr(self: Ref, vm: *Self) struct { *const Ref, *[*]const u8 } {
-        const ref, const raw = self.store(vm, [*]const u8);
-        vm.raw_sp = raw + @sizeOf([*]const u8);
+    fn storeStr(self: Ref) struct { *const Ref, *[*]const u8 } {
+        const ref, const raw = self.store([*]const u8);
+        self.vm.raw_sp = raw + @sizeOf([*]const u8);
         return .{ ref, @ptrCast(@alignCast(raw)) };
+    }
+
+    pub fn format(self: *const Ref, w: *Io.Writer) !void {
+        switch (self.type) {
+            .arr => {
+                if (self.len == 0) {
+                    try w.print("[]", .{});
+                    return;
+                }
+                try w.print("[", .{});
+                for (self.items()) |x| {
+                    try w.print(" {f}", .{x});
+                }
+                try w.print(" ]", .{});
+            },
+            .@"struct" => {
+                const m = self.vm.structs[self.id];
+                if (self.len == 0) {
+                    try w.print("{s} {{}}", .{m.name});
+                    return;
+                }
+                try w.print("{s} {{", .{m.name});
+                var sep: []const u8 = " ";
+                for (self.items(), m.fields) |x, field| {
+                    try w.print("{s}{s} = {f}", .{ sep, field, x });
+                    sep = ", ";
+                }
+                try w.print(" }}", .{});
+            },
+            .str => try w.print("{s}", .{self.str()}),
+        }
     }
 };
 
@@ -116,10 +117,12 @@ fn sexprToVar(vm: *Self, serialized: msgpack.Payload) Var {
         .int => |x| .{ .i64 = x },
         .uint => |x| .{ .i64 = @intCast(x) },
         .str => |x| b: {
-            const ref, const ptr = Ref.storeStr(
-                .{ .type = .str, .segment = .data, .len = x.value().len },
-                vm,
-            );
+            const ref, const ptr = Ref.storeStr(.{
+                .vm = vm,
+                .type = .str,
+                .segment = .data,
+                .len = x.value().len,
+            });
             ptr.* = x.value().ptr;
             break :b .{ .ref = ref };
         },
@@ -160,7 +163,6 @@ pub const StructMeta = struct {
         return .{ .name = try (try serialized.mapGet("name")).?.asStr(), .fields = fields };
     }
 };
-pub var structs: []const StructMeta = undefined;
 
 pub fn deserialize(
     T: type,
@@ -211,12 +213,13 @@ pub const max_slot_size = math.maxInt(u16);
 allocator: mem.Allocator,
 io: Io,
 
+structs: []const StructMeta = &.{},
 local: [1024]Var = undefined,
 pc: usize = 0,
 base: usize = 0,
 top: usize = 0,
 
-raw: [1024]u8 align(@max(@alignOf(Ref), @alignOf(Var))) = undefined,
+raw: [1024]u8 align(@max(@alignOf(Ref), @alignOf(Var), @alignOf([*]const u8))) = undefined,
 raw_sp: [*]u8,
 
 stack: std.ArrayList(Var) = .empty,
@@ -397,7 +400,12 @@ fn typeName(vm: *Self) !void {
         .ref => |ref| @tagName(ref.type),
         else => |x| @tagName(x),
     };
-    const ref, const ptr = Ref.storeStr(.{ .type = .str, .segment = .data, .len = s.len }, vm);
+    const ref, const ptr = Ref.storeStr(.{
+        .vm = vm,
+        .type = .str,
+        .segment = .data,
+        .len = s.len,
+    });
     ptr.* = s.ptr;
     try vm.pushToList(.{ .ref = ref }, &vm.stack);
 }
@@ -423,7 +431,12 @@ fn unit(vm: *Self) !void {
 
 fn arrayNew(vm: *Self) !void {
     const len: u64 = @intCast(vm.pop().i64);
-    const ref, const xs = Ref.storeItems(.{ .type = .arr, .segment = .stack, .len = len }, vm);
+    const ref, const xs = Ref.storeItems(.{
+        .vm = vm,
+        .type = .arr,
+        .segment = .stack,
+        .len = len,
+    });
     for (0..len) |i| {
         xs[i] = vm.pop();
     }
@@ -442,10 +455,13 @@ fn arrayAt(vm: *Self) !void {
 fn @"struct"(vm: *Self) !void {
     const id: u32 = @intCast(vm.pop().i64);
     const len: u64 = @intCast(vm.pop().i64);
-    const ref, const xs = Ref.storeItems(
-        .{ .type = .@"struct", .segment = .stack, .id = id, .len = len },
-        vm,
-    );
+    const ref, const xs = Ref.storeItems(.{
+        .vm = vm,
+        .type = .@"struct",
+        .segment = .stack,
+        .id = id,
+        .len = len,
+    });
     for (0..len) |i| {
         xs[i] = vm.pop();
     }

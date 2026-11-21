@@ -30,7 +30,7 @@ pub fn main(init: process.Init) !void {
     var packer = msgpack.packIO(&reader.interface, @constCast(&Io.Writer.failing));
     const payload = try packer.read(allocator);
     const functions = try VM.deserialize(VM.Fn, allocator, vm, payload, "functions");
-    VM.structs = try VM.deserialize(VM.StructMeta, allocator, vm, payload, "structs");
+    vm.structs = try VM.deserialize(VM.StructMeta, allocator, vm, payload, "structs");
 
     _ = try vm.execute(functions);
 }
