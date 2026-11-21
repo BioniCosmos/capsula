@@ -15,116 +15,100 @@ pub const Var = union(enum) {
     bool: bool,
     i64: i64,
     sym: []const u8,
-    ref: *const Ref,
+    arr: *const Ref(Var, .stack),
+    @"struct": *const Ref(Var, .stack),
+    str: *const Ref(u8, .data),
     @"fn": u64,
-    box: *const Var,
     state: State,
-
-    pub fn format(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
-        switch (self) {
-            .unit => try writer.print("()", .{}),
-            .sym => |x| try writer.print("{s}", .{x}),
-            .ref => |ref| try writer.print("{f}", .{ref}),
-            inline else => |x| try writer.print("{}", .{x}),
-        }
-    }
 };
 
-const Ref = struct {
-    const Type = enum(u8) { arr, @"struct", str };
-    const Segment = enum(u8) { stack, heap, data };
+fn Ref(T: type, segment: Segment) type {
+    const Base = struct { id: usize = 0, len: usize };
 
-    vm: *Self,
-    type: Type,
-    segment: Segment,
-    id: u32 = 0,
-    len: u64,
+    if (segment == .data) {
+        return struct {
+            const Self = @This();
 
-    inline fn data(self: *const Ref) [*]const u8 {
-        const p: [*]const u8 = @ptrCast(self);
-        return p + @sizeOf(Ref);
-    }
+            base: Base,
+            data: [*]const T,
 
-    fn items(self: *const Ref) []const Var {
-        debug.assert(self.type != .str);
-        const aligned = mem.alignPointer(self.data(), @alignOf(Var)).?;
-        const xs: [*]const Var = @ptrCast(@alignCast(aligned));
-        return xs[0..self.len];
-    }
-
-    fn str(self: *const Ref) []const u8 {
-        debug.assert(self.type == .str);
-        const aligned = mem.alignPointer(self.data(), @alignOf([*]const u8)).?;
-        const ptr: *const [*]const u8 = @ptrCast(@alignCast(aligned));
-        return ptr.*[0..self.len];
-    }
-
-    fn store(self: Ref, T: type) struct { *const Ref, [*]u8 } {
-        const ref_aligned = mem.alignPointer(self.vm.raw_sp, @alignOf(Ref)).?;
-        const ref: *Ref = @ptrCast(@alignCast(ref_aligned));
-        const data_aligned = mem.alignPointer(@constCast(ref.data()), @alignOf(T)).?;
-        ref.* = self;
-        return .{ ref, data_aligned };
-    }
-
-    fn storeItems(self: Ref) struct { *const Ref, [*]Var } {
-        const ref, const raw = self.store(Var);
-        self.vm.raw_sp = raw + self.len * @sizeOf(Var);
-        return .{ ref, @ptrCast(@alignCast(raw)) };
-    }
-
-    fn storeStr(self: Ref) struct { *const Ref, *[*]const u8 } {
-        const ref, const raw = self.store([*]const u8);
-        self.vm.raw_sp = raw + @sizeOf([*]const u8);
-        return .{ ref, @ptrCast(@alignCast(raw)) };
-    }
-
-    pub fn format(self: *const Ref, w: *Io.Writer) !void {
-        switch (self.type) {
-            .arr => {
-                if (self.len == 0) {
-                    try w.print("[]", .{});
-                    return;
+            fn init(allocator: mem.Allocator, base: Base, data: ?[*]const T) !*const Self {
+                const x = try allocator.create(Self);
+                x.base = base;
+                if (data) |d| {
+                    x.data = d;
                 }
-                try w.print("[", .{});
-                for (self.items()) |x| {
-                    try w.print(" {f}", .{x});
-                }
-                try w.print(" ]", .{});
-            },
-            .@"struct" => {
-                const m = self.vm.structs[self.id];
-                if (self.len == 0) {
-                    try w.print("{s} {{}}", .{m.name});
-                    return;
-                }
-                try w.print("{s} {{", .{m.name});
-                var sep: []const u8 = " ";
-                for (self.items(), m.fields) |x, field| {
-                    try w.print("{s}{s} = {f}", .{ sep, field, x });
-                    sep = ", ";
-                }
-                try w.print(" }}", .{});
-            },
-            .str => try w.print("{s}", .{self.str()}),
+                return x;
+            }
+
+            fn deinit(self: *const Self, allocator: mem.Allocator) void {
+                allocator.destroy(self);
+            }
+
+            inline fn items(self: *const Self) []const T {
+                return self.data[0..self.base.len];
+            }
+
+            inline fn itemsMut(self: *Self) []T {
+                return @constCast(self.items());
+            }
+
+            fn toHeap(self: *const Self, allocator: mem.Allocator) !*Ref(T, .heap) {
+                return .init(allocator, self.base, self.items().ptr);
+            }
+        };
+    }
+
+    return struct {
+        const Self = @This();
+        const alignment = mem.Alignment.max(.of(Self), .of(T));
+        const data_offset = alignment.forward(@sizeOf(Self));
+
+        base: Base,
+        size: usize,
+
+        fn init(allocator: mem.Allocator, base: Base, data: ?[*]const T) !*Self {
+            const size = data_offset + base.len * @sizeOf(T);
+            const raw = try allocator.alignedAlloc(u8, alignment, size);
+            const x: *Self = @ptrCast(raw.ptr);
+            x.* = .{ .base = base, .size = size };
+            if (data) |d| {
+                @memcpy(x.itemsMut(), d);
+            }
+            return x;
         }
-    }
-};
 
-fn sexprToVar(vm: *Self, serialized: msgpack.Payload) Var {
+        fn deinit(self: *const Self, allocator: mem.Allocator) void {
+            const raw: [*]align(alignment.toByteUnits()) const u8 = @ptrCast(@alignCast(self));
+            allocator.free(raw[0..self.size]);
+        }
+
+        inline fn items(self: *const Self) []const T {
+            const raw: [*]const u8 = @ptrCast(self);
+            const xs: [*]const T = @ptrCast(@alignCast(raw + data_offset));
+            return xs[0..self.base.len];
+        }
+
+        inline fn itemsMut(self: *Self) []T {
+            return @constCast(self.items());
+        }
+
+        fn toHeap(self: *const Self, allocator: mem.Allocator) !*Ref(T, .heap) {
+            return .init(allocator, self.base, self.items().ptr);
+        }
+    };
+}
+
+const Segment = enum(u8) { stack, heap, data };
+
+fn sexprToVar(vm: *VM, serialized: msgpack.Payload) !Var {
     return switch (serialized) {
         .bool => |x| .{ .bool = x },
         .int => |x| .{ .i64 = x },
         .uint => |x| .{ .i64 = @intCast(x) },
-        .str => |x| b: {
-            const ref, const ptr = Ref.storeStr(.{
-                .vm = vm,
-                .type = .str,
-                .segment = .data,
-                .len = x.value().len,
-            });
-            ptr.* = x.value().ptr;
-            break :b .{ .ref = ref };
+        .str => |x| .{
+            .str = try Ref(u8, .data)
+                .init(vm.stack_allocator, .{ .len = x.value().len }, x.value().ptr),
         },
         else => unreachable,
     };
@@ -136,11 +120,11 @@ pub const Fn = struct {
     constants: []const Var,
     local_count: usize,
 
-    pub fn deserialize(allocator: mem.Allocator, vm: *Self, serialized: msgpack.Payload) !Fn {
+    pub fn deserialize(allocator: mem.Allocator, vm: *VM, serialized: msgpack.Payload) !Fn {
         const constants_payload = (try serialized.mapGet("constants")).?;
         const constants = try allocator.alloc(Var, try constants_payload.getArrLen());
         for (constants, 0..) |*constant, i| {
-            constant.* = sexprToVar(vm, try constants_payload.getArrElement(i));
+            constant.* = try sexprToVar(vm, try constants_payload.getArrElement(i));
         }
         return .{
             .code = try (try serialized.mapGet("code")).?.asBin(),
@@ -154,7 +138,7 @@ pub const StructMeta = struct {
     name: []const u8,
     fields: [][]const u8,
 
-    pub fn deserialize(allocator: mem.Allocator, _: *Self, serialized: msgpack.Payload) !StructMeta {
+    pub fn deserialize(allocator: mem.Allocator, _: *VM, serialized: msgpack.Payload) !StructMeta {
         const serialized_fields = (try serialized.mapGet("fields")).?;
         const fields = try allocator.alloc([]const u8, try serialized_fields.getArrLen());
         for (fields, 0..) |*field, i| {
@@ -167,7 +151,7 @@ pub const StructMeta = struct {
 pub fn deserialize(
     T: type,
     allocator: mem.Allocator,
-    vm: *Self,
+    vm: *VM,
     serialized: msgpack.Payload,
     key: []const u8,
 ) ![]T {
@@ -206,7 +190,7 @@ pub const Instruction = enum(u8) {
 
 const Error = error{MaxVariableNumberExceeded} || mem.Allocator.Error || Io.Writer.Error;
 
-const Self = @This();
+const VM = @This();
 
 pub const max_slot_size = math.maxInt(u16);
 
@@ -219,8 +203,9 @@ pc: usize = 0,
 base: usize = 0,
 top: usize = 0,
 
-raw: [1024]u8 align(@max(@alignOf(Ref), @alignOf(Var), @alignOf([*]const u8))) = undefined,
-raw_sp: [*]u8,
+raw: [1024]u8 = undefined,
+raw_allocator: heap.FixedBufferAllocator = undefined,
+stack_allocator: mem.Allocator = undefined,
 
 stack: std.ArrayList(Var) = .empty,
 
@@ -233,9 +218,12 @@ stdout_buf: [1024]u8 = undefined,
 stdout_writer: Io.File.Writer = undefined,
 stdout: *Io.Writer = undefined,
 
-pub fn init(allocator: mem.Allocator, io: Io) !*Self {
-    const vm = try allocator.create(Self);
-    vm.* = .{ .allocator = allocator, .io = io, .raw_sp = &vm.raw };
+pub fn init(allocator: mem.Allocator, io: Io) !*VM {
+    const vm = try allocator.create(VM);
+    vm.* = .{ .allocator = allocator, .io = io };
+
+    vm.raw_allocator = .init(&vm.raw);
+    vm.stack_allocator = vm.raw_allocator.allocator();
 
     vm.stdout_writer = Io.File.stdout().writer(vm.io, &vm.stdout_buf);
     vm.stdout = &vm.stdout_writer.interface;
@@ -243,7 +231,7 @@ pub fn init(allocator: mem.Allocator, io: Io) !*Self {
     return vm;
 }
 
-pub fn deinit(self: *Self) void {
+pub fn deinit(self: *VM) void {
     self.stdout.flush() catch |e| log.warn("VM.deinit: failed to flush stdout: {}", .{e});
 
     self.stack.deinit(self.allocator);
@@ -252,7 +240,7 @@ pub fn deinit(self: *Self) void {
     allocator.destroy(self);
 }
 
-pub fn execute(self: *Self, functions: []const Fn) Error!Var {
+pub fn execute(self: *VM, functions: []const Fn) Error!Var {
     if (functions.len == 0) {
         return .{ .unit = {} };
     }
@@ -304,7 +292,7 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
                 self.base = self.top + 1;
                 self.top = self.base + functions[fn_idx].local_count;
             },
-            .native_call => native_functions.get(self.pop().ref.str()).?(self) catch |err|
+            .native_call => native_functions.get(self.pop().str.items()).?(self) catch |err|
                 if (err == NativeFnError.Break) break else return @errorCast(err),
             .ret => {
                 const top = self.base - 1;
@@ -328,18 +316,18 @@ pub fn execute(self: *Self, functions: []const Fn) Error!Var {
     return self.stack.pop() orelse .{ .unit = {} };
 }
 
-fn read(self: *Self, T: type, bytecode: []const u8) T {
+fn read(self: *VM, T: type, bytecode: []const u8) T {
     const size = @sizeOf(T);
     const addr = mem.readVarInt(T, bytecode[self.pc + 1 .. self.pc + size + 1], .little);
     self.pc += size;
     return addr;
 }
 
-fn pop(self: *Self) Var {
+fn pop(self: *VM) Var {
     return self.stack.pop().?;
 }
 
-fn pushToList(self: *Self, x: Var, xs: *std.ArrayList(Var)) !void {
+fn pushToList(self: *VM, x: Var, xs: *std.ArrayList(Var)) !void {
     xs.append(self.allocator, x) catch |err| {
         self.err = fmt.bufPrint(&self.err_buf, "OOM", .{}) catch unreachable;
         return err;
@@ -352,7 +340,7 @@ fn jump(from: usize, offset: i16) usize {
 
 const NativeFnError = error{Break} || mem.Allocator.Error || Io.Writer.Error;
 
-var native_functions = std.StaticStringMap(*const fn (vm: *Self) NativeFnError!void).initComptime(.{
+var native_functions = std.StaticStringMap(*const fn (vm: *VM) NativeFnError!void).initComptime(.{
     .{ "panic", &panic },
     .{ "type-of", &typeOf },
     .{ "type-name", &typeName },
@@ -363,16 +351,15 @@ var native_functions = std.StaticStringMap(*const fn (vm: *Self) NativeFnError!v
     .{ "array-len", &arrayLen },
     .{ "array-at", &arrayAt },
     .{ "struct", &@"struct" },
-    .{ "box", &box },
 });
 
-fn panic(vm: *Self) !void {
-    debug.print("{s}:{}:{} panic: ", .{ vm.pop().ref.str(), vm.pop().i64, vm.pop().i64 });
-    const format = vm.pop().ref.str();
+fn panic(vm: *VM) !void {
+    debug.print("{s}:{}:{} panic: ", .{ vm.pop().str.items(), vm.pop().i64, vm.pop().i64 });
+    const format = vm.pop().str.items();
     var prev: u8 = 0;
     for (format) |c| {
         if (c == '}' and prev == '{') {
-            debug.print("{f}", .{vm.pop()});
+            debug.print("{}", .{vm.pop()});
         } else if (c != '}' and prev == '{') {
             debug.print("}}{c}", .{c});
         } else if (c != '{') {
@@ -384,38 +371,24 @@ fn panic(vm: *Self) !void {
     return NativeFnError.Break;
 }
 
-fn typeOf(vm: *Self) !void {
-    try vm.pushToList(.{ .i64 = switch (vm.pop()) {
-        .ref => |ref| switch (ref.type) {
-            .arr => 100,
-            .@"struct" => 101,
-            .str => 102,
-        },
-        else => |x| @backingInt(x),
-    } }, &vm.stack);
+fn typeOf(vm: *VM) !void {
+    try vm.pushToList(.{ .i64 = @backingInt(vm.pop()) }, &vm.stack);
 }
 
-fn typeName(vm: *Self) !void {
-    const s = switch (vm.pop()) {
-        .ref => |ref| @tagName(ref.type),
-        else => |x| @tagName(x),
-    };
-    const ref, const ptr = Ref.storeStr(.{
-        .vm = vm,
-        .type = .str,
-        .segment = .data,
-        .len = s.len,
-    });
-    ptr.* = s.ptr;
-    try vm.pushToList(.{ .ref = ref }, &vm.stack);
+fn typeName(vm: *VM) !void {
+    const s = @tagName(vm.pop());
+    try vm.pushToList(
+        .{ .str = try .init(vm.stack_allocator, .{ .len = s.len }, s.ptr) },
+        &vm.stack,
+    );
 }
 
-fn sizeOf(vm: *Self) !void {
+fn sizeOf(vm: *VM) !void {
     try vm.pushToList(.{ .i64 = @sizeOf(Var) }, &vm.stack);
 }
 
-fn print(vm: *Self) !void {
-    vm.stdout.print("{f}", .{vm.pop()}) catch |err| {
+fn print(vm: *VM) !void {
+    displayVar(vm, vm.pop()) catch |err| {
         vm.err = fmt.bufPrint(&vm.err_buf, "failed to print", .{}) catch unreachable;
         return err;
     };
@@ -425,51 +398,73 @@ fn print(vm: *Self) !void {
     };
 }
 
-fn unit(vm: *Self) !void {
+fn displayVar(vm: *const VM, value: Var) !void {
+    const w = vm.stdout;
+    switch (value) {
+        .unit => try w.print("()", .{}),
+        .sym => |x| try w.print("{s}", .{x}),
+        .arr => |ref| {
+            if (ref.base.len == 0) {
+                try w.print("[]", .{});
+                return;
+            }
+            try w.print("[", .{});
+            for (ref.items()) |x| {
+                try w.print(" ", .{});
+                try displayVar(vm, x);
+            }
+            try w.print(" ]", .{});
+        },
+        .@"struct" => |ref| {
+            const m = vm.structs[ref.base.id];
+            if (ref.base.len == 0) {
+                try w.print("{s} {{}}", .{m.name});
+                return;
+            }
+            try w.print("{s} {{", .{m.name});
+            var sep: []const u8 = " ";
+            for (ref.items(), m.fields) |x, field| {
+                try w.print("{s}{s} = ", .{ sep, field });
+                try displayVar(vm, x);
+                sep = ", ";
+            }
+            try w.print(" }}", .{});
+        },
+        .str => |ref| try w.print("{s}", .{ref.items()}),
+        inline else => |x| try w.print("{}", .{x}),
+    }
+}
+
+fn unit(vm: *VM) !void {
     try vm.pushToList(.{ .unit = {} }, &vm.stack);
 }
 
-fn arrayNew(vm: *Self) !void {
+fn arrayNew(vm: *VM) !void {
     const len: u64 = @intCast(vm.pop().i64);
-    const ref, const xs = Ref.storeItems(.{
-        .vm = vm,
-        .type = .arr,
-        .segment = .stack,
-        .len = len,
-    });
+    var ref = try Ref(Var, .stack).init(vm.stack_allocator, .{ .len = len }, null);
+    const xs = ref.itemsMut();
     for (0..len) |i| {
         xs[i] = vm.pop();
     }
-    try vm.pushToList(.{ .ref = ref }, &vm.stack);
+    try vm.pushToList(.{ .arr = ref }, &vm.stack);
 }
 
-fn arrayLen(vm: *Self) !void {
-    try vm.pushToList(.{ .i64 = @intCast(vm.pop().ref.len) }, &vm.stack);
+fn arrayLen(vm: *VM) !void {
+    try vm.pushToList(.{ .i64 = @intCast(vm.pop().arr.base.len) }, &vm.stack);
 }
 
-fn arrayAt(vm: *Self) !void {
-    const ref = vm.pop().ref;
+fn arrayAt(vm: *VM) !void {
+    const ref = vm.pop().arr;
     try vm.pushToList(ref.items()[@intCast(vm.pop().i64)], &vm.stack);
 }
 
-fn @"struct"(vm: *Self) !void {
+fn @"struct"(vm: *VM) !void {
     const id: u32 = @intCast(vm.pop().i64);
     const len: u64 = @intCast(vm.pop().i64);
-    const ref, const xs = Ref.storeItems(.{
-        .vm = vm,
-        .type = .@"struct",
-        .segment = .stack,
-        .id = id,
-        .len = len,
-    });
+    var ref = try Ref(Var, .stack).init(vm.stack_allocator, .{ .id = id, .len = len }, null);
+    const xs = ref.itemsMut();
     for (0..len) |i| {
         xs[i] = vm.pop();
     }
-    try vm.pushToList(.{ .ref = ref }, &vm.stack);
-}
-
-fn box(vm: *Self) !void {
-    const x = try vm.allocator.create(Var);
-    x.* = vm.pop();
-    try vm.pushToList(.{ .box = x }, &vm.stack);
+    try vm.pushToList(.{ .@"struct" = ref }, &vm.stack);
 }
